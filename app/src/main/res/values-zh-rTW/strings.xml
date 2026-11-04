@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">位置模擬</string>
+    <string name="app_name">WeRePosition</string>
     <string name="map_type_label">地圖類型</string>
     <string name="map_type_standard">標準地圖</string>
     <string name="map_type_satellite">衛星地圖</string>

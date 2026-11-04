@@ -3,7 +3,7 @@
 -keep interface de.robv.android.xposed.** { *; }
 -keep class io.github.libxposed.** { *; }
 -keep interface io.github.libxposed.** { *; }
--keep class com.shiraka.locatiobprovid.xposed.** { *; }
+-keep class com.shiraka.wereposition.xposed.** { *; }
 
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
@@ -20,11 +20,11 @@
 }
 
 # Runtime config and provider models are read through reflection or cross-process contracts.
--keep class com.shiraka.locatiobprovid.utils.ConfigManager { *; }
--keep class com.shiraka.locatiobprovid.utils.LSPosedManager { *; }
--keep class com.shiraka.locatiobprovid.provider.** { *; }
--keep class com.shiraka.locatiobprovid.data.** { *; }
--keepclassmembers class com.shiraka.locatiobprovid.data.** { *; }
+-keep class com.shiraka.wereposition.utils.ConfigManager { *; }
+-keep class com.shiraka.wereposition.utils.LSPosedManager { *; }
+-keep class com.shiraka.wereposition.provider.** { *; }
+-keep class com.shiraka.wereposition.data.** { *; }
+-keepclassmembers class com.shiraka.wereposition.data.** { *; }
 
 # General safety for Android lifecycle
 -keep class * extends android.app.Application { *; }

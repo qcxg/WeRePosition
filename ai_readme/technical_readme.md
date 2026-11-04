@@ -1,8 +1,8 @@
-# LocationSpoofer Current Simulation Pipeline
+# WeRePosition Current Simulation Pipeline
 
 Last maintained: 2026-07-20 (repository cleanup, removal of unreachable compatibility hooks, and release documentation)
 
-This document is the current source of truth for how LocationSpoofer simulates GNSS, Wi-Fi, cellular, and related environment signals. It is written for future coding agents and developers so the implementation stays understandable and does not drift into hidden generated telemetry.
+This document is the current source of truth for how WeRePosition simulates GNSS, Wi-Fi, cellular, and related environment signals. It is written for future coding agents and developers so the implementation stays understandable and does not drift into hidden generated telemetry.
 
 ## Project Invariants
 
@@ -18,7 +18,7 @@ This document is the current source of truth for how LocationSpoofer simulates G
 
 ### Host App
 
-Main package: `com.shiraka.locatiobprovid`
+Main package: `com.shiraka.wereposition`
 
 Primary components:
 
@@ -38,18 +38,18 @@ Debug/test apps that directly inspect Wi-Fi, cell, GNSS status, or NMEA must als
 
 Active spoofing state is written to:
 
-- `/data/local/tmp/locationspoofer_config.json`
-- `/data/system/locationspoofer_config.json`
-- app SharedPreferences named `locationspoofer_prefs`
-- system properties under `gsm.locsp.*`
+- `/data/local/tmp/wereposition_config.json`
+- `/data/system/wereposition_config.json`
+- app SharedPreferences named `wereposition_prefs`
+- system properties under `gsm.wrp.*`
 
-JSON config files are written through a generation-tagged `.tmp` file followed by `mv` to the final path. Full snapshots are written on static/RF change and as a 60-second fallback, not once per movement tick. `RuntimeConfigWriteCoordinator` serializes in-process commits and advances only after an acknowledged write succeeds. Every root writer also holds `/data/local/tmp/locationspoofer_runtime.lock`, opened as a shell-function redirection so Android toybox `flock` inherits a valid fd. Generation ordering uses decimal-string comparison because Android shell arithmetic is not reliably 64-bit. An admitted old full snapshot therefore cannot finish after a successful stop snapshot and reactivate the runtime.
+JSON config files are written through a generation-tagged `.tmp` file followed by `mv` to the final path. Full snapshots are written on static/RF change and as a 60-second fallback, not once per movement tick. `RuntimeConfigWriteCoordinator` serializes in-process commits and advances only after an acknowledged write succeeds. Every root writer also holds `/data/local/tmp/wereposition_runtime.lock`, opened as a shell-function redirection so Android toybox `flock` inherits a valid fd. Generation ordering uses decimal-string comparison because Android shell arithmetic is not reliably 64-bit. An admitted old full snapshot therefore cannot finish after a successful stop snapshot and reactivate the runtime.
 
-`gsm.locsp.frame` is the active hot path. It is one bounded property value containing protocol version, active state, the last successful full-snapshot generation, monotonic heartbeat, E7 coordinates, bearing, and speed. A moving run changes only this frame at 1 Hz; a stationary run refreshes it every 10 seconds. The Hook validates the frame and, when its generation matches the cached JSON snapshot, clones/overlays memory without touching disk, ContentProvider, or preferences. A frame generation change is the signal to reload the full JSON snapshot.
+`gsm.wrp.frame` is the active hot path. It is one bounded property value containing protocol version, active state, the last successful full-snapshot generation, monotonic heartbeat, E7 coordinates, bearing, and speed. A moving run changes only this frame at 1 Hz; a stationary run refreshes it every 10 seconds. The Hook validates the frame and, when its generation matches the cached JSON snapshot, clones/overlays memory without touching disk, ContentProvider, or preferences. A frame generation change is the signal to reload the full JSON snapshot.
 
 `LocationHooker.readConfig()` reads only the expected path for its process: UID 1000 uses `/data/system`, other hooked clients use `/data/local/tmp`. It never probes both paths, and after the first permission denial that process permanently disables disk reads and uses the exported ContentProvider instead. XSharedPreferences is not queried by the runtime path. Rich Wi-Fi/cell JSON is never carried in legacy properties. The SystemProperties change callback is global, so it performs only compact property reads and equality checks; unrelated property changes do not trigger JSON parsing or I/O.
 
-An inactive lifecycle write first publishes the monotonic `gsm.locsp.stop_generation` under a separate short-held lock, then publishes the inactive compact frame before it waits for the full runtime-file lock. Hook consumers reject every frame/JSON/property snapshot whose generation is missing or is less than or equal to that fence. Every active full-snapshot and position-frame writer re-checks both the fence and current snapshot generation after acquiring the runtime lock; a superseded service retires without publishing another tombstone. A later legitimate start does not clear the fence; its first successful full snapshot naturally has a newer generation. This keeps stop fail-open even if an orphaned old writer outlives the normal root-command timeout, while stale/equal stop replays cannot turn off a newer run.
+An inactive lifecycle write first publishes the monotonic `gsm.wrp.stop_generation` under a separate short-held lock, then publishes the inactive compact frame before it waits for the full runtime-file lock. Hook consumers reject every frame/JSON/property snapshot whose generation is missing or is less than or equal to that fence. Every active full-snapshot and position-frame writer re-checks both the fence and current snapshot generation after acquiring the runtime lock; a superseded service retires without publishing another tombstone. A later legitimate start does not clear the fence; its first successful full snapshot naturally has a newer generation. This keeps stop fail-open even if an orphaned old writer outlives the normal root-command timeout, while stale/equal stop replays cannot turn off a newer run.
 
 Important config fields:
 
@@ -66,7 +66,7 @@ Important config fields:
 - `heartbeat_at`
 - `heartbeat_uptime_ms`
 - `config_generation`
-- `gsm.locsp.stop_generation` (property-only lifecycle fence)
+- `gsm.wrp.stop_generation` (property-only lifecycle fence)
 - `runtime_lifecycle_token`
 - `boot_id`
 
@@ -336,7 +336,7 @@ The previous experimental magnetic-field hook is removed from the stable hook ch
 - Prefer local collected data first because it is auditable by the user.
 - Remote API imports must be labeled as `由 WiGLE 導入` / `由 OpenCellID 導入`, not reused as place names.
 - The app UI groups environment records with the same coordinate into one visible location and shows RF source labels beside the Wi-Fi/cell counts.
-- Nearby place names resolve through Google Places Nearby Search first, then Google Geocoding and Android `Geocoder`, with `LocationSpoofer_Debug` logs for success and failure.
+- Nearby place names resolve through Google Places Nearby Search first, then Google Geocoding and Android `Geocoder`, with `WeRePosition_Debug` logs for success and failure.
 - Recent locations are separate from saved favorites: the home screen shows the latest seven used locations, while the top bookmark button opens the saved favorites list.
 - Recent locations must be written only after the current coordinate's Wi-Fi/cell payload has been resolved; loading a saved/recent point re-evaluates local RF data for that coordinate.
 - If Android object construction needs missing optional fields, use harmless structural defaults and keep identity fields from trusted data.
@@ -356,9 +356,9 @@ Local build/install paths are recorded in `ai_readme/README.md`; use them direct
 
 Use logcat filters:
 
-- `LocationSpoofer_Xposed`
+- `WeRePosition_Xposed`
 - `OpenCellID`
-- `LocationSpoofer_Debug`
+- `WeRePosition_Debug`
 
 Questions to answer from logs:
 
@@ -373,18 +373,18 @@ Questions to answer from logs:
 
 ## File Map
 
-- `app/src/main/java/com/shiraka/locatiobprovid/xposed/LocationHooker.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/provider/SpooferProvider.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/service/SpoofingService.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/data/repository/LocationRepository.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/receiver/RuntimeCleanupReceiver.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/ConfigManager.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/RuntimeConfigWriteCoordinator.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/EnvironmentCoveragePolicy.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/EnvironmentRfResolver.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/MapCoverageHelper.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/data/db/EnvironmentDao.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/EnvironmentScanner.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/WigleClient.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/utils/OpenCellIdClient.kt`
-- `app/src/main/java/com/shiraka/locatiobprovid/viewmodel/MainViewModel.kt`
+- `app/src/main/java/com/shiraka/wereposition/xposed/LocationHooker.kt`
+- `app/src/main/java/com/shiraka/wereposition/provider/SpooferProvider.kt`
+- `app/src/main/java/com/shiraka/wereposition/service/SpoofingService.kt`
+- `app/src/main/java/com/shiraka/wereposition/data/repository/LocationRepository.kt`
+- `app/src/main/java/com/shiraka/wereposition/receiver/RuntimeCleanupReceiver.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/ConfigManager.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/RuntimeConfigWriteCoordinator.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/EnvironmentCoveragePolicy.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/EnvironmentRfResolver.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/MapCoverageHelper.kt`
+- `app/src/main/java/com/shiraka/wereposition/data/db/EnvironmentDao.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/EnvironmentScanner.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/WigleClient.kt`
+- `app/src/main/java/com/shiraka/wereposition/utils/OpenCellIdClient.kt`
+- `app/src/main/java/com/shiraka/wereposition/viewmodel/MainViewModel.kt`

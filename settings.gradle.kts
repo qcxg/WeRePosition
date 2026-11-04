@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LocationSpoofer"
+rootProject.name = "WeRePosition"
 include(":app")

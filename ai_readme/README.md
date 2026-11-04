@@ -1,4 +1,4 @@
-# LocationSpoofer AI Notes
+# WeRePosition AI Notes
 
 This folder is the maintained AI-facing technical memory for the project.
 
@@ -31,19 +31,20 @@ Use these paths directly after context compaction. Do not rediscover them unless
 - ADB executable:
   `C:\Users\shira\AppData\Local\Android\Sdk\platform-tools\adb.exe`
 - Debug APK output:
-  `C:\Users\shira\Documents\antigravity\LocationSpoofer\app\build\outputs\apk\debug\app-debug.apk`
+  `C:\Users\shira\Documents\shirosproj\WeRePosition\app\build\outputs\apk\debug\app-debug.apk`
 
 Clean debug build command:
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 .\gradlew.bat clean :app:assembleDebug --console=plain
 ```
 
 Install command:
 
 ```powershell
-& 'C:\Users\shira\AppData\Local\Android\Sdk\platform-tools\adb.exe' install -r 'C:\Users\shira\Documents\antigravity\LocationSpoofer\app\build\outputs\apk\debug\app-debug.apk'
+& 'C:\Users\shira\AppData\Local\Android\Sdk\platform-tools\adb.exe' install -r 'C:\Users\shira\Documents\shirosproj\WeRePosition\app\build\outputs\apk\debug\app-debug.apk'
 ```
 
 Default test device:

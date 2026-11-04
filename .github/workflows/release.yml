@@ -88,13 +88,13 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/locationspoofer-release.jks"
-          test -s "$RUNNER_TEMP/locationspoofer-release.jks"
-          chmod 600 "$RUNNER_TEMP/locationspoofer-release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/wereposition-release.jks"
+          test -s "$RUNNER_TEMP/wereposition-release.jks"
+          chmod 600 "$RUNNER_TEMP/wereposition-release.jks"
 
       - name: Lint and build signed release
         env:
-          KEYSTORE_FILE_PATH: ${{ runner.temp }}/locationspoofer-release.jks
+          KEYSTORE_FILE_PATH: ${{ runner.temp }}/wereposition-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -113,8 +113,8 @@ jobs:
           AAB=$(find app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' -print -quit)
           test -n "$APK" && test -n "$AAB"
 
-          APK_OUT="dist/LocationSpoofer-${{ steps.version.outputs.tag }}.apk"
-          AAB_OUT="dist/LocationSpoofer-${{ steps.version.outputs.tag }}.aab"
+          APK_OUT="dist/WeRePosition-${{ steps.version.outputs.tag }}.apk"
+          AAB_OUT="dist/WeRePosition-${{ steps.version.outputs.tag }}.aab"
           cp "$APK" "$APK_OUT"
           cp "$AAB" "$AAB_OUT"
 
@@ -126,7 +126,7 @@ jobs:
       - name: Upload signed build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: LocationSpoofer-${{ steps.version.outputs.tag }}-signed
+          name: WeRePosition-${{ steps.version.outputs.tag }}-signed
           path: dist/*
           if-no-files-found: error
           retention-days: 30
@@ -149,9 +149,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: LocationSpoofer ${{ steps.version.outputs.tag }}
+          name: WeRePosition ${{ steps.version.outputs.tag }}
           body_path: release-notes.md
           files: |
-            dist/LocationSpoofer-${{ steps.version.outputs.tag }}.apk
-            dist/LocationSpoofer-${{ steps.version.outputs.tag }}.aab
+            dist/WeRePosition-${{ steps.version.outputs.tag }}.apk
+            dist/WeRePosition-${{ steps.version.outputs.tag }}.aab
             dist/SHA256SUMS.txt

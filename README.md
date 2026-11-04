@@ -1,19 +1,19 @@
-# LocationSpoofer
+# WeRePosition
 
 系統級 Android 位置與無線電環境模擬工具，面向需要在受控設備上做定位、地圖、風控相容性與環境資料測試的開發者。
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
-[![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://developer.android.com)
+[![Android](https://img.shields.io/badge/Android-14%2B-green.svg)](https://developer.android.com)
 [![Root](https://img.shields.io/badge/Root-KernelSU%20%7C%20Magisk%20%7C%20APatch-orange.svg)](https://kernelsu.org)
 [![Xposed](https://img.shields.io/badge/Framework-LSPosed-purple.svg)](https://github.com/LSPosed/LSPosed)
 
 [更新記錄](CHANGELOG.md) | [English](README_EN.md)
 
-> 本專案最初源自 [HuangZhuoRui/LocationSpoofer](https://github.com/HuangZhuoRui/LocationSpoofer)，目前已重構為獨立維護分支。當前包名為 `com.shiraka.locatiobprovid`。
+> 本專案僅以 [HuangZhuoRui/LocationSpoofer](https://github.com/HuangZhuoRui/LocationSpoofer) 早期公開倉庫的程式碼為起點；維護者已審查當時取得的原始碼。WeRePosition 現由 qcxg 獨立維護，與原專案、其現任維護者及服務沒有合作或隸屬關係。保留原始來源與授權資訊，是為了如實說明程式碼沿革。Android 包名為 `com.shiraka.wereposition`。
 
 ## 核心定位
 
-傳統 Android 開發者選項中的 Mock Location 容易被目標 App 或 SDK 通過 `isFromMockProvider`、AppOps、測試 provider、周邊 Wi-Fi／基站指紋等方式識別。LocationSpoofer 用 Root + LSPosed 在 Android 系統框架建立全域定位來源；只有 App 直接讀取 Wi-Fi、基站、GNSS status 或 NMEA 時，才在該 App 進程補充對應環境資料。
+傳統 Android 開發者選項中的 Mock Location 容易被目標 App 或 SDK 通過 `isFromMockProvider`、AppOps、測試 provider、周邊 Wi-Fi／基站指紋等方式識別。WeRePosition 用 Root + LSPosed 在 Android 系統框架建立全域定位來源；只有 App 直接讀取 Wi-Fi、基站、GNSS status 或 NMEA 時，才在該 App 進程補充對應環境資料。
 
 本專案遵守兩個重要原則：
 
@@ -80,7 +80,7 @@
 ## 運行架構
 
 ```text
-LocationSpoofer App
+WeRePosition App
   |-- Compose UI / MainViewModel: 更新 anchor、控制服務、呈現能力狀態
   |-- EnvironmentScanner / Room: 保存資料與即時 RF-bearing Flow
   |-- EnvironmentCoveragePolicy: 世界固定 30m Web Mercator 六角格
@@ -93,10 +93,10 @@ LocationSpoofer App
         | 單一 moving-anchor 管線（含現有 legacy route / manual）
         v
 Config channels
-  |-- /data/local/tmp/locationspoofer_config.json
-  |-- /data/system/locationspoofer_config.json
-  |-- locationspoofer_prefs
-  |-- gsm.locsp.* system properties
+  |-- /data/local/tmp/wereposition_config.json
+  |-- /data/system/wereposition_config.json
+  |-- wereposition_prefs
+  |-- gsm.wrp.* system properties
   |-- exported ContentProvider fallback
         |
         v
@@ -115,7 +115,7 @@ LSPosed injected processes
 
 ## 環境要求
 
-- Android 8.0+。
+- Android 14（API 34）或更新版本。
 - KernelSU、Magisk 或 APatch Root。
 - LSPosed / libxposed 可用；全域普通定位需要系統框架與 GMS 作用域。只有要模擬 App 內直接讀取的 Wi-Fi、基站、GNSS status 或 NMEA 時，才把該 App 加入作用域。
 - Google Maps API key 用於地圖與搜尋。
@@ -129,6 +129,7 @@ Windows PowerShell 示例：
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 .\gradlew.bat assembleDebug
 ```
 
@@ -149,7 +150,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 1. 安裝 APK，授予 Root 權限。
 2. 在 LSPosed 中啟用模組並啟用系統框架／GMS 作用域；需要 RF 或 GNSS/NMEA 補充時再加入相應 App。
 3. 修改 module 或 scope 後重啟手機，確保 `system_server` 載入同一版本的唯一定位鏈。
-4. 在 LocationSpoofer 中選擇目標點；舊路線模式目前不作為推薦主流程。
+4. 在 WeRePosition 中選擇目標點；舊路線模式目前不作為推薦主流程。
 5. 根據需要啟用 Wi-Fi、基站與抖動配置。
 6. 開始模擬後，在目標 App 中驗證定位與環境資料。
 

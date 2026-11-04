@@ -50,7 +50,7 @@
             android:foregroundServiceType="location" />
         <provider
             android:name=".provider.SpooferProvider"
-            android:authorities="com.suseoaa.locationspoofer.provider"
+            android:authorities="com.shiraka.wereposition.provider"
             android:exported="true" />
 
         <receiver

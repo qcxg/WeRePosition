@@ -1,19 +1,19 @@
-# LocationSpoofer
+# WeRePosition
 
 System-level Android location and radio-environment simulation for testing apps on an authorized rooted device.
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
-[![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://developer.android.com)
+[![Android](https://img.shields.io/badge/Android-14%2B-green.svg)](https://developer.android.com)
 [![Root](https://img.shields.io/badge/Root-KernelSU%20%7C%20Magisk%20%7C%20APatch-orange.svg)](https://kernelsu.org)
 [![Xposed](https://img.shields.io/badge/Framework-LSPosed-purple.svg)](https://github.com/LSPosed/LSPosed)
 
 [繁體中文](README.md) | [Changelog](CHANGELOG.md)
 
-> This project originated from [HuangZhuoRui/LocationSpoofer](https://github.com/HuangZhuoRui/LocationSpoofer) and is now maintained as an independent branch. The current package name is `com.shiraka.locatiobprovid`.
+> This project uses only code obtained from an early public version of [HuangZhuoRui/LocationSpoofer](https://github.com/HuangZhuoRui/LocationSpoofer) as its starting point. The maintainer reviewed that source. WeRePosition is now independently maintained by qcxg and has no affiliation, collaboration, or service relationship with the original project or its current maintainers. The source and license attribution remain to accurately describe the code's history. The Android package is `com.shiraka.wereposition`.
 
 ## Design
 
-Android developer-options mock locations can be identified through mock flags, AppOps, test providers, or inconsistent Wi-Fi/cell fingerprints. LocationSpoofer establishes an ordinary global location source inside the Android framework. Target-app hooks are optional supplements only when an app directly reads Wi-Fi, cellular, GNSS status, or NMEA APIs.
+Android developer-options mock locations can be identified through mock flags, AppOps, test providers, or inconsistent Wi-Fi/cell fingerprints. WeRePosition establishes an ordinary global location source inside the Android framework. Target-app hooks are optional supplements only when an app directly reads Wi-Fi, cellular, GNSS status, or NMEA APIs.
 
 The project follows two rules:
 
@@ -71,7 +71,7 @@ When enabled, the module can replace Wi-Fi connection/scan callbacks and cellula
 ## Runtime architecture
 
 ```text
-LocationSpoofer app
+WeRePosition app
   -> MainViewModel: update the anchor, control the service, present capability state
   -> Room RF-bearing flow -> world-fixed 30 m Web Mercator cells
   -> EnvironmentRfResolver / DAO: resolve the exact target cell
@@ -97,7 +97,7 @@ Runtime configuration is written atomically through generation-tagged temporary 
 
 ## Requirements
 
-- Android 8.0 or later.
+- Android 14 (API 34) or later.
 - KernelSU, Magisk, or APatch root.
 - LSPosed/libxposed with the module enabled for the Android framework and GMS.
 - Add an individual app to scope only when its direct RF, GNSS-status, or NMEA reads must also be simulated.
@@ -111,6 +111,7 @@ Windows PowerShell:
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 .\gradlew.bat assembleDebug
 ```
 
@@ -133,7 +134,7 @@ After changing module code or its scope, reboot so `system_server` and target pr
 1. Install the APK and grant root access.
 2. Enable the module for the Android framework and GMS in LSPosed.
 3. Add only apps that need direct RF/GNSS/NMEA supplements, then reboot.
-4. Select a target point in LocationSpoofer; the legacy route mode is not the recommended primary flow.
+4. Select a target point in WeRePosition; the legacy route mode is not the recommended primary flow.
 5. Enable only the Wi-Fi, cellular, and drift options needed for the test.
 6. Start simulation and verify the location/environment in the tested app.
 

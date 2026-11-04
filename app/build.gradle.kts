@@ -1,8 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
+    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
-    kotlin("plugin.serialization") version "1.9.22"
+    kotlin("plugin.serialization") version "2.2.10"
 }
 
 val releaseKeystorePath = System.getenv("KEYSTORE_FILE_PATH")?.takeIf { it.isNotBlank() }
@@ -16,8 +16,8 @@ val hasReleaseSigning = releaseKeystorePath != null &&
     file(releaseKeystorePath).isFile
 
 android {
-    namespace = "com.shiraka.locatiobprovid"
-    compileSdk = 36
+    namespace = "com.shiraka.wereposition"
+    compileSdk = 37
 
     fun getLocalConfig(key: String): String? {
         val localYml = file("../local.yml")
@@ -35,8 +35,8 @@ android {
         System.getenv("GOOGLE_MAPS_API_KEY") ?: getLocalConfig("GOOGLE_MAPS_API_KEY") ?: ""
 
     defaultConfig {
-        applicationId = "com.shiraka.locatiobprovid"
-        minSdk = 26
+        applicationId = "com.shiraka.wereposition"
+        minSdk = 34
         //noinspection OldTargetApi
         targetSdk = 36
         versionCode = 14300
@@ -84,19 +84,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-Xskip-metadata-version-check",
-            "-opt-in=kotlinx.serialization.InternalSerializationApi"
-        )
-    }
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.11"
     }
     packaging {
         resources {

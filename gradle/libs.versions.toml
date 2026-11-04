@@ -1,6 +1,6 @@
 [versions]
-agp = "8.4.0"
-kotlin = "1.9.23"
+agp = "9.1.1"
+kotlin = "2.2.10"
 coreKtx = "1.13.1"
 lifecycleRuntimeKtx = "2.7.0"
 activityCompose = "1.9.0"
@@ -12,8 +12,8 @@ okhttp = "4.12.0"
 googleMaps = "20.0.0"
 playServicesLocation = "21.2.0"
 places = "3.4.0"
-room = "2.6.1"
-ksp = "1.9.23-1.0.20"
+room = "2.8.5"
+ksp = "2.3.10"
 kotlinxSerializationJson = "1.6.3"
 
 [libraries]
@@ -43,5 +43,5 @@ room-compiler = { group = "androidx.room", name = "room-compiler", version.ref =
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
