@@ -198,7 +198,8 @@ fun SettingsScreen(
                         googleApiTest = ApiTestUiState(isTesting = true)
                         apiTestScope.launch {
                             val result = ExternalApiTester.testGooglePlaces(
-                                apiKey = keyBeingTested
+                                apiKey = keyBeingTested,
+                                context = context
                             )
                             googleApiTest = ApiTestUiState(result = result)
                         }

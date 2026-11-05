@@ -1740,7 +1740,7 @@ class MainViewModel(
                     })
                 })
             }
-            val request = Request.Builder()
+            val request = com.shiraka.wereposition.utils.GoogleAndroidRestrictionHeaders.apply(Request.Builder(), context)
                 .url("https://places.googleapis.com/v1/places:searchNearby")
                 .addHeader("Content-Type", "application/json")
                 .addHeader("X-Goog-Api-Key", apiKey)
@@ -1781,7 +1781,10 @@ class MainViewModel(
             val url = "https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&language=$language&key=${
                 URLEncoder.encode(apiKey, "UTF-8")
             }"
-            val request = Request.Builder().url(url).build()
+            val request = com.shiraka.wereposition.utils.GoogleAndroidRestrictionHeaders
+                .apply(Request.Builder(), context)
+                .url(url)
+                .build()
             geocodeClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     android.util.Log.d("WeRePosition_Debug", "resolveNearbyPlaceName: Google Geocoding HTTP ${response.code} lat=$lat lng=$lng")

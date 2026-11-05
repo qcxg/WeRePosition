@@ -1,5 +1,6 @@
 package com.shiraka.wereposition.utils
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -51,7 +52,7 @@ object ExternalApiTester {
         .build()
 
     /** Tests the Places API used by the app without changing the globally initialized SDK key. */
-    suspend fun testGooglePlaces(apiKey: String): Result = withContext(Dispatchers.IO) {
+    suspend fun testGooglePlaces(apiKey: String, context: Context): Result = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) return@withContext Result(ResultCode.MISSING_CREDENTIAL)
 
         val payload = JSONObject()
@@ -74,7 +75,7 @@ object ExternalApiTester {
             )
 
         val request = try {
-            Request.Builder()
+            GoogleAndroidRestrictionHeaders.apply(Request.Builder(), context)
                 .url("https://places.googleapis.com/v1/places:searchNearby")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .header("Accept", "application/json")
