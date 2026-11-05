@@ -483,6 +483,7 @@ private fun apiTestResultMessage(result: ExternalApiTester.Result): String {
         ExternalApiTester.ResultCode.SUCCESS -> stringResource(R.string.api_test_success)
         ExternalApiTester.ResultCode.MISSING_CREDENTIAL -> stringResource(R.string.api_test_missing_credential)
         ExternalApiTester.ResultCode.INVALID_CREDENTIAL -> stringResource(R.string.api_test_invalid_credential)
+        ExternalApiTester.ResultCode.INVALID_REQUEST -> stringResource(R.string.api_test_invalid_request)
         ExternalApiTester.ResultCode.ACCESS_RESTRICTED -> stringResource(R.string.api_test_access_restricted)
         ExternalApiTester.ResultCode.SERVICE_NOT_ENABLED -> stringResource(R.string.api_test_service_not_enabled)
         ExternalApiTester.ResultCode.BILLING_REQUIRED -> stringResource(R.string.api_test_billing_required)

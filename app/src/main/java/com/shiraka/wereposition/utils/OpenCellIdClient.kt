@@ -15,40 +15,8 @@ class OpenCellIdClient {
         const val DEFAULT_CELL_LIMIT = 20
     }
 
-    /** 验证 token 是否有效 */
-    suspend fun validateToken(token: String): Boolean = withContext(Dispatchers.IO) {
-        if (token.isBlank()) {
-            Log.d("OpenCellID", "validateToken: Token is blank")
-            return@withContext false
-        }
-        Log.d("OpenCellID", "validateToken: Validating token...")
-        return@withContext try {
-            val url = "https://opencellid.org/cell/getInArea?key=$token&BBOX=0.0,0.0,0.0,0.0&format=json"
-            val request = Request.Builder()
-                .url(url)
-                .build()
-            val response = client.newCall(request).execute()
-            Log.d("OpenCellID", "validateToken: Response status = ${response.code}")
-            if (response.isSuccessful) {
-                val body = response.body?.string() ?: return@withContext false
-                Log.d("OpenCellID", "validateToken: Response body = $body")
-                val json = JSONObject(body)
-                if (json.has("error")) {
-                    // code 1 means "No cells found", which actually validates that the key exists and works.
-                    // code 2 means "API Key not known" or other codes indicate invalid key.
-                    json.optInt("code") == 1
-                } else {
-                    true
-                }
-            } else {
-                Log.d("OpenCellID", "validateToken: Request unsuccessful")
-                false
-            }
-        } catch (e: Exception) {
-            Log.e("OpenCellID", "validateToken: Error: ${e.message}", e)
-            false
-        }
-    }
+    /** Use the same safe, bounded request as the Settings connection test. */
+    suspend fun validateToken(token: String): Boolean = ExternalApiTester.testOpenCellId(token).isSuccess
 
     /** 根据经纬度获取基站数据，无数据时返回空数组字符串"[]"，不生成假数据 */
     suspend fun fetchCellData(lat: Double, lng: Double, token: String): String =
@@ -62,27 +30,39 @@ class OpenCellIdClient {
 
             try {
                 for (box in searchBoxes) {
-                    val url = "https://opencellid.org/cell/getInArea?key=$token&BBOX=${box.latMin},${box.lonMin},${box.latMax},${box.lonMax}&format=json&limit=$DEFAULT_CELL_LIMIT"
+                    val url = okhttp3.HttpUrl.Builder()
+                        .scheme("https")
+                        .host("opencellid.org")
+                        .addPathSegments("cell/getInArea")
+                        .addQueryParameter("key", token)
+                        .addQueryParameter("BBOX", "${box.latMin},${box.lonMin},${box.latMax},${box.lonMax}")
+                        .addQueryParameter("format", "json")
+                        .addQueryParameter("limit", DEFAULT_CELL_LIMIT.toString())
+                        .build()
                     Log.d("OpenCellID", "fetchCellData: [Request] getInArea bbox=$box format=json limit=$DEFAULT_CELL_LIMIT")
                     val request = Request.Builder()
                         .url(url)
                         .build()
 
-                    val response = client.newCall(request).execute()
-                    val code = response.code
-                    val message = response.message
-                    Log.d("OpenCellID", "fetchCellData: [Response] Code: $code, Message: $message")
-                    if (response.isSuccessful) {
-                        val body = response.body?.string()
+                    val (code, body) = client.newCall(request).execute().use { response ->
+                        response.code to response.body?.string()
+                    }
+                    Log.d("OpenCellID", "fetchCellData: [Response] Code: $code")
+                    if (code in 200..299) {
                         if (body == null) {
                             Log.d("OpenCellID", "fetchCellData: Body is null, trying next radius")
                             continue
                         }
                         val jsonObject = JSONObject(body)
+                        val providerCode = jsonObject.optInt("code", 0)
+                        if (jsonObject.has("error") && providerCode != 1) {
+                            Log.w("OpenCellID", "fetchCellData: Provider error code=$providerCode; stopping search")
+                            return@withContext "[]"
+                        }
                         val cells = jsonObject.optJSONArray("cells")
                         Log.d(
                             "OpenCellID",
-                            "fetchCellData: [Response] cells=${cells?.length() ?: 0} error=${jsonObject.optString("error", "")} code=${jsonObject.optInt("code", 0)}"
+                            "fetchCellData: [Response] cells=${cells?.length() ?: 0} code=$providerCode"
                         )
                         if (cells == null || cells.length() == 0) {
                             Log.d("OpenCellID", "fetchCellData: No cells found in bbox=$box (code=${jsonObject.optInt("code")}).")
@@ -96,13 +76,17 @@ class OpenCellIdClient {
                         Log.d("OpenCellID", "fetchCellData: Found ${normalizedCells.length()} usable real cell towers in bbox=$box")
                         return@withContext normalizedCells.toString()
                     } else {
+                        if (code == 400 || code == 401 || code == 403 || code == 429) {
+                            Log.w("OpenCellID", "fetchCellData: HTTP $code; stopping search")
+                            return@withContext "[]"
+                        }
                         Log.d("OpenCellID", "fetchCellData: Request unsuccessful (code=$code), trying next radius")
                     }
                 }
                 Log.d("OpenCellID", "fetchCellData: No cells found in all search radii. Returning empty array.")
                 return@withContext "[]"
             } catch (e: Exception) {
-                Log.e("OpenCellID", "fetchCellData: Exception: ${e.message}", e)
+                Log.e("OpenCellID", "fetchCellData: ${e.javaClass.simpleName}")
                 return@withContext "[]"
             }
         }

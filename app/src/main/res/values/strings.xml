@@ -91,6 +91,7 @@
     <string name="api_test_success">Connection and permission test succeeded.</string>
     <string name="api_test_missing_credential">Enter a key or token first.</string>
     <string name="api_test_invalid_credential">The service rejected this credential. Check that it was copied completely.</string>
+    <string name="api_test_invalid_request">OpenCellID rejected the test query (HTTP 400). This does not prove the key is invalid.</string>
     <string name="api_test_access_restricted">The credential exists, but its app or API restrictions rejected this request.</string>
     <string name="api_test_service_not_enabled">This data API is not enabled for the credential. The Google test checks the Places API.</string>
     <string name="api_test_billing_required">Billing is not active for this Google Cloud project.</string>
@@ -200,7 +201,7 @@
     <string name="route_nodes_count">%d points</string>
 
     <string name="custom_wigle_token">WiGLE API Token (Basic Auth Base64)</string>
-    <string name="custom_wigle_token_hint">Enter your WiGLE token...</string>
+    <string name="custom_wigle_token_hint">Paste “Encoded for use” from your WiGLE account</string>
 
     <string name="custom_opencellid_token">OpenCellID API Token</string>
     <string name="custom_opencellid_token_hint">Enter your OpenCellID token...</string>

@@ -96,6 +96,7 @@
     <string name="api_test_success">连接和权限测试成功。</string>
     <string name="api_test_missing_credential">请先输入密钥或 Token。</string>
     <string name="api_test_invalid_credential">服务端拒绝了此凭证，请确认内容复制完整。</string>
+    <string name="api_test_invalid_request">OpenCellID 拒绝了测试查询（HTTP 400），不能据此判断密钥无效。</string>
     <string name="api_test_access_restricted">凭证存在，但应用或 API 限制拒绝了此次请求。</string>
     <string name="api_test_service_not_enabled">此凭证尚未启用对应的数据 API；Google 项测试的是 Places API。</string>
     <string name="api_test_billing_required">该 Google Cloud 项目尚未启用结算。</string>
@@ -197,7 +198,7 @@
     <string name="select_all">全选</string>
 
     <string name="custom_wigle_token">WiGLE API 密钥 (Basic Auth Base64)</string>
-    <string name="custom_wigle_token_hint">输入您的 WiGLE 密钥...</string>
+    <string name="custom_wigle_token_hint">粘贴 WiGLE 帐户中的「Encoded for use」</string>
 
     <string name="custom_opencellid_token">OpenCellID API 密钥</string>
     <string name="custom_opencellid_token_hint">输入您的 OpenCellID 密钥...</string>

@@ -118,14 +118,18 @@ LSPosed injected processes
 - Android 14（API 34）或更新版本。
 - KernelSU、Magisk 或 APatch Root。
 - LSPosed / libxposed 可用；全域普通定位需要系統框架與 GMS 作用域。只有要模擬 App 內直接讀取的 Wi-Fi、基站、GNSS status 或 NMEA 時，才把該 App 加入作用域。
-- Google Maps API key 用於地圖與搜尋。
-- WiGLE / OpenCellID token 可選，用於補充真實 RF payload。
+- Google Maps API key 用於地圖與搜尋。Android 金鑰限制需允許套件 `com.shiraka.wereposition` 與實際安裝包的簽署 SHA-1；可在 App「設定 → App 身份」複製兩者。Debug、正式簽署各有自己的 SHA-1。
+- 地圖 SDK 的金鑰在編譯時由 `GOOGLE_MAPS_API_KEY` 環境變數或未追蹤的 `local.yml` 讀取；設定頁輸入的 Google 金鑰只用於 Places/搜尋，不能更換已編譯的地圖金鑰。變更後須重新編譯安裝。
+- WiGLE / OpenCellID token 可選，用於補充真實 RF payload。WiGLE 欄位需要帳戶頁的 `Encoded for use` 值；OpenCellID 使用 API Access Tokens 頁面的完整金鑰。
+- 設定頁的 Google「測試」會呼叫 Places REST API，不是地圖 SDK 驗證；Android 限制的金鑰可能在此測試被拒絕，但地圖仍可正常顯示。請以實際地圖載入及 Logcat 授權訊息確認地圖 SDK。
 
 ## 編譯
 
 本專案使用 Kotlin、Jetpack Compose、Material 3、Room、Koin、Google Maps / Places SDK 與 LSPosed API。
 
 Windows PowerShell 示例：
+
+在專案根目錄的 `local.yml` 放入 `GOOGLE_MAPS_API_KEY: "你的金鑰"`（此檔已被 Git 忽略），或於編譯前設定同名環境變數。請勿把金鑰提交到倉庫。
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'

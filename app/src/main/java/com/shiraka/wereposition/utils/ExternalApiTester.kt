@@ -24,6 +24,7 @@ object ExternalApiTester {
         SUCCESS,
         MISSING_CREDENTIAL,
         INVALID_CREDENTIAL,
+        INVALID_REQUEST,
         ACCESS_RESTRICTED,
         SERVICE_NOT_ENABLED,
         BILLING_REQUIRED,
@@ -142,7 +143,8 @@ object ExternalApiTester {
                 .host("opencellid.org")
                 .addPathSegments("cell/getInArea")
                 .addQueryParameter("key", token)
-                .addQueryParameter("BBOX", "-0.0001,-0.0001,0.0001,0.0001")
+                // Use a small, valid land area. Some servers reject a box around 0,0.
+                .addQueryParameter("BBOX", "35.680,139.760,35.681,139.761")
                 .addQueryParameter("format", "json")
                 .addQueryParameter("limit", "1")
                 .build()
@@ -153,6 +155,7 @@ object ExternalApiTester {
         execute(Request.Builder().url(url).header("Accept", "application/json").build()) { status, body ->
             when {
                 status == 401 -> Result(ResultCode.INVALID_CREDENTIAL, status)
+                status == 400 -> Result(ResultCode.INVALID_REQUEST, status)
                 status == 403 -> classifyProviderMessage(status, body)
                 status == 429 -> Result(ResultCode.QUOTA_EXCEEDED, status)
                 status >= 500 -> Result(ResultCode.SERVER_UNAVAILABLE, status)
@@ -165,6 +168,8 @@ object ExternalApiTester {
                             // OpenCellID code 1 means that the area contains no cells; the key was accepted.
                             json.optInt("code", -1) == 1 -> Result(ResultCode.SUCCESS, status)
                             json.optInt("code", -1) == 2 -> Result(ResultCode.INVALID_CREDENTIAL, status)
+                            json.optInt("code", -1) == 3 -> Result(ResultCode.INVALID_REQUEST, status)
+                            json.optInt("code", -1) == 7 -> Result(ResultCode.QUOTA_EXCEEDED, status)
                             else -> classifyProviderMessage(status, body)
                         }
                     },
