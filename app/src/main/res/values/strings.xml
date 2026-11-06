@@ -119,6 +119,7 @@
     <string name="app_sha1">App SHA-1 signature</string>
     <string name="custom_google_key">Custom Google API Key</string>
     <string name="custom_google_key_hint">Enter your Google Map key...</string>
+    <string name="maps_sdk_build_key_notice">This field is for Places search. The map uses the key bundled at build time; change GOOGLE_MAPS_API_KEY in local.yml and reinstall to update it.</string>
     <string name="copy">Copy</string>
     <string name="copied_to_clipboard">Copied to clipboard</string>
     <string name="runtime_recovery">Runtime Recovery</string>
@@ -128,7 +129,7 @@
     <string name="cleanup_runtime_env_done">Runtime environment cleaned. Reopen Maps and wait for a fresh fix.</string>
     <string name="cleanup_runtime_env_failed">Cleanup failed. Please confirm root permission is granted.</string>
     <string name="cleanup_runtime_env_confirm_title">Clean runtime environment?</string>
-    <string name="cleanup_runtime_env_confirm_msg">This will stop spoofing, remove runtime config, refresh location services, and close Google Maps/Play services location processes. It does not enable mock location.</string>
+    <string name="cleanup_runtime_env_confirm_msg">This will stop spoofing, remove runtime config, and refresh location services. It does not enable mock location.</string>
     <string name="still">Still</string>
     <string name="waiting_gps_signal">No cached location, waiting for GPS signal (may be slow/unavailable indoors)</string>
     <string name="native_location_success">Native location success!</string>

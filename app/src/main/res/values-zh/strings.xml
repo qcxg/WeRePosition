@@ -124,6 +124,7 @@
     <string name="app_sha1">应用 SHA-1 签名</string>
     <string name="custom_google_key">谷歌地图 API Key</string>
     <string name="custom_google_key_hint">输入您申请的谷歌地图 Key</string>
+    <string name="maps_sdk_build_key_notice">此栏仅用于 Places 搜索。地图使用编译时的密钥；若要更换，请修改 local.yml 中的 GOOGLE_MAPS_API_KEY 并重新安装。</string>
     <string name="copy">复制</string>
     <string name="copied_to_clipboard">已复制到剪贴板</string>
     <string name="runtime_recovery">运行环境恢复</string>
@@ -133,7 +134,7 @@
     <string name="cleanup_runtime_env_done">运行环境已清理。请重新打开地图并等待新的定位。</string>
     <string name="cleanup_runtime_env_failed">清理失败，请确认 Root 权限已授权。</string>
     <string name="cleanup_runtime_env_confirm_title">清理运行环境？</string>
-    <string name="cleanup_runtime_env_confirm_msg">这会停止模拟、删除运行配置、刷新定位服务，并关闭 Google 地图/Play 服务定位进程。不会启用模拟定位权限。</string>
+    <string name="cleanup_runtime_env_confirm_msg">这会停止模拟、删除运行配置并刷新定位服务。不会启用模拟定位权限。</string>
     <string name="still">静止</string>
     <string name="waiting_gps_signal">系统未缓存位置，正在等待GPS信号(室内可能极慢或无信号)</string>
     <string name="native_location_success">原生定位成功！</string>

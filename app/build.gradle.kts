@@ -36,6 +36,7 @@ android {
 
     defaultConfig {
         applicationId = "com.shiraka.wereposition"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 34
         //noinspection OldTargetApi
         targetSdk = 36
@@ -127,4 +128,6 @@ dependencies {
     ksp(libs.room.compiler)
 
     debugImplementation(libs.androidx.ui.tooling)
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

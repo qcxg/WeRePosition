@@ -277,7 +277,6 @@ class RootManager {
             cmd location set-location-enabled false 2>/dev/null || true
             sleep 1
             cmd location set-location-enabled true 2>/dev/null || true
-            am force-stop com.google.android.gms 2>/dev/null || true
             am force-stop com.google.android.apps.maps 2>/dev/null || true
             """.trimIndent()
         )

@@ -205,6 +205,12 @@ fun SettingsScreen(
                         }
                     }
                 )
+                Text(
+                    text = stringResource(R.string.maps_sdk_build_key_notice),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
                 Spacer(Modifier.height(8.dp))
                 ApiCredentialField(
                     value = localWigleToken,

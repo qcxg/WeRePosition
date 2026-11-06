@@ -8,7 +8,7 @@ This document is the current source of truth for how WeRePosition simulates GNSS
 
 - The app must not use Android Developer Options mock-location app assignment as the primary spoofing mechanism.
 - The app must not leave Android test providers or mock providers registered after stopping, rebooting, or service death.
-- Global spoofing is intentional. The hook layer is expected to run in system, GMS, and location infrastructure processes through LSPosed/libxposed scope.
+- Global spoofing is intentional. Only the system framework requires LSPosed/libxposed scope for ordinary location delivery. Play services and Fused Location must remain outside module scope.
 - While spoofing is active, direct reads of real GNSS, Wi-Fi, and cell data should be blocked or replaced only for explicitly enabled simulation channels.
 - When no trusted simulated Wi-Fi or cell data exists, return empty simulated data rather than inventing APs or towers.
 - A live active snapshot is trusted for at most 30 seconds without a new monotonic runtime frame. After writer death or a normal stop, hooks restore pass-through instead of indefinitely breaking real location/RF behavior.
@@ -32,7 +32,7 @@ Primary components:
 - `RootManager.kt`: owns the service-only persistent root shell used during active simulation; one acknowledged serialized shell replaces a new `su` process per movement tick and is closed on stop, location-off, or service destruction.
 - `LocationHooker.kt`: libxposed module injected into scoped processes.
 
-Debug/test apps that directly inspect Wi-Fi, cell, GNSS status, or NMEA must also be in the LSPosed scope. System/GMS scope is enough for many normal location consumers, but tools such as Cellular-Z and GPSTest read several APIs inside their own app process, so their package processes must be hooked too.
+Debug/test apps that directly inspect Wi-Fi, cell, GNSS status, or NMEA must also be in the LSPosed scope. System framework scope is enough for many normal location consumers, but tools such as Cellular-Z and GPSTest read several APIs inside their own app process, so their package processes must be hooked too. Never scope Play services or Fused Location.
 
 ### Config Channels
 
@@ -135,7 +135,7 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 - The foreground service is the single moving-output and active-runtime writer for fixed, route, and manual modes. It keeps moving coordinates fresh through the compact frame at 1 Hz, refreshes a stationary frame every 10 seconds, and rewrites full runtime JSON only on content/RF changes or the 60-second safety fallback. It does not apply final random jitter before publication.
 - Jitter is sampled only on the authoritative framework cadence. `jitter_radius_meters` is the requested roaming envelope, not only a distant clamp. Slow/medium/fast use different OU time scales and hold a coordinate sample for about 2.8 / 1.5 / 0.8 seconds, producing approximately 3 / 2 / 1-fix advancement at 1 Hz while timestamps remain fresh. When any RF switch is enabled, the final OU sample is bounded to the anchor's exact `EnvironmentCoveragePolicy` cell before GCJ-02 -> WGS-84 conversion; this prevents a delivered coordinate from crossing into a cell whose RF payload was not resolved. With all RF switches off, the full configured drift envelope remains available. The location fields are written together, so paired latitude/longitude can never belong to different samples.
 - `onSystemServerStarting` installs the framework hook groups once per PID. Later `onPackageReady` callbacks in that PID are ignored by the process installation guard.
-- GMS receives ordinary framework reports through its normal registrations. There is no GMS `LocationResult` getter replacement and no extra GMS callback timer.
+- GMS receives ordinary framework reports through its normal registrations and is not injected by this module.
 
 ### Satellite and NMEA Supplements
 
@@ -146,17 +146,17 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 - NMEA `RMC`, `GGA`, `GLL`, `VTG`, `GSA`, and `GSV` sentences are rewritten and checksums recalculated. `GSA`/`GSV` use the same cached simulated satellite set as `GnssStatus`.
 - When simulation is inactive or the Android location master switch is off, NMEA listener registration is passed through byte-for-byte and no Proxy or injector timer is created. A listener registered while inactive remains a real listener until its client registers again after simulation starts.
 - If a listener Proxy was created during an active run and remains registered after stop, its normal NMEA callback path becomes a direct real-sentence pass-through: it does not poll config, rewrite the sentence, copy callback arguments, or use reflection.
-- In non-infrastructure scoped client processes, NMEA listeners also receive an active injected burst shortly after registration and then once per second, so satellite views do not need to wait for slow hardware NMEA sentences before showing the simulated constellation. System/GMS infrastructure processes keep passive rewriting but do not receive extra active NMEA timer events.
+- In non-infrastructure scoped client processes, NMEA listeners also receive an active injected burst shortly after registration and then once per second, so satellite views do not need to wait for slow hardware NMEA sentences before showing the simulated constellation. The system framework does not receive extra active NMEA timer events.
 - `usedInFix` satellite selection is weighted by signal quality but not strictly the first sorted satellites; a rotating subset of lower-list satellites can participate in the fix.
 - Hardware satellite visibility is suppressed or replaced through GNSS status and NMEA hooks.
-- AMap, Baidu, and Tencent SDK-specific deep hooks are disabled by default. The stable path is Android framework + system/GMS/fused output. Re-enabling per-SDK branches requires an explicit compatibility decision because those branches can conflict with the global provider chain and reintroduce app-specific instability.
+- AMap, Baidu, and Tencent SDK-specific deep hooks are disabled by default. The stable path is Android framework output; GMS and Fused Location consume it without module injection. Re-enabling per-SDK branches requires an explicit compatibility decision because those branches can conflict with the global provider chain and reintroduce app-specific instability.
 
 ### Restart and Reboot Semantics
 
 - Installing a new APK does not reload already-injected LSPosed/libxposed code inside running target processes. A target process restart or device reboot is required before the newly installed hook code is authoritative.
 - A release `MY_PACKAGE_REPLACED` sets `moduleRestartRequired`; repository starts are rejected until the next `BOOT_COMPLETED`. Debug replacement remains startable for host/service-only iteration, but a tester must still reboot explicitly whenever hook bytecode changed. This prevents production host writers from running against old resident hook code without blocking the normal debug loop.
 - Active runtime configs include `boot_id`; after reboot, previous-boot active configs are intentionally disabled instead of resurrected. Spoofing must be started again so the foreground service writes a fresh same-boot heartbeat/config.
-- `RuntimeCleanupReceiver` marks runtime config inactive on `MY_PACKAGE_REPLACED` and `BOOT_COMPLETED`. This prevents an old `active=true` file with no foreground service heartbeat from leaving system/GMS/client hooks stuck in fail-closed before the user opens the app again.
+- `RuntimeCleanupReceiver` marks runtime config inactive on `MY_PACKAGE_REPLACED` and `BOOT_COMPLETED`. This prevents an old `active=true` file with no foreground service heartbeat from leaving system/client hooks stuck in fail-closed before the user opens the app again.
 
 ### Current Risk Notes
 

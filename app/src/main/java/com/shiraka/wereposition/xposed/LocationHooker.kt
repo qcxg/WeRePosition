@@ -351,14 +351,8 @@ class LocationHooker : XposedModule() {
     private val allowedHookPackages = setOf(
         "android",
         "system",
-        "com.google.android.gms",
-        "com.android.location.fused",
         "com.android.gpstest",
         "make.more.r2d2.cellular_z.play"
-    )
-    private val allowedGmsProcesses = setOf(
-        "com.google.android.gms",
-        "com.google.android.gms.persistent"
     )
 
     init {
@@ -490,11 +484,9 @@ class LocationHooker : XposedModule() {
             return
         }
 
-        // Telephony and NetworkStack are infrastructure rather than consumers. Client-side
-        // TelephonyManager/WifiManager hooks belong in GMS, fused, and explicitly scoped
-        // diagnostic/consumer processes only.
+        // Infrastructure processes are never client-side RF hook targets. Play services and
+        // Fused Location stay outside module scope; framework locations reach them normally.
         if (pkg == "com.android.phone" || pkg == "com.android.networkstack") return
-        if (pkg == "com.google.android.gms" && currentProcessName() !in allowedGmsProcesses) return
 
         hookLocationAPIs(classLoader, pkg)
         hookWifiEnvironment(classLoader)
@@ -504,21 +496,6 @@ class LocationHooker : XposedModule() {
         // It can lower compass confidence when the physical sensor calibration disagrees with
         // the calculated geomagnetic model, so keep compass data untouched by default.
     }
-
-    private fun currentProcessName(): String {
-        return runCatching {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                android.app.Application.getProcessName()
-            } else {
-                Class.forName("android.app.ActivityThread")
-                    .getMethod("currentProcessName")
-                    .invoke(null) as? String
-            }
-        }
-            .getOrNull()
-            .orEmpty()
-    }
-
 
     private var startTimestamp = System.currentTimeMillis()
 

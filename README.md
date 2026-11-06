@@ -27,7 +27,7 @@
 - `system_server` 以單一 1 Hz 節拍經真實 provider 抽象層上報，並在 framework 驗證後、快取與派發前產生一個完整 WGS-84 fix。
 - 經緯度、精度、海拔、運動欄位、wall time 與 elapsed realtime 在同一個樣本一次寫完；一般 App 仍走 Android 原生權限、AppOps、間隔與距離過濾鏈。
 - 不攔截或吞掉 `LocationManager` 請求，不改寫 `Location` getter／Parcel，也不建立每個 App 的額外派發計時器。
-- GMS 與未加入 module scope 的一般 App 都能從 framework 取得正常定位；GNSS status 與 NMEA 是可選的客戶端補充層。
+- GMS 與未加入 module scope 的一般 App 都從 framework 取得定位；GMS 和 Fused Location 不應加入 module scope。GNSS status 與 NMEA 是可選的客戶端補充層。
 - 固定點是目前已驗證的主模式。舊路線／搖桿入口仍在程式內，但未納入本輪回歸；下一階段將把搖桿改成獨立控制並考慮移除自動路線，詳見 [搖桿重構計畫](ai_readme/joystick_refactor_plan.md)。
 
 ### 抖動與自然漂移
@@ -102,7 +102,7 @@ Config channels
         v
 LSPosed injected processes
   |-- system_server: authoritative 1 Hz location source
-  |-- GMS: ordinary framework consumer
+  |-- GMS / Fused Location: ordinary framework consumers, outside module scope
   |-- optional target apps: GNSS / Wi-Fi / Cell supplements
   |-- fail-closed when active config is stale
 ```
@@ -117,7 +117,7 @@ LSPosed injected processes
 
 - Android 14（API 34）或更新版本。
 - KernelSU、Magisk 或 APatch Root。
-- LSPosed / libxposed 可用；全域普通定位需要系統框架與 GMS 作用域。只有要模擬 App 內直接讀取的 Wi-Fi、基站、GNSS status 或 NMEA 時，才把該 App 加入作用域。
+- LSPosed / libxposed 可用；全域普通定位只需要系統框架作用域。不要勾選 Google Play 服務或 Fused Location。只有要模擬 App 內直接讀取的 Wi-Fi、基站、GNSS status 或 NMEA 時，才把該 App 加入作用域。
 - Google Maps API key 用於地圖與搜尋。Android 金鑰限制需允許套件 `com.shiraka.wereposition` 與實際安裝包的簽署 SHA-1；可在 App「設定 → App 身份」複製兩者。Debug、正式簽署各有自己的 SHA-1。
 - 地圖 SDK 的金鑰在編譯時由 `GOOGLE_MAPS_API_KEY` 環境變數或未追蹤的 `local.yml` 讀取；設定頁輸入的 Google 金鑰只用於 Places/搜尋，不能更換已編譯的地圖金鑰。變更後須重新編譯安裝。
 - WiGLE / OpenCellID token 可選，用於補充真實 RF payload。WiGLE 欄位需要帳戶頁的 `Encoded for use` 值；OpenCellID 使用 API Access Tokens 頁面的完整金鑰。
@@ -152,7 +152,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 ## 基本使用
 
 1. 安裝 APK，授予 Root 權限。
-2. 在 LSPosed 中啟用模組並啟用系統框架／GMS 作用域；需要 RF 或 GNSS/NMEA 補充時再加入相應 App。
+2. 在 LSPosed 中啟用模組並只啟用系統框架作用域；不要勾選 Google Play 服務或 Fused Location。需要 RF 或 GNSS/NMEA 補充時再加入相應 App。
 3. 修改 module 或 scope 後重啟手機，確保 `system_server` 載入同一版本的唯一定位鏈。
 4. 在 WeRePosition 中選擇目標點；舊路線模式目前不作為推薦主流程。
 5. 根據需要啟用 Wi-Fi、基站與抖動配置。

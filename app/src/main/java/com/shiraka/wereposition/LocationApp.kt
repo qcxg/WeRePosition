@@ -51,6 +51,13 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
 
     override fun onServiceBind(service: XposedService) {
         mService = service
+        // Old module versions recommended these infrastructure processes. Remove a persisted
+        // selection as well as omitting them from the packaged default scope.
+        runCatching {
+            service.removeScope(listOf("com.google.android.gms", "com.android.location.fused"))
+        }.onFailure {
+            android.util.Log.w("LocationApp", "Could not clear legacy infrastructure scope: ${it.javaClass.simpleName}")
+        }
         _isModuleActive.value = true
     }
 
