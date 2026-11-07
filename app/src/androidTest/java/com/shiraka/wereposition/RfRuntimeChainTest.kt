@@ -90,7 +90,7 @@ class RfRuntimeChainTest {
                     2412, 72, -63, "[WPA2-PSK-CCMP][ESS]", 1, 4)
             )
             dao.insertCellDevice(
-                CellDevice(cellKey = cellKey, type = "LTE", mcc = 1, mnc = 1,
+                CellDevice(cellKey = cellKey, type = "LTE", mcc = 440, mnc = 10,
                     tac = 42, ci = 424242, pci = 42)
             )
             dao.insertLocationCell(LocationCell(recordId, cellKey, -82, true))
@@ -101,7 +101,16 @@ class RfRuntimeChainTest {
             assertEquals(bssid, JSONObject(resolved.wifiJson)
                 .getJSONArray("nearbyWifi").getJSONObject(0).getString("bssid"))
             assertEquals(1, JSONArray(resolved.cellJson).length())
+            assertEquals(440, JSONArray(resolved.cellJson).getJSONObject(0).getInt("mcc"))
+            assertEquals(10, JSONArray(resolved.cellJson).getJSONObject(0).getInt("mnc"))
             assertFalse(resolver.resolve(lat + 0.002, lng).hasWifi)
+
+            val preStartSeconds = InstrumentationRegistry.getArguments()
+                .getString("preStartSeconds")?.toLongOrNull()?.coerceIn(0L, 30L) ?: 0L
+            if (preStartSeconds > 0L) {
+                android.util.Log.i("WRP_RUNTIME_TEST", "Waiting for external app registration before simulation")
+                delay(preStartSeconds * 1_000L)
+            }
 
             repository.startSpoofing(
                 context = context, lat = lat, lng = lng, simMode = "STILL",
@@ -163,6 +172,12 @@ class RfRuntimeChainTest {
                 )
             } finally {
                 locationManager.removeUpdates(listener)
+            }
+            val inspectionSeconds = InstrumentationRegistry.getArguments()
+                .getString("inspectionSeconds")?.toLongOrNull()?.coerceIn(0L, 45L) ?: 0L
+            if (inspectionSeconds > 0L) {
+                android.util.Log.i("WRP_RUNTIME_TEST", "Synthetic runtime active for external app inspection")
+                delay(inspectionSeconds * 1_000L)
             }
         } finally {
             try {

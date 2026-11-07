@@ -348,13 +348,6 @@ object XposedBridge {
 }
 
 class LocationHooker : XposedModule() {
-    private val allowedHookPackages = setOf(
-        "android",
-        "system",
-        "com.android.gpstest",
-        "make.more.r2d2.cellular_z.play"
-    )
-
     init {
         XposedHelpers.module = this
     }
@@ -447,10 +440,10 @@ class LocationHooker : XposedModule() {
         if (pkg == "com.shiraka.wereposition") {
             return // 宿主App不需要注入定位Hook
         }
-        // LSPosed keeps a user's previous scope selection across module updates.
-        // Enforce the stable scope in code so an old broad selection cannot keep
-        // injecting radio hooks into unrelated applications.
-        if (pkg !in allowedHookPackages) return
+        // LSPosed already limits this callback to the user's selected scope.
+        // Never inject into location infrastructure, even if an old scope still
+        // contains it; other selected client apps need their RF/GNSS hooks.
+        if (isInfrastructurePackage(pkg) && pkg != "android" && pkg != "system") return
         if (!claimProcessHookInstallation(pkg)) return
         XposedBridge.log("[WeRePosition] Hooking package: $pkg")
         XposedBridge.logOpenCellId("handleLoadPackage pkg=$pkg classLoader=$classLoader")
@@ -587,6 +580,12 @@ class LocationHooker : XposedModule() {
     )
     // Active GnssStatus injector timers keyed by callback identity hash
     private val gnssStatusInjectors = ConcurrentHashMap<Int, java.util.Timer>()
+    private data class RegisteredGnssStatusCallback(
+        val callback: Any,
+        val classLoader: ClassLoader
+    )
+    private val registeredGnssStatusCallbacks =
+        ConcurrentHashMap<Int, RegisteredGnssStatusCallback>()
     @Volatile
     private var lastSystemLocationCheckAt = 0L
     @Volatile
@@ -3065,6 +3064,7 @@ class LocationHooker : XposedModule() {
                             }
                         }
                         if (callbackObj != null) {
+                            if (param.throwable != null || param.result == false) return
                             val clazz = callbackObj.javaClass
                             if (hookedCallbackClasses.putIfAbsent(clazz, true) == null) {
                                 try {
@@ -3092,11 +3092,11 @@ class LocationHooker : XposedModule() {
                                     })
                                 } catch (e: Throwable) {}
                             }
-                            // Start an active injector so the callback is driven even when the real
-                            // GPS has no satellite signal (indoor, airplane mode, etc.).
-                            // Without this, onSatelliteStatusChanged is never called by the system,
-                            // and satellite view apps see an empty sky regardless of our getter hooks.
                             if (shouldActivelyInjectClientGnss()) {
+                                // Keep the registration while idle. A later config activation must
+                                // start delivery without requiring the target app to register again.
+                                registeredGnssStatusCallbacks[System.identityHashCode(callbackObj)] =
+                                    RegisteredGnssStatusCallback(callbackObj, classLoader)
                                 val config = readConfig()
                                 if (shouldDeliverLocation(config)) {
                                     startGnssStatusInjector(callbackObj, classLoader)
@@ -3114,6 +3114,7 @@ class LocationHooker : XposedModule() {
                         for (arg in param.args) {
                             if (arg != null) {
                                 val key = System.identityHashCode(arg)
+                                registeredGnssStatusCallbacks.remove(key)
                                 gnssStatusInjectors.remove(key)?.cancel()
                             }
                         }
@@ -3153,9 +3154,11 @@ class LocationHooker : XposedModule() {
      */
     private fun startGnssStatusInjector(callbackObj: Any, classLoader: ClassLoader) {
         val key = System.identityHashCode(callbackObj)
-        if (gnssStatusInjectors.containsKey(key)) return
         val timer = java.util.Timer("WeRePosition_GnssSat_${key}", true)
-        gnssStatusInjectors[key] = timer
+        if (gnssStatusInjectors.putIfAbsent(key, timer) != null) {
+            timer.cancel()
+            return
+        }
         XposedBridge.logEvery(
             "gnssInjectorStart:$currentPackageName:${callbackObj.javaClass.simpleName}",
             "[GPS_Spoofer] GnssStatus active injector started pkg=$currentPackageName cb=${callbackObj.javaClass.simpleName}"
@@ -3164,10 +3167,11 @@ class LocationHooker : XposedModule() {
             override fun run() {
                 try {
                     val config = readConfig()
-                    if (!shouldDeliverLocation(config)) {
+                    if (!shouldSpoofLocation(config)) {
                         gnssStatusInjectors.remove(key)?.cancel()
                         return
                     }
+                    if (!isSystemLocationSwitchEnabled()) return
                     updateSatelliteCacheIfNeeded()
                     if (!isSpoofingActiveCache) return
                     val satCount = cachedSatellites?.size ?: 0
@@ -3183,6 +3187,13 @@ class LocationHooker : XposedModule() {
                 } catch (_: Throwable) {}
             }
         }, 200L, 1000L)
+    }
+
+    private fun startRegisteredGnssStatusInjectors() {
+        if (!shouldActivelyInjectClientGnss()) return
+        registeredGnssStatusCallbacks.values.forEach { registration ->
+            startGnssStatusInjector(registration.callback, registration.classLoader)
+        }
     }
 
     /**
@@ -3586,6 +3597,9 @@ class LocationHooker : XposedModule() {
             (selectedCandidate.config.optBoolean("active", false) && !systemInjectorStarted)
         ) {
             wakeSystemLocationInjector()
+        }
+        if (activeChanged && shouldDeliverLocation(selectedCandidate.config)) {
+            startRegisteredGnssStatusInjectors()
         }
         return selectedCandidate.config
     }
