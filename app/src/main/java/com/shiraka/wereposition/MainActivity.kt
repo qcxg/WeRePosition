@@ -11,23 +11,33 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.shiraka.wereposition.ui.screen.BlockingScreen
 import com.shiraka.wereposition.ui.screen.FullScreenMapPage
 import com.shiraka.wereposition.ui.screen.InitializingScreen
+import com.shiraka.wereposition.ui.screen.JoystickSettingsScreen
 import com.shiraka.wereposition.ui.screen.SpoofingScreen
 import com.shiraka.wereposition.ui.screen.LanguageSelectionScreen
 import com.shiraka.wereposition.ui.theme.AppColorSchemeDark
@@ -166,12 +176,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class MainNavState(
-    val fullScreen: Boolean,
-    val scanner: Boolean,
-    val manage: Boolean,
-    val settings: Boolean
-)
+private enum class MainTab(val label: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    FIXED(R.string.fixed_simulation, Icons.Rounded.LocationOn),
+    JOYSTICK(R.string.nav_joystick, Icons.Rounded.SportsEsports),
+    DATA(R.string.title_manage_data, Icons.Rounded.Storage),
+    SETTINGS(R.string.settings, Icons.Rounded.Settings)
+}
 
 @Composable
 fun MainScreen(
@@ -181,7 +191,11 @@ fun MainScreen(
 ) {
     var isFullScreenMap by remember { mutableStateOf(false) }
     var isScannerMap by remember { mutableStateOf(false) }
-    var isSettingsScreen by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(MainTab.FIXED) }
+
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == MainTab.DATA) viewModel.loadManageData()
+    }
 
     val closeMapAndResetRouteIfNeeded = {
         if (uiState.routePlanStage == com.shiraka.wereposition.data.model.RoutePlanStage.SELECTING ||
@@ -191,94 +205,68 @@ fun MainScreen(
         isFullScreenMap = false
     }
 
-    BackHandler(enabled = isFullScreenMap || isScannerMap || uiState.isManageDataScreen || isSettingsScreen) {
-        if (uiState.isManageDataScreen) {
-            viewModel.toggleManageDataScreen(false)
-        } else if (isSettingsScreen) {
-            isSettingsScreen = false
-        } else if (isScannerMap) {
+    BackHandler(enabled = isFullScreenMap || isScannerMap || selectedTab != MainTab.FIXED) {
+        if (isScannerMap) {
             isScannerMap = false
-        } else {
+        } else if (isFullScreenMap) {
             closeMapAndResetRouteIfNeeded()
+        } else {
+            selectedTab = MainTab.FIXED
         }
     }
 
-    AnimatedContent(
-        targetState = MainNavState(isFullScreenMap, isScannerMap, uiState.isManageDataScreen, isSettingsScreen),
-        transitionSpec = {
-            if (initialState.fullScreen || targetState.fullScreen) {
-                // Window scale/fade expanding and shrinking transitions
-                if (targetState.fullScreen) {
-                    scaleIn(initialScale = 0.8f, animationSpec = tween(400)) + fadeIn(animationSpec = tween(400)) togetherWith
-                    scaleOut(targetScale = 1.2f, animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
-                } else {
-                    scaleIn(initialScale = 1.2f, animationSpec = tween(400)) + fadeIn(animationSpec = tween(400)) togetherWith
-                    scaleOut(targetScale = 0.8f, animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
-                }
-            } else {
-                val isEntering = (targetState.settings || targetState.manage || targetState.scanner) && 
-                                 !(initialState.settings || initialState.manage || initialState.scanner)
-                if (isEntering) {
-                    slideInHorizontally(tween(400)) { it } togetherWith slideOutHorizontally(tween(400)) { -it }
-                } else {
-                    slideInHorizontally(tween(400)) { -it } togetherWith slideOutHorizontally(tween(400)) { it }
+    when {
+        uiState.isInitializing -> InitializingScreen(isDark)
+        !uiState.isLanguageSet -> LanguageSelectionScreen(viewModel)
+        !uiState.hasRootAccess -> BlockingScreen(
+            icon = Icons.Rounded.Lock,
+            title = stringResource(R.string.root_required),
+            message = stringResource(R.string.root_message),
+            isDark = isDark
+        )
+        !uiState.isLSPosedActive -> BlockingScreen(
+            icon = Icons.Rounded.Extension,
+            title = stringResource(R.string.lsposed_not_active),
+            message = stringResource(R.string.lsposed_message),
+            isDark = isDark
+        )
+        isFullScreenMap -> FullScreenMapPage(
+            viewModel = viewModel, uiState = uiState, isDark = isDark,
+            isInPipMode = false, onClose = closeMapAndResetRouteIfNeeded
+        )
+        isScannerMap -> com.shiraka.wereposition.ui.screen.ScannerMapScreen(
+            viewModel = viewModel, uiState = uiState, isDark = isDark,
+            onClose = { isScannerMap = false }
+        )
+        else -> Scaffold(
+            bottomBar = {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                    MainTab.entries.forEach { tab ->
+                        NavigationBarItem(
+                            selected = selectedTab == tab,
+                            onClick = { selectedTab = tab },
+                            icon = { Icon(tab.icon, contentDescription = null) },
+                            label = { Text(stringResource(tab.label)) }
+                        )
+                    }
                 }
             }
-        },
-        label = "screen_transition"
-    ) { navState ->
-        if (navState.fullScreen) {
-            FullScreenMapPage(
-                viewModel = viewModel,
-                uiState = uiState,
-                isDark = isDark,
-                isInPipMode = false,
-                onClose = { closeMapAndResetRouteIfNeeded() }
-            )
-        } else if (navState.scanner) {
-            com.shiraka.wereposition.ui.screen.ScannerMapScreen(
-                viewModel = viewModel,
-                uiState = uiState,
-                isDark = isDark,
-                onClose = { isScannerMap = false }
-            )
-        } else if (navState.manage) {
-            com.shiraka.wereposition.ui.screen.ManageDataScreen(
-                viewModel = viewModel,
-                uiState = uiState,
-                isDark = isDark,
-                onClose = { viewModel.toggleManageDataScreen(false) }
-            )
-        } else if (navState.settings) {
-            com.shiraka.wereposition.ui.screen.SettingsScreen(
-                viewModel = viewModel,
-                uiState = uiState,
-                onClose = { isSettingsScreen = false }
-            )
-        } else {
-            when {
-                uiState.isInitializing -> InitializingScreen(isDark)
-                !uiState.isLanguageSet -> LanguageSelectionScreen(viewModel)
-                !uiState.hasRootAccess -> BlockingScreen(
-                    icon = Icons.Rounded.Lock,
-                    title = stringResource(R.string.root_required),
-                    message = stringResource(R.string.root_message),
-                    isDark = isDark
-                )
-                !uiState.isLSPosedActive -> BlockingScreen(
-                    icon = Icons.Rounded.Extension,
-                    title = stringResource(R.string.lsposed_not_active),
-                    message = stringResource(R.string.lsposed_message),
-                    isDark = isDark
-                )
-                else -> SpoofingScreen(
-                    viewModel = viewModel,
-                    uiState = uiState,
-                    isDark = isDark,
-                    onExpandMap = { isFullScreenMap = true },
-                    onExpandScannerMap = { isScannerMap = true },
-                    onExpandSettings = { isSettingsScreen = true }
-                )
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding())) {
+                when (selectedTab) {
+                    MainTab.FIXED -> SpoofingScreen(
+                        viewModel = viewModel, uiState = uiState, isDark = isDark,
+                        onExpandMap = { isFullScreenMap = true },
+                        onExpandScannerMap = { isScannerMap = true }
+                    )
+                    MainTab.JOYSTICK -> JoystickSettingsScreen()
+                    MainTab.DATA -> com.shiraka.wereposition.ui.screen.ManageDataScreen(
+                        viewModel = viewModel, uiState = uiState, isDark = isDark
+                    )
+                    MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
+                        viewModel = viewModel, uiState = uiState
+                    )
+                }
             }
         }
     }

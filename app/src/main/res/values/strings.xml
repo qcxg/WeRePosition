@@ -39,6 +39,17 @@
     <string name="saved_locations">Collection List</string>
     <string name="recent_locations">Recent Locations</string>
     <string name="settings">Settings</string>
+    <string name="nav_joystick">Joystick</string>
+    <string name="nav_joystick_placeholder">Joystick settings will appear here in a later update.</string>
+    <string name="synthetic_rf_title">Generated Wi-Fi and cells</string>
+    <string name="synthetic_rf_on">Enabled for fixed simulation</string>
+    <string name="synthetic_rf_off">Off</string>
+    <string name="synthetic_rf_warning">Generated signals are fictional and are not collected data. The target country is checked by reverse geocoding. If the country cannot be verified or is unsupported, no signals are generated. Supported: TW, JP, US, CN, HK, SG, KR, GB, DE, FR, AU, CA, IN.</string>
+    <string name="synthetic_rf_enable">Generate missing signals</string>
+    <string name="synthetic_wifi_count">Wi-Fi networks: %d</string>
+    <string name="synthetic_cell_count">Cell towers: %d</string>
+    <string name="synthetic_ssid_prefix">Wi-Fi name prefix</string>
+    <string name="synthetic_rf_active">Generated signals active · fictional test data</string>
     <string name="collection_list">Collection List</string>
     <string name="fullscreen_selection">Fullscreen Selection</string>
     <string name="target_coordinates">Target Coordinates</string>

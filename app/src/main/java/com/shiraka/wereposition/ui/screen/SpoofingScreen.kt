@@ -14,7 +14,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -79,7 +78,6 @@ import com.shiraka.wereposition.data.model.WifiConnectionMode
 import com.shiraka.wereposition.data.model.WifiLoadStatus
 import com.shiraka.wereposition.ui.components.AppMapView
 import com.shiraka.wereposition.ui.components.AppMapController
-import com.shiraka.wereposition.ui.components.frostedSurface
 import com.shiraka.wereposition.data.model.AppMapType
 import com.shiraka.wereposition.ui.components.MapTypeDialog
 import androidx.compose.material.icons.rounded.Layers
@@ -112,8 +110,7 @@ fun SpoofingScreen(
     uiState: AppState,
     isDark: Boolean,
     onExpandMap: () -> Unit,
-    onExpandScannerMap: () -> Unit,
-    onExpandSettings: () -> Unit
+    onExpandScannerMap: () -> Unit
 ) {
     val scrollState = rememberScrollState()
     var showSavedLocations by remember { mutableStateOf(false) }
@@ -292,14 +289,6 @@ fun SpoofingScreen(
                     modifier = Modifier.size(20.dp)
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = onExpandSettings, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Rounded.Settings, stringResource(R.string.settings),
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
@@ -342,31 +331,29 @@ fun SpoofingScreen(
                 modifier = Modifier.align(Alignment.Center).size(32.dp).padding(bottom = 16.dp) // 准星底部对齐中心
             )
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .frostedSurface(isDark, 16.dp)
-                    .clickable { onExpandMap() }
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            Surface(
+                onClick = onExpandMap,
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+                tonalElevation = 6.dp
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Fullscreen, null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Icon(Icons.Rounded.Fullscreen, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.fullscreen_selection), fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.fullscreen_selection), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.width(10.dp))
                 }
             }
             
-            Box(
+            FilledTonalIconButton(
+                onClick = { showMapTypeDialog = true },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 12.dp, bottom = 72.dp)
-                    .size(40.dp)
-                    .frostedSurface(isDark, 20.dp)
-                    .clickable {
-                        showMapTypeDialog = true
-                    },
-                contentAlignment = Alignment.Center
+                    .size(48.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f))
             ) {
                 Icon(
                     Icons.Rounded.Layers,
@@ -376,16 +363,13 @@ fun SpoofingScreen(
                 )
             }
 
-            Box(
+            FilledTonalIconButton(
+                onClick = { viewModel.fetchCurrentLocation(context) { _, _ -> } },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 12.dp, bottom = 24.dp)
-                    .size(40.dp)
-                    .frostedSurface(isDark, 20.dp)
-                    .clickable {
-                        viewModel.fetchCurrentLocation(context) { _, _ -> }
-                    },
-                contentAlignment = Alignment.Center
+                    .size(48.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f))
             ) {
                 Icon(
                     Icons.Rounded.MyLocation, 
@@ -480,7 +464,6 @@ fun SpoofingScreen(
                 Card(
                     shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
                     elevation = CardDefaults.cardElevation(0.dp),
                     modifier = Modifier.clickable { showAppCoordinateScreen = true }
                 ) {
@@ -512,7 +495,6 @@ fun SpoofingScreen(
             Card(
                 shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
                 elevation = CardDefaults.cardElevation(0.dp),
                 modifier = Modifier.clickable { 
                     onExpandScannerMap()
@@ -548,36 +530,6 @@ fun SpoofingScreen(
             Card(
                 shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
-                elevation = CardDefaults.cardElevation(0.dp),
-                modifier = Modifier.clickable { 
-                    viewModel.toggleManageDataScreen(true)
-                }
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.title_manage_data), color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        Text(stringResource(R.string.manage_collected_data_desc), color = AppColors.textSecondary(isDark), fontSize = 11.sp)
-                    }
-                    Icon(Icons.Outlined.ChevronRight, null, tint = AppColors.textSecondary(isDark), modifier = Modifier.size(16.dp))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Card(
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Row(
@@ -1137,6 +1089,11 @@ fun WifiStatusCard(uiState: AppState, onClick: () -> Unit) {
     val hasWifiSimulation = uiState.mockWifi && uiState.wifiLoadStatus == WifiLoadStatus.DONE && uiState.wifiApCount > 0
 
     val style = when {
+        uiState.syntheticRfActive -> StatusStyle(
+            MaterialTheme.colorScheme.tertiaryContainer,
+            MaterialTheme.colorScheme.onTertiaryContainer,
+            stringResource(R.string.synthetic_rf_active), Icons.Rounded.WarningAmber
+        )
         uiState.wifiLoadStatus == WifiLoadStatus.LOADING -> StatusStyle(
             AccentOrange.copy(alpha = 0.12f), AccentOrange,
             stringResource(R.string.fetching_wifi), Icons.Outlined.CloudDownload
@@ -1285,7 +1242,6 @@ private fun CellInfoCard(cell: org.json.JSONObject) {
         colors = CardDefaults.cardColors(
             containerColor = AccentOrange.copy(alpha = 0.08f)
         ),
-        border = BorderStroke(1.dp, AccentOrange.copy(alpha = 0.18f))
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Row(
@@ -1335,7 +1291,6 @@ fun CoordinateInputCard(
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1899,7 +1854,6 @@ fun StartSpoofingDialog(
                 .heightIn(max = dialogMaxHeight),
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = if (isDark) 0.18f else 0.72f))
         ) {
             Column(
                 modifier = Modifier

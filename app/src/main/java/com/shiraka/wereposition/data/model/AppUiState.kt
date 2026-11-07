@@ -127,6 +127,11 @@ data class AppState(
     val mockWifi: Boolean = true,
     val mockCell: Boolean = true,
     val mockBluetooth: Boolean = false,
+    val syntheticRfEnabled: Boolean = false,
+    val syntheticWifiCount: Int = 3,
+    val syntheticCellCount: Int = 1,
+    val syntheticSsidPrefix: String = "WRP-Test",
+    val syntheticRfActive: Boolean = false,
     val enableJitter: Boolean = true,
     val jitterRadiusMeters: Int = 30,
     val jitterSpeed: JitterSpeed = JitterSpeed.MEDIUM,
@@ -140,7 +145,6 @@ data class AppState(
     val canMockBluetooth: Boolean = false,
     
     // Data Management
-    val isManageDataScreen: Boolean = false,
     val manageDataList: List<com.shiraka.wereposition.data.db.CompleteLocation> = emptyList(),
     val nearbyPlaceNames: Map<String, String> = emptyMap(),
     val manageDataIsLoading: Boolean = false

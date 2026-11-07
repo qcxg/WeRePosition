@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,8 +52,7 @@ private data class ManagedLocationGroup(
 fun ManageDataScreen(
     viewModel: MainViewModel,
     uiState: com.shiraka.wereposition.data.model.AppState,
-    isDark: Boolean,
-    onClose: () -> Unit
+    isDark: Boolean
 ) {
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
@@ -97,18 +95,13 @@ fun ManageDataScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (isSelectionMode) {
+                    if (isSelectionMode) {
+                        IconButton(onClick = {
                             isSelectionMode = false
                             selectedIds.clear()
-                        } else {
-                            onClose()
+                        }) {
+                            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.back))
                         }
-                    }) {
-                        Icon(
-                            if (isSelectionMode) Icons.Rounded.Close else Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
-                        )
                     }
                 },
                 actions = {
@@ -143,18 +136,18 @@ fun ManageDataScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = com.shiraka.wereposition.ui.theme.AppColors.topBarBackground(isDark),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         }
     ) { paddingValues ->
         if (uiState.manageDataIsLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         } else if (dataList.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.no_data_collected), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {

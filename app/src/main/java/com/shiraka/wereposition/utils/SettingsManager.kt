@@ -81,6 +81,27 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("mock_cell", true)
         set(value) = prefs.edit().putBoolean("mock_cell", value).apply()
 
+    var syntheticRfEnabled: Boolean
+        get() = prefs.getBoolean("synthetic_rf_enabled", false)
+        set(value) = prefs.edit().putBoolean("synthetic_rf_enabled", value).apply()
+
+    var syntheticWifiCount: Int
+        get() = prefs.getInt("synthetic_wifi_count", 3).coerceIn(0, 8)
+        set(value) = prefs.edit().putInt("synthetic_wifi_count", value.coerceIn(0, 8)).apply()
+
+    var syntheticCellCount: Int
+        get() = prefs.getInt("synthetic_cell_count", 1).coerceIn(0, 3)
+        set(value) = prefs.edit().putInt("synthetic_cell_count", value.coerceIn(0, 3)).apply()
+
+    var syntheticSsidPrefix: String
+        get() = prefs.getString("synthetic_ssid_prefix", "WRP-Test")?.take(24).orEmpty()
+        set(value) = prefs.edit().putString("synthetic_ssid_prefix", value.trim().take(24)).apply()
+
+    val syntheticRfOptions: SyntheticRfOptions
+        get() = SyntheticRfOptions(
+            syntheticRfEnabled, syntheticWifiCount, syntheticCellCount, syntheticSsidPrefix
+        )
+
     var mockBluetooth: Boolean
         get() = false
         set(@Suppress("UNUSED_PARAMETER") value) = prefs.edit().putBoolean("mock_bluetooth", false).apply()

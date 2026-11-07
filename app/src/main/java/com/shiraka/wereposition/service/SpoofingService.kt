@@ -23,6 +23,7 @@ import com.shiraka.wereposition.utils.ConfigManager
 import com.shiraka.wereposition.utils.RootManager
 import com.shiraka.wereposition.utils.RuntimeConfigWriteCoordinator
 import com.shiraka.wereposition.utils.SettingsManager
+import com.shiraka.wereposition.utils.SyntheticRfGenerator
 import com.shiraka.wereposition.utils.TrajectorySimulator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -79,6 +80,7 @@ class SpoofingService : Service() {
     }
     private val rfResolver by lazy { EnvironmentRfResolver(environmentDao) }
     private val settingsManager by lazy { SettingsManager(applicationContext) }
+    private val syntheticRfGenerator by lazy { SyntheticRfGenerator(applicationContext) }
     private val rfDatabaseRevision = AtomicLong(0L)
     private var rfInvalidationJob: Job? = null
     private var resolvedRf = EnvironmentRfResolver.ResolvedRfCoverage.empty()
@@ -495,7 +497,13 @@ class SpoofingService : Service() {
             resolvedRfRequestRevision != requestRevision ||
             movedWithinCell
         ) {
-            resolvedRf = rfResolver.resolve(loc.lat, loc.lng)
+            val localRf = rfResolver.resolve(loc.lat, loc.lng)
+            val options = settingsManager.syntheticRfOptions
+            resolvedRf = if (!SpooferProvider.isRouteMode && loc.speed <= 0.05f) {
+                syntheticRfGenerator.fillMissing(loc.lat, loc.lng, localRf, options)
+            } else {
+                localRf
+            }
             resolvedRfDatabaseRevision = databaseRevision
             resolvedRfRequestRevision = requestRevision
             resolvedRfLatitude = loc.lat

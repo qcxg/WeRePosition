@@ -287,7 +287,10 @@ class SpooferProvider : ContentProvider() {
         // A missing service means the scope cannot be verified, so the caller retries later.
         val callerPackage = callingPackage
         val scope = LocationApp.mService?.scope
-        if (callerPackage == null || scope == null || callerPackage !in scope) {
+        val uidPackages = context?.packageManager?.getPackagesForUid(callerUid).orEmpty()
+        if (callerPackage == null || callerPackage !in uidPackages ||
+            scope == null || callerPackage !in scope
+        ) {
             throw SecurityException("Runtime configuration is restricted to the module scope")
         }
     }

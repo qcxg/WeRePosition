@@ -18,11 +18,13 @@ import com.shiraka.wereposition.data.model.JitterSpeed
 import com.shiraka.wereposition.data.model.StartSpoofingPhase
 import com.shiraka.wereposition.data.model.StartSpoofingProgress
 import com.shiraka.wereposition.data.repository.LocationRepository
+import com.shiraka.wereposition.data.repository.OpenCellNormalizer
 import com.shiraka.wereposition.data.repository.SettingsRepository
 import com.shiraka.wereposition.provider.SpooferProvider
 import com.shiraka.wereposition.service.SpoofingService
 import com.shiraka.wereposition.utils.EnvironmentCoveragePolicy
 import com.shiraka.wereposition.utils.EnvironmentRfResolver
+import com.shiraka.wereposition.utils.SyntheticRfGenerator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,6 +79,10 @@ class MainViewModel(
             mockWifi = settingsRepository.mockWifi,
             mockCell = settingsRepository.mockCell,
             mockBluetooth = false,
+            syntheticRfEnabled = settingsRepository.syntheticRfEnabled,
+            syntheticWifiCount = settingsRepository.syntheticWifiCount,
+            syntheticCellCount = settingsRepository.syntheticCellCount,
+            syntheticSsidPrefix = settingsRepository.syntheticSsidPrefix,
             enableJitter = settingsRepository.enableJitter,
             jitterRadiusMeters = settingsRepository.jitterRadiusMeters,
             jitterSpeed = parseJitterSpeed(settingsRepository.jitterSpeed),
@@ -102,6 +108,7 @@ class MainViewModel(
     private val geocodeClient = OkHttpClient()
     private val nearbyNameMemory = mutableMapOf<String, String>()
     private val environmentRfResolver = EnvironmentRfResolver(environmentDao)
+    private val syntheticRfGenerator = SyntheticRfGenerator(context)
     private val capabilityEvaluationGeneration = AtomicLong(0L)
     private var capabilityEvaluationJob: Job? = null
     private var lastCapabilityCell: EnvironmentCoveragePolicy.Cell? = null
@@ -548,7 +555,7 @@ class MainViewModel(
         lng: Double,
         generation: Long = capabilityEvaluationGeneration.incrementAndGet()
     ) {
-        val resolved = resolveRfCoverageForTargetCell(lat, lng)
+        val resolved = environmentRfResolver.resolve(lat, lng)
         withContext(Dispatchers.Main) {
             if (generation != capabilityEvaluationGeneration.get()) return@withContext
             val current = _uiState.value
@@ -568,6 +575,7 @@ class MainViewModel(
                 collectedWifiJson = resolved.wifiJson,
                 collectedCellJson = resolved.cellJson,
                 collectedBluetoothJson = "[]",
+                syntheticRfActive = resolved.synthetic,
                 wifiApCount = resolved.wifiApCount,
                 wifiLoadStatus = if (resolved.hasWifi) {
                     com.shiraka.wereposition.data.model.WifiLoadStatus.DONE
@@ -589,9 +597,13 @@ class MainViewModel(
 
     private suspend fun resolveRfCoverageForTargetCell(
         lat: Double,
-        lng: Double
+        lng: Double,
+        allowSynthetic: Boolean = true
     ): EnvironmentRfResolver.ResolvedRfCoverage {
-        val resolved = environmentRfResolver.resolve(lat, lng)
+        val local = environmentRfResolver.resolve(lat, lng)
+        val resolved = if (allowSynthetic) syntheticRfGenerator.fillMissing(
+            lat, lng, local, settingsRepository.syntheticRfOptions
+        ) else local
         val selectedBssid = SpooferProvider.connectedWifiOverrideFor(lat, lng) ?: return resolved
         val selectedWifiJson = EnvironmentRfResolver.selectConnectedWifi(
             resolved.wifiJson,
@@ -737,7 +749,7 @@ class MainViewModel(
             val cellsArray = org.json.JSONArray(rawJsonArrayString)
             android.util.Log.d("OpenCellID", "fetchCellFromOpenCellIdSync: Received cell list size: ${cellsArray.length()}")
             if (cellsArray.length() > 0) {
-                val formattedCells = normalizeCellArrayForStorage(cellsArray)
+                val formattedCells = com.shiraka.wereposition.data.repository.OpenCellNormalizer.normalize(cellsArray)
                 if (formattedCells.length() == 0) {
                     android.util.Log.d("OpenCellID", "fetchCellFromOpenCellIdSync: No usable cells after normalization.")
                     return false
@@ -773,73 +785,6 @@ class MainViewModel(
         }
     }
 
-    private fun normalizeCellArrayForStorage(cellsArray: org.json.JSONArray): org.json.JSONArray {
-        val formattedCells = org.json.JSONArray()
-        for (i in 0 until cellsArray.length()) {
-            val cell = cellsArray.optJSONObject(i) ?: continue
-            val area = cellArea(cell)
-            val identity = cellIdentity(cell)
-            if (area <= 0 || identity <= 0) {
-                android.util.Log.d("OpenCellID", "normalizeCellArrayForStorage: Skipping invalid cell: $cell")
-                continue
-            }
-
-            val type = normalizeCellType(cell.optString("type", cell.optString("radio", "LTE")))
-            val cellObj = org.json.JSONObject().apply {
-                put("type", type)
-                put("radio", cell.optString("radio", type))
-                put("mcc", positiveCellInt(cell, "mcc", default = 460))
-                put("mnc", positiveCellInt(cell, "mnc", "net", default = 0))
-                put("tac", area)
-                put("lac", area)
-                put("ci", identity)
-                put("cid", identity)
-                put("cellid", identity)
-                put("pci", positiveCellInt(cell, "pci", default = (identity % 504).coerceIn(0, 503)))
-                put("dbm", cellSignalDbm(cell, i))
-                put("isRegistered", cell.optBoolean("isRegistered", i == 0))
-            }
-            formattedCells.put(cellObj)
-        }
-        return formattedCells
-    }
-
-    private fun normalizeCellType(rawType: String): String {
-        return when (rawType.uppercase(java.util.Locale.US)) {
-            "GSM" -> "GSM"
-            "UMTS", "WCDMA" -> "WCDMA"
-            "NR", "NR5G", "5G" -> "NR"
-            else -> "LTE"
-        }
-    }
-
-    private fun cellArea(cell: org.json.JSONObject): Int =
-        positiveCellInt(cell, "tac", "lac", "area", default = 0)
-
-    private fun cellIdentity(cell: org.json.JSONObject): Int =
-        positiveCellInt(cell, "ci", "cid", "cellid", "cell", default = 0)
-
-    private fun positiveCellInt(cell: org.json.JSONObject, vararg keys: String, default: Int): Int {
-        for (key in keys) {
-            if (!cell.has(key) || cell.isNull(key)) continue
-            val value = cell.optInt(key, Int.MIN_VALUE)
-            if (value > 0) return value
-            val parsed = cell.optString(key).toIntOrNull()
-            if (parsed != null && parsed > 0) return parsed
-        }
-        return default
-    }
-
-    private fun cellSignalDbm(cell: org.json.JSONObject, index: Int): Int {
-        val direct = cell.optInt("dbm", Int.MIN_VALUE)
-        if (direct in -140..-40) return direct
-        val average = cell.optInt("averageSignalStrength", Int.MIN_VALUE)
-        if (average in -140..-40) return average
-        val signal = cell.optInt("signal", Int.MIN_VALUE)
-        if (signal in -140..-40) return signal
-        return (-70 - index * 3).coerceAtLeast(-110)
-    }
-
     // 定点模拟
 
     @android.annotation.SuppressLint("MissingPermission")
@@ -872,8 +817,8 @@ class MainViewModel(
             }
 
             val localCoverage = findRfCoverageInTargetCell(lat, lng)
-            val needsWifiFetch = state.mockWifi && !hasLocalWifiInTargetCell(localCoverage)
-            val needsCellFetch = state.mockCell && !hasLocalCellsInTargetCell(localCoverage)
+            val needsWifiFetch = state.mockWifi && !state.syntheticRfEnabled && !hasLocalWifiInTargetCell(localCoverage)
+            val needsCellFetch = state.mockCell && !state.syntheticRfEnabled && !hasLocalCellsInTargetCell(localCoverage)
             val fetchSources = buildList {
                 if (needsWifiFetch) add("WiGLE")
                 if (needsCellFetch) add("OpenCellID")
@@ -941,13 +886,15 @@ class MainViewModel(
             publishResolvedRfCoverage(resolved)
 
             val updatedState = _uiState.value
+            // Recent locations are a user-facing history, not a store for generated RF.
+            val recentRf = if (resolved.synthetic) environmentRfResolver.resolve(lat, lng) else resolved
             recordRecentLocation(
                 SavedLocation(
                     String.format(java.util.Locale.US, "%.5f, %.5f", lat, lng),
                     lat,
                     lng,
-                    resolved.wifiJson,
-                    resolved.cellJson
+                    recentRf.wifiJson,
+                    recentRf.cellJson
                 )
             )
             val now = System.currentTimeMillis()
@@ -1020,7 +967,7 @@ class MainViewModel(
         viewModelScope.launch {
             locationRepository.stopSpoofing(context)
             _uiState.update {
-                it.copy(isSpoofingActive = false, isSavingConfig = false)
+                it.copy(isSpoofingActive = false, isSavingConfig = false, syntheticRfActive = false)
             }
         }
     }
@@ -1036,6 +983,7 @@ class MainViewModel(
                 it.copy(
                     isSpoofingActive = false,
                     isSavingConfig = false,
+                    syntheticRfActive = false,
                     routePlanStage = RoutePlanStage.IDLE,
                     routePoints = emptyList(),
                     routeRunMode = RouteRunMode.MANUAL
@@ -1240,7 +1188,7 @@ class MainViewModel(
         val operationGeneration = runtimeOperationGeneration.incrementAndGet()
         runtimeStartJob?.cancel()
         runtimeStartJob = viewModelScope.launch {
-            val resolved = resolveRfCoverageForTargetCell(startPoint.lat, startPoint.lng)
+            val resolved = resolveRfCoverageForTargetCell(startPoint.lat, startPoint.lng, allowSynthetic = false)
             if (operationGeneration != runtimeOperationGeneration.get() ||
                 _uiState.value.routePlanStage != RoutePlanStage.RUNNING ||
                 _uiState.value.routePoints != pointsToRun
@@ -1567,6 +1515,31 @@ class MainViewModel(
     fun setShowHomeCoordinateAlgorithm(show: Boolean) {
         settingsRepository.showHomeCoordinateAlgorithm = show
         _uiState.update { it.copy(showHomeCoordinateAlgorithm = show) }
+    }
+
+    fun setSyntheticRfConfig(enabled: Boolean, wifiCount: Int, cellCount: Int, ssidPrefix: String) {
+        settingsRepository.syntheticRfEnabled = enabled
+        settingsRepository.syntheticWifiCount = wifiCount
+        settingsRepository.syntheticCellCount = cellCount
+        settingsRepository.syntheticSsidPrefix = ssidPrefix
+        _uiState.update {
+            it.copy(
+                syntheticRfEnabled = enabled,
+                syntheticWifiCount = wifiCount.coerceIn(0, 8),
+                syntheticCellCount = cellCount.coerceIn(0, 3),
+                syntheticSsidPrefix = ssidPrefix.trim().take(24),
+                syntheticRfActive = false
+            )
+        }
+        SpooferProvider.requestRfRefresh()
+        val state = _uiState.value
+        val lat = state.latitudeInput.toDoubleOrNull()
+        val lng = state.longitudeInput.toDoubleOrNull()
+        if (state.isSpoofingActive && lat != null && lng != null) {
+            viewModelScope.launch {
+                publishResolvedRfCoverage(resolveRfCoverageForTargetCell(lat, lng))
+            }
+        }
     }
     
     private fun syncMockSettings() {
@@ -1917,14 +1890,6 @@ class MainViewModel(
         }
     }
 
-    fun toggleManageDataScreen(show: Boolean) {
-        _uiState.update { it.copy(isManageDataScreen = show) }
-        if (show) {
-            loadManageData()
-        }
-    }
-
-
     fun setGoogleApiKey(key: String) {
         settingsRepository.setGoogleApiKey(key)
         _uiState.update { it.copy(googleApiKey = key) }
@@ -2045,24 +2010,24 @@ class MainViewModel(
             val cellArr = org.json.JSONArray(cellJson)
             for (i in 0 until cellArr.length()) {
                 val obj = cellArr.getJSONObject(i)
-                val type = normalizeCellType(obj.optString("type", obj.optString("radio", "UNKNOWN")))
-                val area = cellArea(obj)
-                val identity = cellIdentity(obj)
+                val type = OpenCellNormalizer.normalizeCellType(obj.optString("type", obj.optString("radio", "UNKNOWN")))
+                val area = OpenCellNormalizer.cellArea(obj)
+                val identity = OpenCellNormalizer.cellIdentity(obj)
                 val tac = when (type) {
                     "LTE", "NR" -> area
-                    else -> positiveCellInt(obj, "tac", default = 0)
+                    else -> OpenCellNormalizer.positiveCellInt(obj, "tac", default = 0)
                 }
                 val lac = when (type) {
                     "GSM", "WCDMA" -> area
-                    else -> positiveCellInt(obj, "lac", default = 0)
+                    else -> OpenCellNormalizer.positiveCellInt(obj, "lac", default = 0)
                 }
                 val ci = when (type) {
                     "LTE" -> identity
-                    else -> positiveCellInt(obj, "ci", default = 0)
+                    else -> OpenCellNormalizer.positiveCellInt(obj, "ci", default = 0)
                 }
                 val cid = when (type) {
                     "GSM", "WCDMA" -> identity
-                    else -> positiveCellInt(obj, "cid", default = 0)
+                    else -> OpenCellNormalizer.positiveCellInt(obj, "cid", default = 0)
                 }
                 val nci = if (type == "NR") {
                     obj.optLong("nci", identity.toLong()).takeIf { it > 0L } ?: identity.toLong()
@@ -2070,23 +2035,26 @@ class MainViewModel(
                     obj.optLong("nci", 0L)
                 }
                 val basestationId = if (type == "CDMA") {
-                    positiveCellInt(obj, "basestationId", "cellid", "cell", default = 0)
+                    OpenCellNormalizer.positiveCellInt(obj, "basestationId", "cellid", "cell", default = 0)
                 } else {
-                    positiveCellInt(obj, "basestationId", default = 0)
+                    OpenCellNormalizer.positiveCellInt(obj, "basestationId", default = 0)
                 }
                 if (area <= 0 && identity <= 0 && basestationId <= 0) continue
-                val cellKey = "${type}_${positiveCellInt(obj, "mcc", default = 460)}_${positiveCellInt(obj, "mnc", "net", default = 0)}_${tac}_${ci}_${cid}_${basestationId}_${nci}"
+                val mcc = obj.optInt("mcc", -1)
+                val mnc = if (obj.has("mnc")) obj.optInt("mnc", -1) else obj.optInt("net", -1)
+                if (mcc !in 100..999 || mnc !in 0..999) continue
+                val cellKey = "${type}_${mcc}_${mnc}_${tac}_${ci}_${cid}_${basestationId}_${nci}"
                 val device = com.shiraka.wereposition.data.db.CellDevice(
                     cellKey = cellKey, type = type,
-                    mcc = positiveCellInt(obj, "mcc", default = 460),
-                    mnc = positiveCellInt(obj, "mnc", "net", default = 0),
+                    mcc = mcc,
+                    mnc = mnc,
                     tac = tac, ci = ci,
-                    pci = positiveCellInt(obj, "pci", default = if (identity > 0) (identity % 504).coerceIn(0, 503) else 0),
+                    pci = OpenCellNormalizer.positiveCellInt(obj, "pci", default = if (identity > 0) (identity % 504).coerceIn(0, 503) else 0),
                     lac = lac, cid = cid,
-                    psc = positiveCellInt(obj, "psc", default = 0),
+                    psc = OpenCellNormalizer.positiveCellInt(obj, "psc", default = 0),
                     nci = nci,
-                    networkId = positiveCellInt(obj, "networkId", default = 0),
-                    systemId = positiveCellInt(obj, "systemId", default = 0),
+                    networkId = OpenCellNormalizer.positiveCellInt(obj, "networkId", default = 0),
+                    systemId = OpenCellNormalizer.positiveCellInt(obj, "systemId", default = 0),
                     basestationId = basestationId
                 )
                 environmentDao.insertCellDevice(device)
@@ -2094,7 +2062,7 @@ class MainViewModel(
                     com.shiraka.wereposition.data.db.LocationCell(
                         locId,
                         cellKey,
-                        cellSignalDbm(obj, i),
+                        OpenCellNormalizer.cellSignalDbm(obj, i),
                         obj.optBoolean("isRegistered", i == 0)
                     )
                 )

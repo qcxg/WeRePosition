@@ -7,10 +7,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.animation.AnimatedVisibility
@@ -33,16 +33,20 @@ import com.shiraka.wereposition.utils.ExternalApiTester
 import com.shiraka.wereposition.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
-    uiState: AppState,
-    onClose: () -> Unit
+    uiState: AppState
 ) {
     val context = LocalContext.current
     var localGoogleApiKey by remember(uiState.googleApiKey) { mutableStateOf(uiState.googleApiKey) }
     var localWigleToken by remember(uiState.wigleToken) { mutableStateOf(uiState.wigleToken) }
     var localOpencellidToken by remember(uiState.opencellidToken) { mutableStateOf(uiState.opencellidToken) }
+    var syntheticEnabled by remember(uiState.syntheticRfEnabled) { mutableStateOf(uiState.syntheticRfEnabled) }
+    var syntheticWifiCount by remember(uiState.syntheticWifiCount) { mutableFloatStateOf(uiState.syntheticWifiCount.toFloat()) }
+    var syntheticCellCount by remember(uiState.syntheticCellCount) { mutableFloatStateOf(uiState.syntheticCellCount.toFloat()) }
+    var syntheticSsidPrefix by remember(uiState.syntheticSsidPrefix) { mutableStateOf(uiState.syntheticSsidPrefix) }
     val clipboardManager = LocalClipboardManager.current
     var showCleanupDialog by remember { mutableStateOf(false) }
     var isCleaningRuntime by remember { mutableStateOf(false) }
@@ -62,32 +66,11 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
     ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onClose) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.settings),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-        }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+        TopAppBar(
+            title = { Text(stringResource(R.string.settings)) },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        )
 
         Column(
             modifier = Modifier
@@ -174,6 +157,53 @@ fun SettingsScreen(
                         checked = uiState.showHomeCoordinateAlgorithm,
                         onCheckedChange = { viewModel.setShowHomeCoordinateAlgorithm(it) }
                     )
+                }
+            }
+
+            ExpandableSettingsRow(
+                title = stringResource(R.string.synthetic_rf_title),
+                summary = stringResource(if (uiState.syntheticRfEnabled) R.string.synthetic_rf_on else R.string.synthetic_rf_off),
+                expanded = expandedSection == "synthetic_rf",
+                onClick = { toggleSection("synthetic_rf") }
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Rounded.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            stringResource(R.string.synthetic_rf_warning),
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.synthetic_rf_enable), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Switch(checked = syntheticEnabled, onCheckedChange = { syntheticEnabled = it })
+                }
+                Text(stringResource(R.string.synthetic_wifi_count, syntheticWifiCount.toInt()), style = MaterialTheme.typography.bodyMedium)
+                Slider(value = syntheticWifiCount, onValueChange = { syntheticWifiCount = it }, valueRange = 0f..8f, steps = 7, enabled = syntheticEnabled)
+                Text(stringResource(R.string.synthetic_cell_count, syntheticCellCount.toInt()), style = MaterialTheme.typography.bodyMedium)
+                Slider(value = syntheticCellCount, onValueChange = { syntheticCellCount = it }, valueRange = 0f..3f, steps = 2, enabled = syntheticEnabled)
+                OutlinedTextField(
+                    value = syntheticSsidPrefix,
+                    onValueChange = { syntheticSsidPrefix = it.take(24) },
+                    label = { Text(stringResource(R.string.synthetic_ssid_prefix)) },
+                    singleLine = true,
+                    enabled = syntheticEnabled,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                SaveSettingsButton {
+                    viewModel.setSyntheticRfConfig(
+                        syntheticEnabled, syntheticWifiCount.toInt(),
+                        syntheticCellCount.toInt(), syntheticSsidPrefix
+                    )
+                    Toast.makeText(context, context.getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -287,7 +317,6 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            Spacer(Modifier.navigationBarsPadding())
         }
     }
 
@@ -335,46 +364,26 @@ private fun ExpandableSettingsRow(
     onClick: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
+    ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 10.dp),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
-        )
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column {
-            Row(
+            ListItem(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onClick)
-                    .padding(horizontal = 14.dp, vertical = 13.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        summary,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.56f)
-                    )
-                }
-                Icon(
+                    .clickable(onClick = onClick),
+                headlineContent = { Text(title) },
+                supportingContent = { Text(summary) },
+                trailingContent = { Icon(
                     if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.56f)
-                )
-            }
+                    contentDescription = null
+                ) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            )
             AnimatedVisibility(visible = expanded) {
                 Column(
                     modifier = Modifier
@@ -512,9 +521,7 @@ private fun SaveSettingsButton(onClick: () -> Unit) {
     Spacer(Modifier.height(10.dp))
     Button(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Text(stringResource(R.string.save), modifier = Modifier.padding(vertical = 4.dp))
     }

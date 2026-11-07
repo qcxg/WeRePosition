@@ -45,6 +45,17 @@
     <string name="saved_locations">收藏列表</string>
     <string name="recent_locations">最近位置</string>
     <string name="settings">設定</string>
+    <string name="nav_joystick">搖桿</string>
+    <string name="nav_joystick_placeholder">搖桿配置將在後續版本加入。</string>
+    <string name="synthetic_rf_title">合成 Wi-Fi 與基站</string>
+    <string name="synthetic_rf_on">定點模擬時啟用</string>
+    <string name="synthetic_rf_off">已關閉</string>
+    <string name="synthetic_rf_warning">這些訊號是虛構資料，並非實際採集。系統會以反向地理編碼確認目標國家；無法確認或未支援時不產生訊號。支援：台灣、日本、美國、中國、香港、新加坡、韓國、英國、德國、法國、澳洲、加拿大、印度。</string>
+    <string name="synthetic_rf_enable">產生缺少的訊號</string>
+    <string name="synthetic_wifi_count">Wi-Fi 數量：%d</string>
+    <string name="synthetic_cell_count">基站數量：%d</string>
+    <string name="synthetic_ssid_prefix">Wi-Fi 名稱前綴</string>
+    <string name="synthetic_rf_active">合成訊號啟用中 · 虛構測試資料</string>
     <string name="collection_list">收藏列表</string>
     <string name="fullscreen_selection">全螢幕選點</string>
     <string name="target_coordinates">目標座標</string>

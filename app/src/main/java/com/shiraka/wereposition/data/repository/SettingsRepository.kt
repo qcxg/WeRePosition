@@ -3,6 +3,7 @@ package com.shiraka.wereposition.data.repository
 import com.shiraka.wereposition.data.model.SavedLocation
 import com.shiraka.wereposition.data.model.SavedRoute
 import com.shiraka.wereposition.utils.SettingsManager
+import com.shiraka.wereposition.utils.SyntheticRfOptions
 
 class SettingsRepository(private val settingsManager: SettingsManager) {
 
@@ -93,6 +94,25 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
     var mockCell: Boolean
         get() = settingsManager.mockCell
         set(value) { settingsManager.mockCell = value }
+
+    var syntheticRfEnabled: Boolean
+        get() = settingsManager.syntheticRfEnabled
+        set(value) { settingsManager.syntheticRfEnabled = value }
+
+    var syntheticWifiCount: Int
+        get() = settingsManager.syntheticWifiCount
+        set(value) { settingsManager.syntheticWifiCount = value }
+
+    var syntheticCellCount: Int
+        get() = settingsManager.syntheticCellCount
+        set(value) { settingsManager.syntheticCellCount = value }
+
+    var syntheticSsidPrefix: String
+        get() = settingsManager.syntheticSsidPrefix
+        set(value) { settingsManager.syntheticSsidPrefix = value }
+
+    val syntheticRfOptions: SyntheticRfOptions
+        get() = settingsManager.syntheticRfOptions
 
     var mockBluetooth: Boolean
         get() = settingsManager.mockBluetooth
