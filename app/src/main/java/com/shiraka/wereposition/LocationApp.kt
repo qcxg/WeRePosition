@@ -15,7 +15,7 @@ class LocationApp : Application(), XposedServiceHelper.OnServiceListener {
     companion object {
         private val _isModuleActive = MutableStateFlow(false)
         val isModuleActive: StateFlow<Boolean> = _isModuleActive
-        var mService: XposedService? = null
+        @Volatile var mService: XposedService? = null
         lateinit var instance: LocationApp
             private set
     }

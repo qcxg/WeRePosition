@@ -24,9 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Density
 import com.shiraka.wereposition.ui.screen.BlockingScreen
 import com.shiraka.wereposition.ui.screen.FullScreenMapPage
 import com.shiraka.wereposition.ui.screen.InitializingScreen
@@ -34,6 +32,8 @@ import com.shiraka.wereposition.ui.screen.SpoofingScreen
 import com.shiraka.wereposition.ui.screen.LanguageSelectionScreen
 import com.shiraka.wereposition.ui.theme.AppColorSchemeDark
 import com.shiraka.wereposition.ui.theme.AppColorSchemeLight
+import com.shiraka.wereposition.ui.theme.AppShapes
+import com.shiraka.wereposition.ui.theme.AppTypography
 import com.shiraka.wereposition.utils.LocaleUtils
 import com.shiraka.wereposition.viewmodel.MainViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -89,10 +89,6 @@ class MainActivity : ComponentActivity() {
                 val uiState by viewModel.uiState.collectAsState()
                 val isDark = isSystemInDarkTheme()
                 val colorScheme = if (isDark) AppColorSchemeDark else AppColorSchemeLight
-                val baseDensity = LocalDensity.current
-                val appDensity = remember(baseDensity.density, baseDensity.fontScale) {
-                    Density(baseDensity.density, baseDensity.fontScale.coerceAtMost(1.15f))
-                }
 
                 // 核心：在 Compose 层级内部通过 CompositionLocalProvider 动态刷新
                 // 使用 remember(uiState.currentLanguage) 确保语言切换时重新计算 Context
@@ -108,10 +104,9 @@ class MainActivity : ComponentActivity() {
 
                 CompositionLocalProvider(
                     LocalContext provides wrappedContext,
-                    LocalConfiguration provides configuration,
-                    LocalDensity provides appDensity
+                    LocalConfiguration provides configuration
                 ) {
-                    MaterialTheme(colorScheme = colorScheme) {
+                    MaterialTheme(colorScheme = colorScheme, shapes = AppShapes, typography = AppTypography) {
                         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                             MainScreen(viewModel = viewModel, uiState = uiState, isDark = isDark)
                         }

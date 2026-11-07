@@ -3,6 +3,7 @@ package com.shiraka.wereposition.ui.screen
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -49,6 +50,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.res.stringResource
 import com.shiraka.wereposition.R
@@ -76,6 +79,7 @@ import com.shiraka.wereposition.data.model.WifiConnectionMode
 import com.shiraka.wereposition.data.model.WifiLoadStatus
 import com.shiraka.wereposition.ui.components.AppMapView
 import com.shiraka.wereposition.ui.components.AppMapController
+import com.shiraka.wereposition.ui.components.frostedSurface
 import com.shiraka.wereposition.data.model.AppMapType
 import com.shiraka.wereposition.ui.components.MapTypeDialog
 import androidx.compose.material.icons.rounded.Layers
@@ -140,7 +144,6 @@ fun SpoofingScreen(
     }
     
     var showCustomCoordDialog by remember { mutableStateOf(false) }
-    val topBarBg = MaterialTheme.colorScheme.background
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<AppPoiItem>>(emptyList()) }
     var showSearchPanel by remember { mutableStateOf(false) }
@@ -233,23 +236,29 @@ fun SpoofingScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(topBarBg)
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceContainer,
+                            MaterialTheme.colorScheme.background
+                        )
+                    )
+                )
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.size(36.dp).clip(CircleShape)
-                    .background(AccentBlue.copy(alpha = 0.15f)),
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.MyLocation, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.MyLocation, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(12.dp))
             Text(
                 stringResource(R.string.app_name),
                 color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleMedium
             )
             Spacer(Modifier.weight(1f))
             IconButton(
@@ -337,8 +346,7 @@ fun SpoofingScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(12.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                    .frostedSurface(isDark, 16.dp)
                     .clickable { onExpandMap() }
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
@@ -354,8 +362,7 @@ fun SpoofingScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 12.dp, bottom = 72.dp)
                     .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                    .frostedSurface(isDark, 20.dp)
                     .clickable {
                         showMapTypeDialog = true
                     },
@@ -374,8 +381,7 @@ fun SpoofingScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 12.dp, bottom = 24.dp)
                     .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                    .frostedSurface(isDark, 20.dp)
                     .clickable {
                         viewModel.fetchCurrentLocation(context) { _, _ -> }
                     },
@@ -472,8 +478,9 @@ fun SpoofingScreen(
                 SectionHeader(Icons.Rounded.Extension, stringResource(R.string.custom_coordinate_algo), isDark)
                 Spacer(Modifier.height(8.dp))
                 Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = AppColors.cardBackground(isDark)),
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
                     elevation = CardDefaults.cardElevation(0.dp),
                     modifier = Modifier.clickable { showAppCoordinateScreen = true }
                 ) {
@@ -503,8 +510,9 @@ fun SpoofingScreen(
             SectionHeader(Icons.Rounded.Radar, stringResource(R.string.spatial_env_collection), isDark)
             Spacer(Modifier.height(8.dp))
             Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = AppColors.cardBackground(isDark)),
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
                 elevation = CardDefaults.cardElevation(0.dp),
                 modifier = Modifier.clickable { 
                     onExpandScannerMap()
@@ -538,8 +546,9 @@ fun SpoofingScreen(
             }
             Spacer(Modifier.height(8.dp))
             Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = AppColors.cardBackground(isDark)),
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
                 elevation = CardDefaults.cardElevation(0.dp),
                 modifier = Modifier.clickable { 
                     viewModel.toggleManageDataScreen(true)
@@ -566,8 +575,9 @@ fun SpoofingScreen(
             }
             Spacer(Modifier.height(8.dp))
             Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = AppColors.cardBackground(isDark)),
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Row(
@@ -1155,7 +1165,7 @@ fun WifiStatusCard(uiState: AppState, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(style.bgColor)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1323,8 +1333,9 @@ fun CoordinateInputCard(
     onCustomClick: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1402,8 +1413,8 @@ fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onOpenMap: () -> 
         )
         Button(
             onClick = { viewModel.stopSpoofing() },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = MaterialTheme.shapes.medium,
             colors = ButtonDefaults.buttonColors(containerColor = stopColor)
         ) {
             Icon(Icons.Rounded.Stop, null, modifier = Modifier.size(20.dp))
@@ -1418,8 +1429,8 @@ fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onOpenMap: () -> 
             Button(
                 onClick = onStartFixedSpoofing,
                 enabled = !uiState.isSavingConfig,
-                modifier = Modifier.weight(1f).height(52.dp),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f).height(56.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
                 if (uiState.isSavingConfig) {
@@ -1438,8 +1449,8 @@ fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onOpenMap: () -> 
             }
             Button(
                 onClick = { viewModel.enterRoutePlanning(); onOpenMap() },
-                modifier = Modifier.weight(1f).height(52.dp),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f).height(56.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
             ) {
                 Icon(Icons.Rounded.Route, null, modifier = Modifier.size(18.dp))
@@ -1825,11 +1836,21 @@ fun CustomCoordinateDialog(
 fun LocalizedDialog(
     onDismissRequest: () -> Unit,
     properties: androidx.compose.ui.window.DialogProperties = androidx.compose.ui.window.DialogProperties(),
+    blurBackground: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val currentContext = androidx.compose.ui.platform.LocalContext.current
     val currentConfiguration = androidx.compose.ui.platform.LocalConfiguration.current
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        val blurRadius = with(LocalDensity.current) { 20.dp.roundToPx() }
+        DisposableEffect(window, blurBackground) {
+            if (blurBackground && window != null) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                window.attributes = window.attributes.apply { setBlurBehindRadius(blurRadius) }
+            }
+            onDispose { if (blurBackground) window?.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND) }
+        }
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.ui.platform.LocalContext provides currentContext,
             androidx.compose.ui.platform.LocalConfiguration provides currentConfiguration
@@ -1871,13 +1892,14 @@ fun StartSpoofingDialog(
     val dialogMaxHeight = minOf(screenHeight * 0.86f, 720.dp)
     val dialogScrollState = rememberScrollState()
 
-    LocalizedDialog(onDismissRequest = { if (!uiState.isSavingConfig) onDismiss() }) {
+    LocalizedDialog(onDismissRequest = { if (!uiState.isSavingConfig) onDismiss() }, blurBackground = true) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = dialogMaxHeight),
-            shape = RoundedCornerShape(16.dp),
-            color = AppColors.cardBackground(isDark)
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = if (isDark) 0.18f else 0.72f))
         ) {
             Column(
                 modifier = Modifier

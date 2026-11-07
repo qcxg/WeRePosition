@@ -2,7 +2,14 @@ package com.shiraka.wereposition.ui.theme
 
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 // 深色调色板
 val DarkBg = Color(0xFF0D1117)
@@ -37,6 +44,11 @@ val AppColorSchemeDark = darkColorScheme(
     onBackground = TextPrimaryDark,
     onSurface = TextPrimaryDark,
     outline = DividerColorDark,
+    surfaceVariant = Color(0xFF263043),
+    surfaceContainer = Color(0xFF1C2635),
+    surfaceContainerHigh = Color(0xFF27364B),
+    primaryContainer = Color(0xFF173760),
+    onPrimaryContainer = Color(0xFFDBEAFF),
     error = ErrorRed
 )
 
@@ -50,7 +62,28 @@ val AppColorSchemeLight = lightColorScheme(
     onBackground = TextPrimaryLight,
     onSurface = TextPrimaryLight,
     outline = DividerColorLight,
+    surfaceVariant = Color(0xFFE7EDF5),
+    surfaceContainer = Color(0xFFF0F5FB),
+    surfaceContainerHigh = Color(0xFFE7F0FA),
+    primaryContainer = Color(0xFFD7E8FF),
+    onPrimaryContainer = Color(0xFF123A65),
     error = Color(0xFFCF222E)
+)
+
+val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(28.dp),
+    extraLarge = RoundedCornerShape(36.dp)
+)
+
+val AppTypography = Typography(
+    headlineSmall = TextStyle(fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold),
+    titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
+    titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
 )
 
 object AppColors {

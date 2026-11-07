@@ -6,6 +6,9 @@ import android.content.Context
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
+import android.os.Binder
+import android.os.Process
+import com.shiraka.wereposition.LocationApp
 import com.shiraka.wereposition.utils.EnvironmentCoveragePolicy
 import com.shiraka.wereposition.utils.EnvironmentRfResolver
 import java.util.concurrent.atomic.AtomicLong
@@ -218,6 +221,12 @@ class SpooferProvider : ContentProvider() {
         uri: Uri, projection: Array<out String>?, selection: String?,
         selectionArgs: Array<out String>?, sortOrder: String?
     ): Cursor {
+        if (uri.authority != RUNTIME_CONFIG_URI.authority ||
+            (uri.path != null && uri.path != "" && uri.path != RUNTIME_CONFIG_URI.path)
+        ) {
+            throw IllegalArgumentException("Unknown runtime configuration URI")
+        }
+        enforceScopedCaller()
         val position = if (isActive) currentPosition() else anchorPosition()
         val outputLatitude = position.latitude
         val outputLongitude = position.longitude
@@ -235,7 +244,7 @@ class SpooferProvider : ContentProvider() {
             )
         )
         cursor.addRow(
-            arrayOf(
+            arrayOf<Any?>(
                 if (isActive) 1 else 0,
                 outputLatitude,
                 outputLongitude,
@@ -268,6 +277,19 @@ class SpooferProvider : ContentProvider() {
             )
         )
         return cursor
+    }
+
+    private fun enforceScopedCaller() {
+        val callerUid = Binder.getCallingUid()
+        if (callerUid == Process.myUid() || callerUid == Process.SYSTEM_UID) return
+
+        // Only packages explicitly selected in LSPosed may receive live coordinates and RF data.
+        // A missing service means the scope cannot be verified, so the caller retries later.
+        val callerPackage = callingPackage
+        val scope = LocationApp.mService?.scope
+        if (callerPackage == null || scope == null || callerPackage !in scope) {
+            throw SecurityException("Runtime configuration is restricted to the module scope")
+        }
     }
 
     override fun getType(uri: Uri): String? = null
