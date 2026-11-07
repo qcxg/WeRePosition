@@ -40,6 +40,10 @@ fun SettingsScreen(
     uiState: AppState
 ) {
     val context = LocalContext.current
+    val copiedMessage = stringResource(R.string.copied_to_clipboard)
+    val savedMessage = stringResource(R.string.settings_saved)
+    val cleanupDoneMessage = stringResource(R.string.cleanup_runtime_env_done)
+    val cleanupFailedMessage = stringResource(R.string.cleanup_runtime_env_failed)
     var localGoogleApiKey by remember(uiState.googleApiKey) { mutableStateOf(uiState.googleApiKey) }
     var localWigleToken by remember(uiState.wigleToken) { mutableStateOf(uiState.wigleToken) }
     var localOpencellidToken by remember(uiState.opencellidToken) { mutableStateOf(uiState.opencellidToken) }
@@ -111,7 +115,7 @@ fun SettingsScreen(
                     label = stringResource(R.string.app_package_name),
                     onCopy = {
                         clipboardManager.setText(AnnotatedString(context.packageName))
-                        Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
                     }
                 )
                 Spacer(Modifier.height(8.dp))
@@ -120,7 +124,7 @@ fun SettingsScreen(
                     label = stringResource(R.string.app_sha1),
                     onCopy = {
                         clipboardManager.setText(AnnotatedString(uiState.appSha1))
-                        Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
                     }
                 )
             }
@@ -203,7 +207,7 @@ fun SettingsScreen(
                         syntheticEnabled, syntheticWifiCount.toInt(),
                         syntheticCellCount.toInt(), syntheticSsidPrefix
                     )
-                    Toast.makeText(context, context.getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -285,7 +289,7 @@ fun SettingsScreen(
                     viewModel.setGoogleApiKey(localGoogleApiKey)
                     viewModel.setWigleApiToken(localWigleToken)
                     viewModel.setOpencellidApiToken(localOpencellidToken)
-                    Toast.makeText(context, context.getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -335,7 +339,7 @@ fun SettingsScreen(
                             showCleanupDialog = false
                             Toast.makeText(
                                 context,
-                                context.getString(if (ok) R.string.cleanup_runtime_env_done else R.string.cleanup_runtime_env_failed),
+                                if (ok) cleanupDoneMessage else cleanupFailedMessage,
                                 Toast.LENGTH_LONG
                             ).show()
                         }

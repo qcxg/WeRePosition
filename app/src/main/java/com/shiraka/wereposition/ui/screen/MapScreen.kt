@@ -71,6 +71,9 @@ fun FullScreenMapPage(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val currentLocationLabel = stringResource(R.string.current_location)
+    val coordinateSelectedMessage = stringResource(R.string.coordinate_selected)
+    val saveSuccessMessage = stringResource(R.string.save_success)
     var mapRef by remember { mutableStateOf<AppMapController?>(null) }
     var showSavedLocations by remember { mutableStateOf(false) }
     var showMapTypeDialog by remember { mutableStateOf(false) }
@@ -136,7 +139,7 @@ fun FullScreenMapPage(
             if (currentLat != null && currentLng != null) {
                 liveMarker = map.addMarker(
                     currentLat, currentLng,
-                    context.getString(R.string.current_location),
+                    currentLocationLabel,
                     MarkerType.ORANGE
                 )
             }
@@ -165,7 +168,7 @@ fun FullScreenMapPage(
             } else {
                 liveMarker = mapRef?.addMarker(
                     lat, lng,
-                    context.getString(R.string.current_location),
+                    currentLocationLabel,
                     MarkerType.ORANGE
                 )
             }
@@ -400,7 +403,7 @@ fun FullScreenMapPage(
                         val tLng = mapRef?.cameraTargetLng
                         if (tLat != null && tLng != null) {
                             viewModel.confirmMapPoint(tLat, tLng)
-                            Toast.makeText(context, context.getString(R.string.coordinate_selected), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, coordinateSelectedMessage, Toast.LENGTH_SHORT).show()
                             onClose()
                         }
                     },
@@ -520,7 +523,7 @@ fun FullScreenMapPage(
                         Button(onClick = {
                             if (routeName.isNotBlank()) {
                                 viewModel.saveRoute(routeName, routePoints)
-                                Toast.makeText(context, context.getString(R.string.save_success), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, saveSuccessMessage, Toast.LENGTH_SHORT).show()
                                 showSaveRouteDialog = false
                             }
                         }) {

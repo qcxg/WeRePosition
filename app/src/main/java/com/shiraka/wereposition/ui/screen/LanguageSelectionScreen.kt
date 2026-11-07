@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,7 +23,6 @@ import androidx.core.os.LocaleListCompat
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.ui.theme.AccentBlue
 import com.shiraka.wereposition.viewmodel.MainViewModel
-import java.util.Locale
 
 data class LanguageOption(val name: String, val code: String, val nativeName: String)
 
@@ -34,7 +34,7 @@ val LANGUAGES = listOf(
 
 @Composable
 fun LanguageSelectionScreen(viewModel: MainViewModel) {
-    val systemLocale = Locale.getDefault()
+    val systemLocale = LocalLocale.current.platformLocale
     val systemTag = systemLocale.toLanguageTag()
     
     // Default to system language if supported, otherwise English
@@ -47,7 +47,7 @@ fun LanguageSelectionScreen(viewModel: MainViewModel) {
         else -> "en"
     }
     
-    var selectedLang by remember { mutableStateOf(defaultLang) }
+    var selectedLang by remember(defaultLang) { mutableStateOf(defaultLang) }
 
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),

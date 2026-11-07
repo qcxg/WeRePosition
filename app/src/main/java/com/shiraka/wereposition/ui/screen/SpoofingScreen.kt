@@ -122,6 +122,7 @@ fun SpoofingScreen(
     var showMapTypeDialog by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
+    val locationUpdatedMessage = stringResource(R.string.location_updated)
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -318,7 +319,7 @@ fun SpoofingScreen(
                         if (latestUiState.value.isSpoofingActive &&
                             viewModel.updateSpoofingPositionFromMap(lat, lng)
                         ) {
-                            Toast.makeText(context, context.getString(R.string.location_updated), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, locationUpdatedMessage, Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
