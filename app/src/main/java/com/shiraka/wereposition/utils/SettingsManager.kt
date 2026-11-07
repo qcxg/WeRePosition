@@ -41,10 +41,6 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("map_type", "NORMAL") ?: "NORMAL"
         set(value) = prefs.edit().putString("map_type", value).apply()
 
-    var showHomeCoordinateAlgorithm: Boolean
-        get() = prefs.getBoolean("show_home_coordinate_algorithm", true)
-        set(value) = prefs.edit().putBoolean("show_home_coordinate_algorithm", value).apply()
-
     var ignoredVersion: String
         get() = prefs.getString("ignored_version", "") ?: ""
         set(value) = prefs.edit().putString("ignored_version", value).apply()
@@ -249,23 +245,4 @@ class SettingsManager(context: Context) {
         prefs.edit().putString("saved_routes", jsonArray.toString()).apply()
     }
 
-    fun getAppCoordinateSystems(): Map<String, String> {
-        val jsonString = prefs.getString("app_coordinate_systems", "{}") ?: "{}"
-        val map = mutableMapOf<String, String>()
-        try {
-            val jsonObj = JSONObject(jsonString)
-            for (key in jsonObj.keys()) {
-                map[key] = jsonObj.getString(key)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return map
-    }
-
-    fun setAppCoordinateSystems(map: Map<String, String>) {
-        val jsonObj = JSONObject()
-        map.forEach { (k, v) -> jsonObj.put(k, v) }
-        prefs.edit().putString("app_coordinate_systems", jsonObj.toString()).apply()
-    }
 }

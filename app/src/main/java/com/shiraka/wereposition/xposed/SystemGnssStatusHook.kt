@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Replaces GNSS status at the system_server listener fan-out, before Binder delivery. */
 internal class SystemGnssStatusHook(
     private val currentConfig: () -> JSONObject?,
+    private val isSimulationActive: (JSONObject?) -> Boolean,
     private val shouldDeliver: (JSONObject?) -> Boolean,
     private val currentSatellites: () -> Array<LocationHooker.SatelliteData>
 ) {
@@ -28,7 +29,7 @@ internal class SystemGnssStatusHook(
         override fun run() {
             tickScheduled.set(false)
             val target = provider
-            val active = shouldDeliver(currentConfig())
+            val active = isSimulationActive(currentConfig())
             if (active && target != null &&
                 SystemClock.elapsedRealtime() - lastRealReportAtMs >= 1_500L
             ) {
@@ -66,20 +67,26 @@ internal class SystemGnssStatusHook(
             override fun beforeHookedMethod(param: MethodHookParam) {
                 param.thisObject?.let { capture(it) }
                 val config = currentConfig()
-                if (!shouldDeliver(config)) return
+                if (!isSimulationActive(config)) return
                 if (injecting.get() != true) lastRealReportAtMs = SystemClock.elapsedRealtime()
-                val satellites = currentSatellites()
+                val satellites = if (shouldDeliver(config)) currentSatellites() else emptyArray()
                 val loader = param.thisObject?.javaClass?.classLoader ?: classLoader
                 val replacement = GnssStatusFactory.build(loader, satellites, satellites.size, "android")
-                    ?: return
-                if (param.args.isNotEmpty()) {
-                    param.args[0] = replacement
-                    XposedBridge.logEvery(
-                        "systemGnssRewritten",
-                        "[WeRePosition] system GNSS status delivered with ${satellites.size} satellites",
-                        10_000L
-                    )
+                    ?: emptyStatus(loader)
+                if (replacement == null) {
+                    param.result = null // Never pass through the real sky on synthesis failure.
+                    return
                 }
+                if (param.args.isEmpty()) {
+                    param.result = null
+                    return
+                }
+                param.args[0] = replacement
+                XposedBridge.logEvery(
+                    "systemGnssRewritten",
+                    "[WeRePosition] system GNSS status delivered with ${satellites.size} satellites",
+                    10_000L
+                )
             }
         })
         XposedBridge.log("[WeRePosition] system GNSS status hook installed")

@@ -162,14 +162,6 @@
     <string name="confirm">確認</string>
     <string name="custom_coordinate_title">自訂座標</string>
     <string name="custom_coord_desc">手動輸入經緯度座標，修改後地圖位置也會同步更新。</string>
-    <string name="custom_coordinate_algo">自訂座標算法</string>
-    <string name="config_app_coordinate">配置應用座標系</string>
-    <string name="config_app_coordinate_desc">解決固定偏移，為獨立軟體定制底層座標系</string>
-    <string name="home_display_settings">首頁顯示</string>
-    <string name="show_home_coordinate_algorithm">顯示座標算法入口</string>
-    <string name="show_home_coordinate_algorithm_desc">暫時顯示或隱藏首頁的應用座標系配置卡片。</string>
-    <string name="coordinate_algorithm_visible">座標算法入口已顯示</string>
-    <string name="coordinate_algorithm_hidden">座標算法入口已隱藏</string>
     <string name="spatial_env_collection">空間環境采集</string>
     <string name="env_map_scan">環境圖譜與掃街</string>
     <string name="scanning_reference_points">采集中... 已有 %1$d 個參考點</string>
@@ -180,10 +172,6 @@
     <string name="export_data">匯出</string>
     <string name="show_system_apps">顯示系統應用</string>
     <string name="no_hooked_apps">目前未取得或未勾選任何已 Hook 的目標應用</string>
-    <string name="gcj02_desc">火星座標系（中國大陸地圖預設，如高德/微信）</string>
-    <string name="wgs84_desc">國際標準 GPS（海外地圖預設，如 Google Maps）</string>
-    <string name="bd09_desc">百度座標系（百度地圖專屬）</string>
-    <string name="set_coordinate_algo">設定座標算法</string>
     <string name="select_coord_sys_desc">為 %1$s 選擇要模擬的底層座標系標準\n（提示不一定完全正確，請自行測試）</string>
     <string name="scanning_status_active">采集中 (%1$d)</string>
     <string name="scanning_status_inactive">未開啟采集</string>

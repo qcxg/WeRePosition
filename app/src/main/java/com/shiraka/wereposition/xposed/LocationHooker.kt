@@ -143,12 +143,14 @@ class LocationHooker : XposedModule() {
             hookSystemLocationProviderPipeline(classLoader, pkg)
             SystemGnssStatusHook(
                 currentConfig = ::readConfig,
+                isSimulationActive = ::shouldBlockRealLocation,
                 shouldDeliver = ::shouldDeliverLocation,
                 currentSatellites = {
                     updateSatelliteCacheIfNeeded()
                     cachedSatellites ?: emptyArray()
                 }
             ).install(classLoader)
+            SystemGnssRawDataHook(::readConfig, ::shouldBlockRealLocation).install(classLoader)
             return
         }
 
@@ -166,55 +168,6 @@ class LocationHooker : XposedModule() {
     }
 
     private var startTimestamp = System.currentTimeMillis()
-
-    // ── GCJ-02 → WGS-84 转换（Xposed模块运行在目标App进程，必须自带转换代码）──
-    private val GCJ_A = 6378245.0
-    private val GCJ_EE = 0.00669342162296594
-
-    private fun gcj02ToWgs84(gcjLat: Double, gcjLng: Double): Pair<Double, Double> {
-        if (gcjLng < 72.004 || gcjLng > 137.8347 || gcjLat < 0.8293 || gcjLat > 55.8271)
-            return Pair(gcjLat, gcjLng)
-        val dLat = gcjTransformLat(gcjLng - 105.0, gcjLat - 35.0)
-        val dLng = gcjTransformLng(gcjLng - 105.0, gcjLat - 35.0)
-        val radLat = gcjLat / 180.0 * Math.PI
-        var magic = sin(radLat)
-        magic = 1 - GCJ_EE * magic * magic
-        val sqrtMagic = sqrt(magic)
-        val mLat = (dLat * 180.0) / ((GCJ_A * (1 - GCJ_EE)) / (magic * sqrtMagic) * Math.PI)
-        val mLng = (dLng * 180.0) / (GCJ_A / sqrtMagic * cos(radLat) * Math.PI)
-        return Pair(gcjLat - mLat, gcjLng - mLng)
-    }
-
-    private fun gcjTransformLat(x: Double, y: Double): Double {
-        var ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * sqrt(abs(x))
-        ret += (20.0 * sin(6.0 * x * Math.PI) + 20.0 * sin(2.0 * x * Math.PI)) * 2.0 / 3.0
-        ret += (20.0 * sin(y * Math.PI) + 40.0 * sin(y / 3.0 * Math.PI)) * 2.0 / 3.0
-        ret += (160.0 * sin(y / 12.0 * Math.PI) + 320.0 * sin(y * Math.PI / 30.0)) * 2.0 / 3.0
-        return ret
-    }
-
-    private fun gcjTransformLng(x: Double, y: Double): Double {
-        var ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * sqrt(abs(x))
-        ret += (20.0 * sin(6.0 * x * Math.PI) + 20.0 * sin(2.0 * x * Math.PI)) * 2.0 / 3.0
-        ret += (20.0 * sin(x * Math.PI) + 40.0 * sin(x / 3.0 * Math.PI)) * 2.0 / 3.0
-        ret += (150.0 * sin(x / 12.0 * Math.PI) + 300.0 * sin(x / 30.0 * Math.PI)) * 2.0 / 3.0
-        return ret
-    }
-
-    // Retained only to publish legacy BD-09 compatibility fields. The stable
-    // framework/GMS location pipeline always consumes WGS-84.
-    private val BD_PI = Math.PI * 3000.0 / 180.0
-
-    /** Converts GCJ-02 to the legacy BD-09 compatibility representation. */
-    private fun gcj02ToBd09(gcjLat: Double, gcjLng: Double): Pair<Double, Double> {
-        val x = gcjLng
-        val y = gcjLat
-        val z = sqrt(x * x + y * y) + 0.00002 * sin(y * BD_PI)
-        val theta = Math.atan2(y, x) + 0.000003 * cos(x * BD_PI)
-        val bdLng = z * cos(theta) + 0.0065
-        val bdLat = z * sin(theta) + 0.006
-        return Pair(bdLat, bdLng)
-    }
 
     /** Per-process Ornstein-Uhlenbeck state for bounded stationary drift. */
     private val rng = Random()
@@ -334,12 +287,7 @@ class LocationHooker : XposedModule() {
     }
 
     private fun standardLocationCoordinates(config: JSONObject): Pair<Double, Double> {
-        // Android LocationManager, GNSS and GMS all use WGS-84. Per-app GCJ/BD conversion is
-        // only valid at an explicit map-SDK boundary and must never enter system_server.
-        return Pair(
-            config.optDouble("wgs84_lat", config.optDouble("lat", 0.0)),
-            config.optDouble("wgs84_lng", config.optDouble("lng", 0.0))
-        )
+        return Pair(config.optDouble("lat", 0.0), config.optDouble("lng", 0.0))
     }
 
     private fun createLocationSample(
@@ -348,15 +296,15 @@ class LocationHooker : XposedModule() {
         timestamps: SpoofedTimestamps
     ): SpoofedLocationSample {
         val enableJitter = config.optBoolean("enable_jitter", true)
-        // Resolve/jitter in the app's stored coordinate domain first, because
-        // EnvironmentCoveragePolicy and the RF database use that same domain.
-        // Only then convert the complete sample to Android's WGS-84 contract.
+        // Google Maps selection, the RF database, and Android Location all use WGS-84.
+        // Jitter in that same coordinate system so the delivered fix stays at the
+        // selected point instead of acquiring an erroneous GCJ-02 offset.
         val appBase = Pair(
             config.optDouble("lat", 0.0),
             config.optDouble("lng", 0.0)
         )
         val jitteredApp = getJitteredLocation(appBase.first, appBase.second)
-        val jittered = gcj02ToWgs84(jitteredApp.first, jitteredApp.second)
+        val jittered = jitteredApp
         val baseAltitude = config.optDouble("altitude", 0.0)
         val altitude = if (enableJitter && baseAltitude > 0.0) {
             baseAltitude + (rng.nextDouble() - 0.5)
@@ -672,12 +620,6 @@ class LocationHooker : XposedModule() {
             try {
                 val addNmeaListenerHook = object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        // An inactive/off registration must reach Android byte-for-byte. A
-                        // listener registered before a later start remains real until the app
-                        // registers it again; this avoids a permanent per-sentence proxy cost
-                        // while simulation is idle.
-                        if (!shouldDeliverLocation(readConfig())) return
-
                         val args = param.args
                         for (i in args.indices) {
                             val arg = args[i] ?: continue
@@ -2605,25 +2547,21 @@ class LocationHooker : XposedModule() {
                             if (hookedCallbackClasses.putIfAbsent(clazz, true) == null) {
                                 try {
                                     XposedBridge.hookAllMethods(clazz, "onSatelliteStatusChanged", object : XC_MethodHook() {
-                                        private var lastCallTime = 0L
-
                                         override fun beforeHookedMethod(param: MethodHookParam) {
                                             val config = readConfig()
-                                            if (!shouldDeliverLocation(config)) return
-                                            val now = android.os.SystemClock.elapsedRealtime()
-                                            if (now - lastCallTime < 1000) {
-                                                param.result = null // Throttle real callbacks
-                                                return
-                                            }
-                                            lastCallTime = now
-
-                                            if (param.args.isEmpty() || param.args[0] == null) return
+                                            if (!shouldBlockRealLocation(config)) return
                                             updateSatelliteCacheIfNeeded()
-
-                                            // Do not mutate GnssStatus internals here. Android keeps parallel
-                                            // arrays for CN0/elevation/azimuth/flags, and field-name drift can
-                                            // leave mSvCount larger than one of those arrays. Public getter hooks
-                                            // below provide a coherent satellite view without corrupting objects.
+                                            val satellites = if (shouldDeliverLocation(config)) {
+                                                cachedSatellites ?: emptyArray()
+                                            } else emptyArray()
+                                            val replacement = GnssStatusFactory.build(
+                                                classLoader, satellites, satellites.size, currentPackageName
+                                            )
+                                            if (replacement == null || param.args.isEmpty()) {
+                                                param.result = null
+                                            } else {
+                                                param.args[0] = replacement
+                                            }
                                         }
                                     })
                                 } catch (e: Throwable) {}
@@ -2668,7 +2606,7 @@ class LocationHooker : XposedModule() {
                 XposedHelpers.findAndHookMethod("android.location.GpsStatus", classLoader, "getSatellites", object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val config = readConfig()
-                        if (shouldDeliverLocation(config)) {
+                        if (shouldBlockRealLocation(config)) {
                             param.result = createSpoofedGpsSatellites(classLoader)
                         }
                     }
@@ -2746,7 +2684,7 @@ class LocationHooker : XposedModule() {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         updateSatelliteCacheIfNeeded()
-                        if (isSpoofingActiveCache) {
+                        if (shouldBlockRealLocation(readConfig())) {
                             val count = cachedSatellites?.size ?: 0
                             param.result = count
                             XposedBridge.logEvery(
@@ -2767,8 +2705,9 @@ class LocationHooker : XposedModule() {
                     Int::class.javaPrimitiveType!!,
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
-                            val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return) ?: return
-                            param.result = value(sat)
+                            if (!shouldBlockRealLocation(readConfig())) return
+                            val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return)
+                            param.result = sat?.let(value) ?: 0
                         }
                     }
                 )
@@ -2783,8 +2722,9 @@ class LocationHooker : XposedModule() {
                     Int::class.javaPrimitiveType!!,
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
-                            val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return) ?: return
-                            param.result = value(sat)
+                            if (!shouldBlockRealLocation(readConfig())) return
+                            val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return)
+                            param.result = sat?.let(value) ?: 0f
                         }
                     }
                 )
@@ -2799,8 +2739,9 @@ class LocationHooker : XposedModule() {
                     Int::class.javaPrimitiveType!!,
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
-                            val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return) ?: return
-                            param.result = value(sat)
+                            if (!shouldBlockRealLocation(readConfig())) return
+                            val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return)
+                            param.result = sat?.let(value) ?: false
                         }
                     }
                 )
@@ -2833,8 +2774,9 @@ class LocationHooker : XposedModule() {
                 Int::class.javaPrimitiveType!!,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return) ?: return
-                        param.result = if (sat.type == 5) "I" else "C"
+                        if (!shouldBlockRealLocation(readConfig())) return
+                        val sat = getApiSatellite(param.args.getOrNull(0) as? Int ?: return)
+                        param.result = if (sat == null) "" else if (sat.type == 5) "I" else "C"
                     }
                 }
             )
@@ -3131,7 +3073,23 @@ class LocationHooker : XposedModule() {
     }
 
     private fun shouldDeliverLocation(config: JSONObject?): Boolean {
-        return shouldSpoofLocation(config) && isSystemLocationSwitchEnabled()
+        return shouldSpoofLocation(config) &&
+            config?.optBoolean("fail_closed", false) != true &&
+            hasValidTargetCoordinates(config) && isSystemLocationSwitchEnabled()
+    }
+
+    private fun shouldBlockRealLocation(config: JSONObject?): Boolean {
+        if (shouldSpoofLocation(config)) return true
+        // The compact runtime property is published before the full snapshot can be
+        // reloaded by every hooked process. Block that activation window as well.
+        return config == null && getSystemProperty("gsm.wrp.active", "false") == "true"
+    }
+
+    private fun hasValidTargetCoordinates(config: JSONObject?): Boolean {
+        if (config == null || !config.has("lat") || !config.has("lng")) return false
+        val lat = config.optDouble("lat", Double.NaN)
+        val lng = config.optDouble("lng", Double.NaN)
+        return lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0
     }
 
     private fun shouldMockWifi(config: JSONObject?): Boolean {
@@ -3243,20 +3201,20 @@ class LocationHooker : XposedModule() {
                 Long.MAX_VALUE
             }
             if (config.optBoolean("active", false) && heartbeatAgeMs == Long.MAX_VALUE) {
-                markExpiredConfigInactive(config)
+                markActiveConfigUnavailable(config)
                 XposedBridge.logOpenCellIdEvery(
                     "config:heartbeat-missing",
-                    "readConfig restored pass-through because active config has no trusted heartbeat",
+                    "readConfig blocked real data because active config has no trusted heartbeat",
                     30_000L
                 )
             } else if (
                 config.optBoolean("active", false) &&
                 heartbeatAgeMs > activeConfigTtlMs
             ) {
-                markExpiredConfigInactive(config)
+                markActiveConfigUnavailable(config)
                 XposedBridge.logOpenCellIdEvery(
                     "config:expired",
-                    "readConfig restored pass-through after stale active config age=${heartbeatAgeMs}ms",
+                    "readConfig blocked real data after stale active config age=${heartbeatAgeMs}ms",
                     30_000L
                 )
             }
@@ -3265,12 +3223,7 @@ class LocationHooker : XposedModule() {
         }
         val lat = config.optDouble("lat", 0.0)
         val lng = config.optDouble("lng", 0.0)
-        val wgs84 = gcj02ToWgs84(lat, lng)
-        config.put("wgs84_lat", wgs84.first)
-        config.put("wgs84_lng", wgs84.second)
-        val bd09 = gcj02ToBd09(lat, lng)
-        config.put("bd09_lat", bd09.first)
-        config.put("bd09_lng", bd09.second)
+        // Runtime lat/lng are canonical WGS-84. External map adapters convert at their edge.
         config.put(
             "jitter_radius_meters",
             config.optDouble("jitter_radius_meters", DEFAULT_JITTER_RADIUS_METERS)
@@ -3403,6 +3356,16 @@ class LocationHooker : XposedModule() {
         config.put("mock_cell", false)
         config.put("mock_bluetooth", false)
         config.put("satellite_count", 0)
+    }
+
+    private fun markActiveConfigUnavailable(config: JSONObject) {
+        // Only an explicit stop fence or a new boot may end an active simulation.
+        // A dead writer must never expose a real position while the UI is still armed.
+        config.put("active", true)
+        config.put("fail_closed", true)
+        config.put("satellite_count", 0)
+        config.put("wifi_json", emptyWifiPayload())
+        config.put("cell_json", org.json.JSONArray())
     }
 
     private fun readBootId(): String {
@@ -4135,8 +4098,11 @@ class LocationHooker : XposedModule() {
             )
             if (timestamps.wallTimeMs <= 0L || timestamps.elapsedRealtimeNanos <= 0L) continue
             rememberSystemProviderTimestamp(provider, timestamps)
-            applySpoofedLocationToObject(location, config, provider, timestamps)
-            rewritten = true
+            if (applySpoofedLocationToObject(location, config, provider, timestamps)) {
+                rewritten = true
+            } else {
+                return false
+            }
         }
         return rewritten
     }
@@ -4159,50 +4125,40 @@ class LocationHooker : XposedModule() {
 
         val managerClassName = "com.android.server.location.provider.LocationProviderManager"
         val managerClass = XposedHelpers.findClassIfExists(managerClassName, classLoader) ?: return
-        val processMethodCount = managerClass.declaredMethods.count {
-            it.name == "processReportedLocation" && it.parameterCount == 1
-        }
 
         try {
-            if (processMethodCount > 0) {
-                XposedBridge.hookAllMethods(managerClass, "processReportedLocation", object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        if (param.result == null) return
-                        val manager = param.thisObject ?: return
-                        val provider = systemProviderName(manager) ?: return
-                        if (!isSyntheticSystemProvider(provider)) return
-                        val config = readConfig() ?: return
-                        if (!shouldDeliverLocation(config)) return
-                        if (!isSyntheticSystemProviderFallback(param.result, provider)) {
-                            lastRealSystemProviderReportAtMs[provider] =
-                                android.os.SystemClock.elapsedRealtime()
-                        }
-                        if (!rewriteFrameworkLocationResultInPlace(param.result, config, provider)) return
+            // This is the first framework boundary for every provider report. Never let a
+            // real result enter the manager's cache or listener fan-out while armed.
+            XposedBridge.hookAllMethods(managerClass, "onReportLocation", object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    val config = readConfig()
+                    if (!shouldBlockRealLocation(config)) return
+                    val manager = param.thisObject
+                    val provider = manager?.let(::systemProviderName)
+                    val result = param.args.getOrNull(0)
+                    if (provider == null || !isSyntheticSystemProvider(provider) ||
+                        !shouldDeliverLocation(config) || result == null ||
+                        !rewriteFrameworkLocationResultInPlace(result, config!!, provider)
+                    ) {
+                        param.result = null // void onReportLocation: suppress the entire report
                         XposedBridge.logEvery(
-                            "systemCanonicalFix:$provider",
-                            "[WeRePosition] canonical $provider fix rewritten with provider timestamp after validation",
+                            "systemFixSuppressed:${provider ?: "unknown"}",
+                            "[WeRePosition] blocked real provider report while simulation is active",
                             10_000L
                         )
+                        return
                     }
-                })
-            } else {
-                // Compatibility fallback for releases without processReportedLocation().
-                XposedBridge.hookAllMethods(managerClass, "onReportLocation", object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val config = readConfig() ?: return
-                        if (!shouldDeliverLocation(config)) return
-                        val manager = param.thisObject ?: return
-                        val provider = systemProviderName(manager) ?: return
-                        if (!isSyntheticSystemProvider(provider)) return
-                        val result = param.args.getOrNull(0) ?: return
-                        if (!isSyntheticSystemProviderFallback(result, provider)) {
-                            lastRealSystemProviderReportAtMs[provider] =
-                                android.os.SystemClock.elapsedRealtime()
-                        }
-                        rewriteFrameworkLocationResultInPlace(result, config, provider)
+                    if (!isSyntheticSystemProviderFallback(result, provider)) {
+                        lastRealSystemProviderReportAtMs[provider] =
+                            android.os.SystemClock.elapsedRealtime()
                     }
-                })
-            }
+                    XposedBridge.logEvery(
+                        "systemCanonicalFix:$provider",
+                        "[WeRePosition] canonical $provider fix rewritten before framework delivery",
+                        10_000L
+                    )
+                }
+            })
 
             XposedBridge.hookAllMethods(managerClass, "startManager", object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
@@ -4215,13 +4171,32 @@ class LocationHooker : XposedModule() {
                     param.thisObject?.let(::captureSystemProviderManager)
                 }
             }
-            for (methodName in listOf("registerLocationRequest", "getCurrentLocation", "getLastLocation")) {
+            for (methodName in listOf("registerLocationRequest", "getCurrentLocation")) {
                 XposedBridge.hookAllMethods(managerClass, methodName, lateCaptureHook)
             }
+            XposedBridge.hookAllMethods(managerClass, "getLastLocation", object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    param.thisObject?.let(::captureSystemProviderManager)
+                }
+
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    val config = readConfig()
+                    if (!shouldBlockRealLocation(config)) return
+                    val location = param.result as? android.location.Location ?: return
+                    val provider = param.thisObject?.let(::systemProviderName)
+                    if (provider == null || !isSyntheticSystemProvider(provider) ||
+                        !shouldDeliverLocation(config) ||
+                        !applySpoofedLocationToObject(
+                            location, config!!, provider,
+                            SpoofedTimestamps(location.time, location.elapsedRealtimeNanos)
+                        )
+                    ) param.result = null
+                }
+            })
 
             XposedBridge.log(
                 "[WeRePosition] system framework fix hook installed at " +
-                    if (processMethodCount > 0) "processReportedLocation-after" else "onReportLocation-before"
+                    "onReportLocation-before"
             )
         } catch (e: Throwable) {
             XposedBridge.log("[WeRePosition] system framework fix hook failed: $e")
@@ -4453,7 +4428,7 @@ class LocationHooker : XposedModule() {
         config: JSONObject,
         provider: String,
         timestamps: SpoofedTimestamps
-    ) {
+    ): Boolean {
         val sample = createLocationSample(
             config = config,
             provider = provider,
@@ -4518,6 +4493,13 @@ class LocationHooker : XposedModule() {
                 XposedHelpers.callMethod(loc, "setExtras", bundle)
             }
         } catch (_: Throwable) {}
+        // Reflection failures must never be reported as a successful rewrite.
+        val delivered = loc as? android.location.Location ?: return false
+        return delivered.latitude.isFinite() && delivered.longitude.isFinite() &&
+            kotlin.math.abs(delivered.latitude - sample.latitude) < 1e-7 &&
+            kotlin.math.abs(delivered.longitude - sample.longitude) < 1e-7 &&
+            delivered.time == sample.timestamps.wallTimeMs &&
+            delivered.elapsedRealtimeNanos == sample.timestamps.elapsedRealtimeNanos
     }
 
     private fun createOnNmeaMessageListenerProxy(original: Any, classLoader: ClassLoader): Any {
@@ -4536,7 +4518,7 @@ class LocationHooker : XposedModule() {
                         val timestamp = (args[1] as? Number)?.toLong()
                         if (originalMsg != null && timestamp != null) {
                             val config = lastConfig
-                            val deliveredMsg = if (shouldDeliverLocation(config)) {
+                            val deliveredMsg = if (shouldBlockRealLocation(config)) {
                                 spoofNmeaMessage(originalMsg, config ?: return null)
                             } else {
                                 originalMsg
@@ -4580,7 +4562,7 @@ class LocationHooker : XposedModule() {
                         val timestamp = (args[0] as? Number)?.toLong()
                         if (originalMsg != null && timestamp != null) {
                             val config = lastConfig
-                            val deliveredMsg = if (shouldDeliverLocation(config)) {
+                            val deliveredMsg = if (shouldBlockRealLocation(config)) {
                                 spoofNmeaMessage(originalMsg, config ?: return null)
                             } else {
                                 originalMsg
@@ -4639,16 +4621,18 @@ class LocationHooker : XposedModule() {
 
     private fun spoofNmeaMessage(sentence: String, config: JSONObject): String? {
         try {
-            if (!shouldDeliverLocation(config)) return sentence
+            if (!shouldDeliverLocation(config)) return null
             
-            val targetLat = config.optDouble("wgs84_lat", 0.0)
-            val targetLng = config.optDouble("wgs84_lng", 0.0)
-            if (targetLat == 0.0 && targetLng == 0.0) return sentence
+            val targetLat = config.optDouble("lat", 0.0)
+            val targetLng = config.optDouble("lng", 0.0)
+            if (!targetLat.isFinite() || !targetLng.isFinite() ||
+                targetLat !in -90.0..90.0 || targetLng !in -180.0..180.0
+            ) return null
             
             val parts = sentence.split("*")
             val mainPart = parts[0]
             val fields = mainPart.split(",").toMutableList()
-            if (fields.isEmpty()) return sentence
+            if (fields.isEmpty()) return null
             
             val type = fields[0]
             var modified = false
@@ -4696,7 +4680,7 @@ class LocationHooker : XposedModule() {
                 modified = true
             }
             
-            if (!modified) return sentence
+            if (!modified) return null
             
             val newMainPart = fields.joinToString(",")
             val newChecksum = calculateNmeaChecksum(newMainPart)
@@ -4711,7 +4695,7 @@ class LocationHooker : XposedModule() {
             return newMainPart + tail
         } catch (e: Exception) {
             XposedBridge.log(e)
-            return sentence
+            return null
         }
     }
 
@@ -4734,8 +4718,8 @@ class LocationHooker : XposedModule() {
     }
 
     private fun buildSpoofedNmeaBurst(config: JSONObject): List<String> {
-        val targetLat = config.optDouble("wgs84_lat", 0.0)
-        val targetLng = config.optDouble("wgs84_lng", 0.0)
+        val targetLat = config.optDouble("lat", 0.0)
+        val targetLng = config.optDouble("lng", 0.0)
         if (targetLat == 0.0 && targetLng == 0.0) return emptyList()
         updateSatelliteCacheIfNeeded()
         val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))

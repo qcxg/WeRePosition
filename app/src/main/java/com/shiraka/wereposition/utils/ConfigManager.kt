@@ -34,7 +34,6 @@ class ConfigManager(private val rootManager: RootManager) {
         routePoints: List<RoutePoint> = emptyList(),
         isRouteMode: Boolean = false,
         wifiJson: String = EnvironmentRfResolver.EMPTY_WIFI_JSON,
-        appCoordinateSystems: Map<String, String> = emptyMap(),
         cellJson: String = "[]",
         mockWifi: Boolean = true,
         mockCell: Boolean = true,
@@ -110,9 +109,6 @@ class ConfigManager(private val rootManager: RootManager) {
             put("altitude", altitude)
             put("satellite_count", satelliteCount)
             
-            val coordSysObj = JSONObject()
-            appCoordinateSystems.forEach { (pkg, sys) -> coordSysObj.put(pkg, sys) }
-            put("app_coordinate_systems", coordSysObj)
         }
         // 使用 quoted heredoc 写入，避免 JSON 中的引号、美元符号等被 shell 解析。
         val cellArray = try { JSONArray(cellJson) } catch (_: Exception) { JSONArray() }

@@ -74,8 +74,6 @@ class MainViewModel(
             savedRoutes = emptyList(), // Will be populated by Room Flow
             currentLanguage = normalizeLanguageTag(settingsRepository.getLanguage()),
             isLanguageSet = settingsRepository.isLanguageSet(),
-            appCoordinateSystems = settingsRepository.getAppCoordinateSystems(),
-            showHomeCoordinateAlgorithm = settingsRepository.showHomeCoordinateAlgorithm,
             mockWifi = settingsRepository.mockWifi,
             mockCell = settingsRepository.mockCell,
             mockBluetooth = false,
@@ -630,13 +628,8 @@ class MainViewModel(
         withContext(Dispatchers.Main) {
             _uiState.update { it.copy(wifiLoadStatus = com.shiraka.wereposition.data.model.WifiLoadStatus.LOADING) }
         }
-        // Align coordinate conversion to WGS-84 standard for WiGLE API
-        val wgs84 = com.shiraka.wereposition.utils.CoordinateUtils.gcj02ToWgs84(lat, lng)
-        val wgsLat = wgs84.lat
-        val wgsLng = wgs84.lng
-
         try {
-            val rawJsonArrayString = wifiRepository.fetchWifiData(wgsLat, wgsLng, settingsToken)
+            val rawJsonArrayString = wifiRepository.fetchWifiData(lat, lng, settingsToken)
             val nearbyArr = org.json.JSONArray(rawJsonArrayString)
             if (nearbyArr.length() > 0) {
                 val wifiObj = org.json.JSONObject()
@@ -739,13 +732,8 @@ class MainViewModel(
             return false
         }
         android.util.Log.d("OpenCellID", "fetchCellFromOpenCellIdSync: Starting request for coordinates ($lat, $lng)")
-        val wgs84 = com.shiraka.wereposition.utils.CoordinateUtils.gcj02ToWgs84(lat, lng)
-        val wgsLat = wgs84.lat
-        val wgsLng = wgs84.lng
-        android.util.Log.d("OpenCellID", "fetchCellFromOpenCellIdSync: Converted GCJ-02 ($lat, $lng) -> WGS-84 ($wgsLat, $wgsLng) for OpenCellID query")
-
         try {
-            val rawJsonArrayString = opencellidClient.fetchCellData(wgsLat, wgsLng, tokenToUse)
+            val rawJsonArrayString = opencellidClient.fetchCellData(lat, lng, tokenToUse)
             val cellsArray = org.json.JSONArray(rawJsonArrayString)
             android.util.Log.d("OpenCellID", "fetchCellFromOpenCellIdSync: Received cell list size: ${cellsArray.length()}")
             if (cellsArray.length() > 0) {
@@ -903,7 +891,6 @@ class MainViewModel(
                     context, lat, lng,
                     "STILL", 0f, now,
                     emptyList(), false,
-                    updatedState.appCoordinateSystems,
                     resolved.wifiJson,
                     resolved.cellJson,
                     updatedState.mockWifi,
@@ -1202,7 +1189,7 @@ class MainViewModel(
                 locationRepository.startSpoofing(
                     context, startPoint.lat, startPoint.lng,
                     if (isLoop) state.routeSimMode.name else "STILL",
-                    0f, now, pointsToRun, isLoop, runtimeState.appCoordinateSystems,
+                    0f, now, pointsToRun, isLoop,
                     resolved.wifiJson, resolved.cellJson,
                     runtimeState.mockWifi,
                     runtimeState.mockCell,
@@ -1512,11 +1499,6 @@ class MainViewModel(
         startSpoofing()
     }
 
-    fun setShowHomeCoordinateAlgorithm(show: Boolean) {
-        settingsRepository.showHomeCoordinateAlgorithm = show
-        _uiState.update { it.copy(showHomeCoordinateAlgorithm = show) }
-    }
-
     fun setSyntheticRfConfig(enabled: Boolean, wifiCount: Int, cellCount: Int, ssidPrefix: String) {
         settingsRepository.syntheticRfEnabled = enabled
         settingsRepository.syntheticWifiCount = wifiCount
@@ -1551,9 +1533,6 @@ class MainViewModel(
             SpooferProvider.signalJitterEnabled = state.signalJitterEnabled
             SpooferProvider.signalJitterLevel = state.signalJitterLevel
             SpooferProvider.wifiConnectionMode = state.wifiConnectionMode.name
-            SpooferProvider.appCoordinateSystemsJson = org.json.JSONObject().apply {
-                state.appCoordinateSystems.forEach { (pkg, system) -> put(pkg, system) }
-            }.toString()
             SpooferProvider.altitude = state.altitudeInput.toDoubleOrNull() ?: 0.0
             SpooferProvider.satelliteCount = state.satelliteCountInput.toIntOrNull()?.coerceIn(0, 64) ?: 20
             SpooferProvider.requestRfRefresh()
@@ -1931,28 +1910,6 @@ class MainViewModel(
         return "Unknown"
     }
 
-    fun setAppCoordinateSystem(pkg: String, sys: String) {
-        val currentMap = _uiState.value.appCoordinateSystems.toMutableMap()
-        currentMap[pkg] = sys
-        settingsRepository.setAppCoordinateSystems(currentMap)
-        _uiState.update { it.copy(appCoordinateSystems = currentMap) }
-        
-        // If spoofing is active, update config
-        if (_uiState.value.isSpoofingActive) {
-            syncMockSettings()
-        }
-    }
-
-    fun removeAppCoordinateSystem(pkg: String) {
-        val currentMap = _uiState.value.appCoordinateSystems.toMutableMap()
-        currentMap.remove(pkg)
-        settingsRepository.setAppCoordinateSystems(currentMap)
-        _uiState.update { it.copy(appCoordinateSystems = currentMap) }
-
-        if (_uiState.value.isSpoofingActive) {
-            syncMockSettings()
-        }
-    }
     
     private suspend fun saveEnvironmentData(lat: Double, lng: Double, wifiJson: String, cellJson: String) {
         val locId = environmentDao.insertLocation(com.shiraka.wereposition.data.db.LocationRecord(lat = lat, lng = lng))

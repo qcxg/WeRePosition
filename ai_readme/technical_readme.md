@@ -78,7 +78,7 @@ Fixed-point, route, and manual-joystick movement share one output path. `MainVie
 
 The start-spoofing dialog uses content height up to a screen-bounded maximum, then scrolls. Collapsed sections are removed from layout instead of reserving blank space or animating platform-window remeasurement. It stays visible after confirmation as a compact progress surface. Local exact-cell RF cache hits enable immediately; API misses identify WiGLE/OpenCellID as separate sources and offer either retry or "use current state" startup. User-enabled RF channels remain enabled even when their exact-cell payload is empty, in which case diagnostics show `block only` and hooks hide real RF data.
 
-`show_home_coordinate_algorithm` controls only the home UI entry. Per-app coordinate mappings are persisted and published for compatibility, but the disabled legacy map-SDK hooks do not currently apply them to the canonical framework fix.
+The legacy per-app coordinate selector was removed because it did not affect any active location hook. Runtime, storage, and external RF lookup coordinates now have one WGS-84 interpretation.
 
 The hook layer checks compact-frame monotonic heartbeat and boot ID. A missing/stale active heartbeat becomes inactive pass-through after 30 seconds; a stale or mismatched boot config must not revive spoofing after reboot.
 
@@ -92,7 +92,7 @@ Start/API work is guarded by both a UI operation generation and a repository/ser
 
 GNSS coordinates come from the selected target coordinate or the host app's legacy route/joystick path. Fixed-point behavior is the currently verified primary mode; route-coupled manual control is scheduled for replacement in `joystick_refactor_plan.md`. Standard Android location is independent of Wi-Fi/cell payload availability. Wi-Fi and cell hooks are optional RF supplements; they never gate whether a normal `LocationManager` consumer can obtain a fix.
 
-The host/UI coordinate is stored as GCJ-02 where applicable. The canonical Android framework fix is always WGS-84 (`wgs84_lat`, `wgs84_lng`). GCJ-02 and BD-09 conversion belongs only at an explicitly enabled map-SDK boundary, never in `system_server`.
+The host/UI coordinate, saved points, RF database, runtime `lat`/`lng`, GNSS generation, and Android framework fix are all WGS-84. A future GCJ-02 or BD-09 integration must convert only at that external map or data-source boundary.
 
 ### Authoritative Framework Path
 
@@ -102,8 +102,8 @@ There is exactly one owner for ordinary location cadence: the module instance lo
 SpoofingService fixed / legacy route / manual output point
   -> system_server 1 Hz cadence
   -> current real AbstractLocationProvider.reportLocation(LocationResult)
-  -> LocationProviderManager.processReportedLocation() validates provider input
-  -> processReportedLocation after-hook returns one new canonical WGS-84 fix
+  -> LocationProviderManager.onReportLocation() before-hook replaces or suppresses provider input
+  -> one canonical WGS-84 LocationResult enters framework validation
   -> framework last-location cache
   -> interval / minDistance filtering
   -> permission, AppOps and coarse-location handling
@@ -113,7 +113,7 @@ SpoofingService fixed / legacy route / manual output point
 
 The cadence calls the current real provider abstraction for `gps`, `network`, and `fused`. It does not create, register, remove, or disguise an Android test/mock provider. Passive location is updated by the framework itself.
 
-`LocationProviderManager.processReportedLocation()` is the only standard-location rewrite point on the verified Android 16 path. Each provider report returns a newly built singleton `LocationResult`; one complete sample is written before framework caching and delivery filtering. The downstream transport, `Location.writeToParcel()`, and public `Location` getters must remain untouched.
+`LocationProviderManager.onReportLocation()` is the first standard-location rewrite point on the current device path. Each provider report is rewritten before framework caching and delivery filtering; a failed rewrite suppresses the report. The downstream transport, `Location.writeToParcel()`, and public `Location` getters remain untouched.
 
 This placement is deliberate:
 
@@ -133,7 +133,7 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 - The location master switch remains authoritative for delivery, not lifecycle admission. Simulation may be armed while the switch is off; the foreground service stays asleep with no active runtime frame/RF output, then writes its first full snapshot automatically when the switch is enabled. Turning it off during a run pauses output and turning it back on resumes with a fresh full snapshot.
 - While fixed spoofing is active, dragging the home map and leaving it idle updates the shared anchor; the next service heartbeat publishes it instead of `MainViewModel` writing runtime config directly.
 - The foreground service is the single moving-output and active-runtime writer for fixed, route, and manual modes. It keeps moving coordinates fresh through the compact frame at 1 Hz, refreshes a stationary frame every 10 seconds, and rewrites full runtime JSON only on content/RF changes or the 60-second safety fallback. It does not apply final random jitter before publication.
-- Jitter is sampled only on the authoritative framework cadence. `jitter_radius_meters` is the requested roaming envelope, not only a distant clamp. Slow/medium/fast use different OU time scales and hold a coordinate sample for about 2.8 / 1.5 / 0.8 seconds, producing approximately 3 / 2 / 1-fix advancement at 1 Hz while timestamps remain fresh. When any RF switch is enabled, the final OU sample is bounded to the anchor's exact `EnvironmentCoveragePolicy` cell before GCJ-02 -> WGS-84 conversion; this prevents a delivered coordinate from crossing into a cell whose RF payload was not resolved. With all RF switches off, the full configured drift envelope remains available. The location fields are written together, so paired latitude/longitude can never belong to different samples.
+- Jitter is sampled only on the authoritative framework cadence. `jitter_radius_meters` is the requested roaming envelope, not only a distant clamp. Slow/medium/fast use different OU time scales and hold a coordinate sample for about 2.8 / 1.5 / 0.8 seconds, producing approximately 3 / 2 / 1-fix advancement at 1 Hz while timestamps remain fresh. When any RF switch is enabled, the final WGS-84 OU sample is bounded to the anchor's exact `EnvironmentCoveragePolicy` cell; this prevents a delivered coordinate from crossing into a cell whose RF payload was not resolved. With all RF switches off, the full configured drift envelope remains available. The location fields are written together, so paired latitude/longitude can never belong to different samples.
 - `onSystemServerStarting` installs the framework hook groups once per PID. Later `onPackageReady` callbacks in that PID are ignored by the process installation guard.
 - GMS receives ordinary framework reports through its normal registrations and is not injected by this module.
 
@@ -161,7 +161,7 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 ### Current Risk Notes
 
 - GNSS object compatibility depends on Android version. Prefer public getter hooks and avoid private field mutation.
-- The provider cadence and `processReportedLocation` method are verified on Pixel Android 16/API 36. Other framework versions must be checked against their real provider-manager method order before moving the rewrite point.
+- The provider cadence and `onReportLocation` hook have been checked on the connected API 37 device. Other framework versions need their provider-manager method order verified before deployment.
 - The current stable path does not rewrite magnetometer data or force `Location` bearing APIs in fixed spoofing mode. Compass calibration, magnetic-field accuracy, and app-side compass behavior remain handled by the system/physical sensor stack. Route, joystick, and moving simulation modes can still expose course-over-ground through `Location` speed/bearing.
 - Legacy route/manual UI was not part of the 2026-07-13 regression pass. Its known coupling and planned removal/rewrite are documented in `joystick_refactor_plan.md`; that work must preserve the same service writer and framework hook chain.
 
@@ -197,7 +197,7 @@ It no longer generates random SSIDs or vendor-looking BSSIDs.
 
 ### API Wi-Fi Import
 
-`fetchWifiFromWigleSync()` queries WiGLE using WGS-84 coordinates converted from the app coordinate. It stores WiGLE APs as environment data when returned.
+`fetchWifiFromWigleSync()` queries WiGLE with the app's WGS-84 coordinate directly. It stores WiGLE APs as environment data when returned.
 
 On start spoofing, WiGLE is queried only when the exact target cell has no trusted local Wi-Fi payload; once imported, later runs resolve the Room/SQLite row through the same cell policy.
 

@@ -130,41 +130,6 @@ fun SettingsScreen(
             }
 
             ExpandableSettingsRow(
-                title = stringResource(R.string.home_display_settings),
-                summary = if (uiState.showHomeCoordinateAlgorithm) {
-                    stringResource(R.string.coordinate_algorithm_visible)
-                } else {
-                    stringResource(R.string.coordinate_algorithm_hidden)
-                },
-                expanded = expandedSection == "home_display",
-                onClick = { toggleSection("home_display") }
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            stringResource(R.string.show_home_coordinate_algorithm),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            stringResource(R.string.show_home_coordinate_algorithm_desc),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.56f)
-                        )
-                    }
-                    Switch(
-                        checked = uiState.showHomeCoordinateAlgorithm,
-                        onCheckedChange = { viewModel.setShowHomeCoordinateAlgorithm(it) }
-                    )
-                }
-            }
-
-            ExpandableSettingsRow(
                 title = stringResource(R.string.synthetic_rf_title),
                 summary = stringResource(if (uiState.syntheticRfEnabled) R.string.synthetic_rf_on else R.string.synthetic_rf_off),
                 expanded = expandedSection == "synthetic_rf",

@@ -43,7 +43,6 @@ class LocationRepository(
         startTime: Long,
         routePoints: List<RoutePoint>,
         isRouteMode: Boolean,
-        appCoordinateSystems: Map<String, String>,
         wifiJson: String = EnvironmentRfResolver.EMPTY_WIFI_JSON,
         cellJson: String = "[]",
         mockWifi: Boolean = true,
@@ -80,9 +79,6 @@ class LocationRepository(
             SpooferProvider.signalJitterEnabled = signalJitterEnabled
             SpooferProvider.signalJitterLevel = signalJitterLevel.coerceIn(0, 100)
             SpooferProvider.wifiConnectionMode = if (wifiConnectionMode == "RANDOM") "RANDOM" else "FIXED"
-            SpooferProvider.appCoordinateSystemsJson = JSONObject().apply {
-                appCoordinateSystems.forEach { (pkg, sys) -> put(pkg, sys) }
-            }.toString()
             SpooferProvider.publishRfSnapshot(
                 lat,
                 lng,
@@ -138,7 +134,6 @@ class LocationRepository(
             SpooferProvider.clearRfForCoverageTransition()
             SpooferProvider.routeJson = "[]"
             SpooferProvider.isRouteMode = false
-            SpooferProvider.appCoordinateSystemsJson = "{}"
             settingsManager.isSpoofingActive = false
             nextGeneration
         }
@@ -166,7 +161,6 @@ class LocationRepository(
             SpooferProvider.clearRfForCoverageTransition()
             SpooferProvider.routeJson = "[]"
             SpooferProvider.isRouteMode = false
-            SpooferProvider.appCoordinateSystemsJson = "{}"
             settingsManager.isSpoofingActive = false
             nextGeneration
         }

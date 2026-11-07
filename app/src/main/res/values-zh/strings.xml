@@ -161,14 +161,6 @@
     <string name="confirm">确认</string>
     <string name="custom_coordinate_title">自定义坐标</string>
     <string name="custom_coord_desc">手动输入经纬度坐标，修改后地图位置也会同步更新。</string>
-    <string name="custom_coordinate_algo">自定义坐标算法</string>
-    <string name="config_app_coordinate">配置应用坐标系</string>
-    <string name="config_app_coordinate_desc">解决固定偏移，为独立软件定制底层坐标系</string>
-    <string name="home_display_settings">首页显示</string>
-    <string name="show_home_coordinate_algorithm">显示坐标算法入口</string>
-    <string name="show_home_coordinate_algorithm_desc">临时显示或隐藏首页的应用坐标系配置卡片。</string>
-    <string name="coordinate_algorithm_visible">坐标算法入口已显示</string>
-    <string name="coordinate_algorithm_hidden">坐标算法入口已隐藏</string>
     <string name="spatial_env_collection">空间环境采集</string>
     <string name="env_map_scan">环境图谱与扫街</string>
     <string name="scanning_reference_points">采集中... 已有 %1$d 个参考点</string>
@@ -179,10 +171,6 @@
     <string name="export_data">导出</string>
     <string name="show_system_apps">显示系统应用</string>
     <string name="no_hooked_apps">当前未获取到或未勾选任何已 Hook 的目标应用</string>
-    <string name="gcj02_desc">火星坐标系 (中国大陆地图默认, 如高德/微信)</string>
-    <string name="wgs84_desc">国际标准GPS (国外地图默认, 如Google Maps)</string>
-    <string name="bd09_desc">百度坐标系 (百度地图专属)</string>
-    <string name="set_coordinate_algo">设置坐标算法</string>
     <string name="select_coord_sys_desc">为 %1$s 选择要模拟的底层坐标系标准\n(我写的提示不一定是正确的，要自己测)</string>
     <string name="scanning_status_active">采集中 (%1$d)</string>
     <string name="scanning_status_inactive">未开启采集</string>

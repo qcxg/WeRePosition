@@ -72,12 +72,11 @@ class SyntheticRfGenerator(private val context: Context) {
             now - it.recordedAt < if (it.code == null) 30_000L else 30 * 60_000L
         }?.let { return it.code }
         if (!Geocoder.isPresent()) return null
-        val wgs = CoordinateUtils.gcj02ToWgs84(latitude, longitude)
         val code = withTimeoutOrNull(3_000L) {
             suspendCancellableCoroutine<String?> { continuation ->
                 runCatching {
                     Geocoder(context, Locale.ENGLISH).getFromLocation(
-                        wgs.lat, wgs.lng, 1,
+                        latitude, longitude, 1,
                         object : Geocoder.GeocodeListener {
                             override fun onGeocode(addresses: MutableList<Address>) {
                                 if (continuation.isActive) continuation.resume(

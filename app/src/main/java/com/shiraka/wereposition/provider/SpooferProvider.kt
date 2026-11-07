@@ -76,8 +76,8 @@ class SpooferProvider : ContentProvider() {
 
         @Volatile var isActive = false
         @Volatile var runtimeLifecycleToken = 0L
-        @Volatile var latitude = 0.0      // GCJ-02（高德坐标系，存入即为GCJ-02）
-        @Volatile var longitude = 0.0     // GCJ-02
+        @Volatile var latitude = 0.0      // WGS-84 throughout runtime and storage.
+        @Volatile var longitude = 0.0     // WGS-84
         @Volatile var currentLatitude = 0.0
         @Volatile var currentLongitude = 0.0
         @Volatile var wifiJson = EnvironmentRfResolver.EMPTY_WIFI_JSON
@@ -95,7 +95,6 @@ class SpooferProvider : ContentProvider() {
         @Volatile var signalJitterEnabled = true
         @Volatile var signalJitterLevel = 40
         @Volatile var wifiConnectionMode = "FIXED"
-        @Volatile var appCoordinateSystemsJson = "{}"
         @Volatile var mockWifi = true
         @Volatile var mockCell = true
         @Volatile var mockBluetooth = false

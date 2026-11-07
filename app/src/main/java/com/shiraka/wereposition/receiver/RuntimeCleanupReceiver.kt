@@ -31,7 +31,6 @@ class RuntimeCleanupReceiver : BroadcastReceiver() {
         SpooferProvider.clearRfForCoverageTransition()
         SpooferProvider.routeJson = "[]"
         SpooferProvider.isRouteMode = false
-        SpooferProvider.appCoordinateSystemsJson = "{}"
         SettingsManager(context.applicationContext).apply {
             isSpoofingActive = false
             // Release replacement still requires an LSPosed reload. Debug APKs are

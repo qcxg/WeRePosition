@@ -116,7 +116,6 @@ fun SpoofingScreen(
     var showSavedLocations by remember { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var showAppCoordinateScreen by remember { mutableStateOf(false) }
     var showEnvironmentDialog by remember { mutableStateOf(false) }
     var showStartSpoofingDialog by remember { mutableStateOf(false) }
     var showMapTypeDialog by remember { mutableStateOf(false) }
@@ -459,38 +458,6 @@ fun SpoofingScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            if (uiState.showHomeCoordinateAlgorithm) {
-                SectionHeader(Icons.Rounded.Extension, stringResource(R.string.custom_coordinate_algo), isDark)
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                    elevation = CardDefaults.cardElevation(0.dp),
-                    modifier = Modifier.clickable { showAppCoordinateScreen = true }
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
-                                .background(AccentBlue.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.Extension, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.config_app_coordinate), color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text(stringResource(R.string.config_app_coordinate_desc), color = AppColors.textSecondary(isDark), fontSize = 11.sp)
-                        }
-                        Icon(Icons.Outlined.ChevronRight, null, tint = AppColors.textSecondary(isDark), modifier = Modifier.size(16.dp))
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-            }
-
-
             SectionHeader(Icons.Rounded.Radar, stringResource(R.string.spatial_env_collection), isDark)
             Spacer(Modifier.height(8.dp))
             Card(
@@ -665,20 +632,6 @@ fun SpoofingScreen(
             onDelete = { loc -> viewModel.removeSavedLocation(loc) }
         )
     }
-
-    if (showAppCoordinateScreen) {
-        LocalizedDialog(
-            onDismissRequest = { showAppCoordinateScreen = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            AppCoordinateScreen(
-                viewModel = viewModel,
-                uiState = uiState,
-                onBack = { showAppCoordinateScreen = false }
-            )
-        }
-    }
-
 
     LaunchedEffect(showStartSpoofingDialog, uiState.startSpoofingProgress.phase) {
         if (showStartSpoofingDialog && uiState.startSpoofingProgress.phase == StartSpoofingPhase.SUCCESS) {
@@ -1296,7 +1249,7 @@ fun CoordinateInputCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SectionHeader(Icons.Outlined.PinDrop, stringResource(R.string.target_coordinates), isDark)
+                SectionHeader(Icons.Outlined.PinDrop, "${stringResource(R.string.target_coordinates)} · WGS84", isDark)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onCustomClick) {
                     Icon(Icons.Outlined.Edit, null, modifier = Modifier.size(16.dp))

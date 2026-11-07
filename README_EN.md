@@ -38,8 +38,8 @@ The project follows two rules:
 
 ### Coordinates
 
-- Standard Android `Location` output is always WGS-84.
-- GCJ-02 and BD-09 conversion is restricted to an explicitly enabled map-SDK boundary and never changes the global framework fix.
+- Google Maps selection, manual input, routes, the collected database, WiGLE/OpenCellID queries, and Android framework `Location` all use WGS-84 without a second conversion during injection.
+- A future GCJ-02 or BD-09 map or data source must convert only at its input or display boundary. The legacy per-app coordinate setting had no effect and has been removed; existing stored points are not shifted by guesswork.
 
 ### Trusted RF replay
 

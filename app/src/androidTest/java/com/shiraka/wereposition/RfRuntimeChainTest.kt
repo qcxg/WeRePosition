@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
 import android.location.LocationListener
+import android.location.GnssStatus
+import android.os.Handler
 import android.os.Looper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -68,10 +70,10 @@ class RfRuntimeChainTest {
         val dao = database.environmentDao()
         val repository = GlobalContext.get().get<LocationRepository>()
         val resolver = EnvironmentRfResolver(dao)
-        // Outside the GCJ-02 conversion region so the framework callback can be
-        // compared directly with the synthetic coordinate stored in Room.
-        val lat = 35.6762
-        val lng = 139.6503
+        // This point lies inside the legacy GCJ-02 conversion region. A second
+        // conversion would move the framework fix away from the WGS-84 input.
+        val lat = 24.966021
+        val lng = 121.377552
         val suffix = ByteArray(4).also(SecureRandom()::nextBytes)
             .joinToString(":") { "%02X".format(it) }
         val bssid = "02:7A:$suffix"
@@ -90,7 +92,7 @@ class RfRuntimeChainTest {
                     2412, 72, -63, "[WPA2-PSK-CCMP][ESS]", 1, 4)
             )
             dao.insertCellDevice(
-                CellDevice(cellKey = cellKey, type = "LTE", mcc = 440, mnc = 10,
+                CellDevice(cellKey = cellKey, type = "LTE", mcc = 466, mnc = 92,
                     tac = 42, ci = 424242, pci = 42)
             )
             dao.insertLocationCell(LocationCell(recordId, cellKey, -82, true))
@@ -101,8 +103,8 @@ class RfRuntimeChainTest {
             assertEquals(bssid, JSONObject(resolved.wifiJson)
                 .getJSONArray("nearbyWifi").getJSONObject(0).getString("bssid"))
             assertEquals(1, JSONArray(resolved.cellJson).length())
-            assertEquals(440, JSONArray(resolved.cellJson).getJSONObject(0).getInt("mcc"))
-            assertEquals(10, JSONArray(resolved.cellJson).getJSONObject(0).getInt("mnc"))
+            assertEquals(466, JSONArray(resolved.cellJson).getJSONObject(0).getInt("mcc"))
+            assertEquals(92, JSONArray(resolved.cellJson).getJSONObject(0).getInt("mnc"))
             assertFalse(resolver.resolve(lat + 0.002, lng).hasWifi)
 
             val preStartSeconds = InstrumentationRegistry.getArguments()
@@ -116,7 +118,7 @@ class RfRuntimeChainTest {
                 context = context, lat = lat, lng = lng, simMode = "STILL",
                 simBearing = 0f, startTime = System.currentTimeMillis(),
                 routePoints = emptyList(), isRouteMode = false,
-                appCoordinateSystems = emptyMap(), wifiJson = resolved.wifiJson,
+                wifiJson = resolved.wifiJson,
                 cellJson = resolved.cellJson, mockWifi = true, mockCell = true,
                 enableJitter = false
             )
@@ -172,6 +174,25 @@ class RfRuntimeChainTest {
                 )
             } finally {
                 locationManager.removeUpdates(listener)
+            }
+            val satelliteCount = AtomicInteger(-1)
+            val gnssCallback = object : GnssStatus.Callback() {
+                override fun onSatelliteStatusChanged(status: GnssStatus) {
+                    satelliteCount.set(status.satelliteCount)
+                }
+            }
+            assertTrue(
+                "GNSS status callback registration failed",
+                locationManager.registerGnssStatusCallback(gnssCallback, Handler(Looper.getMainLooper()))
+            )
+            try {
+                for (attempt in 0 until 8) {
+                    if (satelliteCount.get() >= 0) break
+                    delay(1_000)
+                }
+                assertEquals("System GNSS status did not reach an unscoped listener", 20, satelliteCount.get())
+            } finally {
+                locationManager.unregisterGnssStatusCallback(gnssCallback)
             }
             val inspectionSeconds = InstrumentationRegistry.getArguments()
                 .getString("inspectionSeconds")?.toLongOrNull()?.coerceIn(0L, 45L) ?: 0L

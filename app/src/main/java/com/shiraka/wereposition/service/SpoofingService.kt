@@ -116,7 +116,6 @@ class SpoofingService : Service() {
         val wifiConnectionMode: String,
         val altitude: Double,
         val satelliteCount: Int,
-        val appCoordinateSystemsJson: String
     )
 
     private data class RuntimePositionFingerprint(
@@ -438,7 +437,6 @@ class SpoofingService : Service() {
             wifiConnectionMode = SpooferProvider.wifiConnectionMode,
             altitude = SpooferProvider.altitude,
             satelliteCount = SpooferProvider.satelliteCount,
-            appCoordinateSystemsJson = SpooferProvider.appCoordinateSystemsJson
         )
     }
 
@@ -685,7 +683,6 @@ class SpoofingService : Service() {
             put("wifi_connection_mode", SpooferProvider.wifiConnectionMode)
             put("altitude", SpooferProvider.altitude)
             put("satellite_count", SpooferProvider.satelliteCount)
-            put("app_coordinate_systems", safeJsonObject(SpooferProvider.appCoordinateSystemsJson))
         }
         val jsonText = config.toString()
         val command = """

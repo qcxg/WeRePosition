@@ -61,19 +61,11 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
         settingsManager.mapType = value
     }
 
-    var showHomeCoordinateAlgorithm: Boolean
-        get() = settingsManager.showHomeCoordinateAlgorithm
-        set(value) { settingsManager.showHomeCoordinateAlgorithm = value }
-
     fun getIgnoredVersion(): String = settingsManager.ignoredVersion
 
     fun setIgnoredVersion(value: String) {
         settingsManager.ignoredVersion = value
     }
-
-    fun getAppCoordinateSystems(): Map<String, String> = settingsManager.getAppCoordinateSystems()
-
-    fun setAppCoordinateSystems(map: Map<String, String>) = settingsManager.setAppCoordinateSystems(map)
 
     var isSpoofingActive: Boolean
         get() = settingsManager.isSpoofingActive

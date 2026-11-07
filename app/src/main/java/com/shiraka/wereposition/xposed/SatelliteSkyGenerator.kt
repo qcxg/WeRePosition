@@ -13,8 +13,8 @@ internal object SatelliteSkyGenerator {
     ): SatelliteData {
         val updateIntervalSec = 4.0
         val steppedTimeSec = Math.floor((timeSec + satIndex) / updateIntervalSec) * updateIntervalSec - satIndex
-        val targetLat = config.optDouble("wgs84_lat", config.optDouble("lat", 0.0))
-        val targetLng = config.optDouble("wgs84_lng", config.optDouble("lng", 0.0))
+        val targetLat = config.optDouble("lat", 0.0)
+        val targetLng = config.optDouble("lng", 0.0)
 
         val type = when (satIndex % 10) {
             0, 1, 2, 3, 4 -> 1
@@ -90,8 +90,8 @@ internal object SatelliteSkyGenerator {
         enableJitter: Boolean,
         timeSec: Double
     ): SatelliteData {
-        val targetLat = config.optDouble("wgs84_lat", config.optDouble("lat", 0.0))
-        val targetLng = config.optDouble("wgs84_lng", config.optDouble("lng", 0.0))
+        val targetLat = config.optDouble("lat", 0.0)
+        val targetLng = config.optDouble("lng", 0.0)
         val type = when (satIndex % 10) {
             0, 1, 2, 3, 4 -> 1
             5, 6 -> 3

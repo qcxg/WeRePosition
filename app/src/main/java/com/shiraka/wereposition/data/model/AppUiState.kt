@@ -110,12 +110,10 @@ data class AppState(
     val isFetchingRoute: Boolean = false,
     /** 首页地图已确认的选点（点击地图后出现确认按钮，确认后填充坐标） */
     val mapConfirmedPoint: Pair<Double, Double>? = null,
-    val showHomeCoordinateAlgorithm: Boolean = true,
     val googleApiKey: String = "",
     val wigleToken: String = "",
     val opencellidToken: String = "",
     val appSha1: String = "",
-    val appCoordinateSystems: Map<String, String> = emptyMap(),
     val isContinuousScanning: Boolean = false,
     val environmentRecordCount: Int = 0,
     val hookedApps: List<AppInfoItem> = emptyList(),

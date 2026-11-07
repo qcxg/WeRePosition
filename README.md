@@ -36,10 +36,10 @@
 - 抖動半徑可在 `1m` 到 `80m` 之間無級調整，預設 `30m`。
 - 慢 / 中 / 快除了使用不同時間尺度，也分別約每 3 / 2 / 1 個 1 Hz framework fix 推進一次漂移樣本；每個 fix 的經緯度仍屬於同一完整樣本。任一 RF 開關啟用時，最終漂移會留在已解析的同一六角格內；全部 RF 關閉時才使用完整設定半徑。
 
-### 座標系適配
+### 座標系
 
-- Android framework 的標準 `Location` 固定輸出 `WGS-84`。
-- `GCJ-02`、`BD-09` 只用於明確啟用的地圖 SDK 邊界，不得回寫到全域 framework fix。
+- Google 地圖選點、手動輸入、路線、採集資料庫、WiGLE／OpenCellID 查詢與 Android framework `Location` 均以 `WGS-84` 表示，不再於注入時二次轉換。
+- 如日後整合使用 `GCJ-02` 或 `BD-09` 的地圖／資料源，只能在該外部來源的輸入或顯示邊界轉換。舊版逐 App 座標系設定沒有作用，已移除；既有儲存座標不會被猜測性搬移。
 
 ### Wi-Fi / 基站環境模擬
 
@@ -66,7 +66,6 @@
 - 地圖、開始前能力檢查與運行期 RF 解析共用 `EnvironmentCoveragePolicy` 的完全相同格 ID；`EnvironmentRfResolver`／DAO 只讀取目標所在格，密集采樣不會擴大範圍，跨格也不會借用資料。
 - Exact-cell RF 六角格的有效緯度為 `±85.05112878°`；更高緯度目前不保證 RF 隔離或漂移限格，請勿在極區座標啟用 RF 模擬。
 - 開始模擬時會先檢查目標六角格的本地 RF 快取；API 補採失敗時可重試，或直接以目前資料啟用。使用者已開啟但該格沒有可信 payload 的 RF 通道會保持啟用並進入 `block only`，不會退回真實 RF。
-- 首頁座標算法入口可在設定中暫時顯示或隱藏。
 - 本地搜尋與管理頁會優先用 Google Places Nearby Search 取附近 POI 名稱，再用 Geocoding / 系統 Geocoder 後備顯示「某地附近」。
 - Wi-Fi payload 對話框提供去重列表：短按展開詳情，長按切換要暴露為 `connectedWifi` 的 AP。
 - RF 診斷面板顯示 `ready`、`block only`、`off`、`loading` 等狀態，便於確認目前是模擬、阻斷還是關閉。
