@@ -3097,6 +3097,10 @@ class LocationHooker : XposedModule() {
                                 // start delivery without requiring the target app to register again.
                                 registeredGnssStatusCallbacks[System.identityHashCode(callbackObj)] =
                                     RegisteredGnssStatusCallback(callbackObj, classLoader)
+                                // Some client processes cannot register either lifecycle
+                                // observer. Keep their idle poll responsive while a satellite
+                                // callback is listening, then return to the long idle interval.
+                                requestConfigRefresh()
                                 val config = readConfig()
                                 if (shouldDeliverLocation(config)) {
                                     startGnssStatusInjector(callbackObj, classLoader)
@@ -3118,6 +3122,7 @@ class LocationHooker : XposedModule() {
                                 gnssStatusInjectors.remove(key)?.cancel()
                             }
                         }
+                        if (registeredGnssStatusCallbacks.isEmpty()) requestConfigRefresh()
                     }
                 })
             } catch (e: Throwable) {}
@@ -3198,7 +3203,7 @@ class LocationHooker : XposedModule() {
 
     /**
      * Constructs a minimal GnssStatus shell with the given satellite count.
-     * Tries GnssStatus.Builder (Android 7+) first, then falls back to the
+     * Tries the public GnssStatus.Builder first, then falls back to the
      * internal constructor via reflection.
      * Returns null if no construction path works on this Android version.
      */
@@ -3206,7 +3211,7 @@ class LocationHooker : XposedModule() {
         val gnssStatusClazz = XposedHelpers.findClassIfExists("android.location.GnssStatus", classLoader)
             ?: return null
 
-        // Path 1: GnssStatus.Builder (Android 7.0+ / API 24+)
+        // Path 1: GnssStatus.Builder (Android 11+ / API 30+)
         try {
             val builderClazz = XposedHelpers.findClassIfExists("android.location.GnssStatus\$Builder", classLoader)
             if (builderClazz != null) {
@@ -3214,8 +3219,8 @@ class LocationHooker : XposedModule() {
                 val sats = cachedSatellites ?: return null
                 for (i in 0 until minOf(satCount, sats.size)) {
                     val sat = sats[i]
-                    // addSatellite(constellationType, svid, cn0DbHz, elevation, azimuth,
-                    //              hasAlmanac, hasEphemeris, usedInFix)
+                    // Android 14+ Builder.addSatellite has 12 parameters. The old
+                    // eight-parameter lookup silently failed and built an empty sky.
                     try {
                         val addSat = builderClazz.getMethod(
                             "addSatellite",
@@ -3226,11 +3231,22 @@ class LocationHooker : XposedModule() {
                             Float::class.javaPrimitiveType,
                             Boolean::class.javaPrimitiveType,
                             Boolean::class.javaPrimitiveType,
-                            Boolean::class.javaPrimitiveType
+                            Boolean::class.javaPrimitiveType,
+                            Boolean::class.javaPrimitiveType,
+                            Float::class.javaPrimitiveType,
+                            Boolean::class.javaPrimitiveType,
+                            Float::class.javaPrimitiveType
                         )
                         addSat.invoke(builder, sat.type, sat.svid, sat.cn0,
-                            sat.elevation, sat.azimuth, true, true, sat.usedInFix)
-                    } catch (_: Throwable) {}
+                            sat.elevation, sat.azimuth, true, true, sat.usedInFix,
+                            false, 0f, false, 0f)
+                    } catch (e: Throwable) {
+                        XposedBridge.logEvery(
+                            "gnssBuilderAdd:$currentPackageName",
+                            "[GPS_Spoofer] GnssStatus.Builder.addSatellite failed pkg=$currentPackageName error=${e.javaClass.simpleName}"
+                        )
+                        return null
+                    }
                 }
                 val buildMethod = builderClazz.getMethod("build")
                 return buildMethod.invoke(builder)
@@ -3575,7 +3591,9 @@ class LocationHooker : XposedModule() {
             selectedCandidate.config.optBoolean("active", false)
         lastConfig = selectedCandidate.config
         configPollIntervalMs = when {
-            !selectedCandidate.config.optBoolean("active", false) -> inactiveConfigPollIntervalMs
+            !selectedCandidate.config.optBoolean("active", false) ->
+                if (registeredGnssStatusCallbacks.isNotEmpty()) 2_000L else inactiveConfigPollIntervalMs
+            registeredGnssStatusCallbacks.isNotEmpty() -> 2_000L
             !isSystemLocationSwitchEnabled() -> if (
                 configChangeCallbackInstalled || configContentObserverInstalled
             ) {
