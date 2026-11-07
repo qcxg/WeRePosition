@@ -1,6 +1,7 @@
 package com.shiraka.wereposition.xposed
 
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
 import org.json.JSONObject
@@ -12,7 +13,12 @@ internal class SystemGnssStatusHook(
     private val shouldDeliver: (JSONObject?) -> Boolean,
     private val currentSatellites: () -> Array<LocationHooker.SatelliteData>
 ) {
-    private val handler = Handler(Looper.getMainLooper())
+    // Construct only when a listener appears; system_server may install hooks before
+    // its main looper is ready.
+    private val handler by lazy {
+        val looper = Looper.getMainLooper() ?: HandlerThread("WRP-GnssStatus").also { it.start() }.looper
+        Handler(looper)
+    }
     private val injecting = ThreadLocal.withInitial { false }
     @Volatile private var provider: Any? = null
     @Volatile private var lastRealReportAtMs = 0L
