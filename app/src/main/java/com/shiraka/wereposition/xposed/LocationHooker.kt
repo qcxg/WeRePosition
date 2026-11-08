@@ -3078,6 +3078,23 @@ class LocationHooker : XposedModule() {
             hasValidTargetCoordinates(config) && isSystemLocationSwitchEnabled()
     }
 
+    private fun locationAllowedForCaller(config: JSONObject?, callerPackage: String?): Boolean {
+        if (config?.optBoolean("location_allowlist_enabled", false) != true) return true
+        if (callerPackage == null) return false
+        if (isInfrastructurePackage(callerPackage)) return true
+        val allowed = config.optJSONArray("location_allowlist") ?: return false
+        return (0 until allowed.length()).any { allowed.optString(it) == callerPackage }
+    }
+
+    private fun callerPackageFromIdentity(identity: Any?): String? = identity?.let {
+        runCatching { XposedHelpers.callMethod(it, "getPackageName") as? String }.getOrNull()
+    }
+
+    private fun callerPackageFromRegistration(registration: Any?): String? = registration?.let {
+        val identity = runCatching { XposedHelpers.callMethod(it, "getIdentity") }.getOrNull()
+        callerPackageFromIdentity(identity)
+    }
+
     private fun shouldBlockRealLocation(config: JSONObject?): Boolean {
         if (shouldSpoofLocation(config)) return true
         // The compact runtime property is published before the full snapshot can be
@@ -3800,6 +3817,12 @@ class LocationHooker : XposedModule() {
                     val mockCell = runCatching {
                         c.getInt(c.getColumnIndexOrThrow("mock_cell")) == 1
                     }.getOrDefault(false)
+                    val locationAllowlistEnabled = runCatching {
+                        c.getInt(c.getColumnIndexOrThrow("location_allowlist_enabled")) == 1
+                    }.getOrDefault(false)
+                    val locationAllowlist = runCatching {
+                        safeArrayPayload(c.getString(c.getColumnIndexOrThrow("location_allowlist")))
+                    }.getOrDefault(org.json.JSONArray())
                     val config = JSONObject().apply {
                         put("active", true)
                         put("lat", lat)
@@ -3819,6 +3842,8 @@ class LocationHooker : XposedModule() {
                         put("mock_cell", mockCell)
                         put("mock_wifi", mockWifi)
                         put("mock_bluetooth", false)
+                        put("location_allowlist_enabled", locationAllowlistEnabled)
+                        put("location_allowlist", locationAllowlist)
                         put("enable_jitter", enableJitter)
                         put("jitter_radius_meters", jitterRadius.coerceIn(1, 80))
                         put("jitter_speed", jitterSpeed)
@@ -3899,6 +3924,8 @@ class LocationHooker : XposedModule() {
             val satCountStr = getSystemProperty("gsm.wrp.sat_count", "10")
             val mockWifiStr = getSystemProperty("gsm.wrp.mock_wifi", "false")
             val mockCellStr = getSystemProperty("gsm.wrp.mock_cell", "false")
+            val locationAllowlistEnabled =
+                getSystemProperty("gsm.wrp.location_allowlist_enabled", "false") == "true"
             val enableJitterStr = getSystemProperty("gsm.wrp.enable_jitter", "true")
             val jitterRadiusStr = getSystemProperty("gsm.wrp.jitter_radius", DEFAULT_JITTER_RADIUS_METERS.toInt().toString())
             val jitterSpeed = getSystemProperty("gsm.wrp.jitter_speed", "MEDIUM")
@@ -3922,6 +3949,8 @@ class LocationHooker : XposedModule() {
                 put("mock_cell", mockCellStr == "true")
                 put("mock_wifi", mockWifiStr == "true")
                 put("mock_bluetooth", false)
+                put("location_allowlist_enabled", locationAllowlistEnabled)
+                put("location_allowlist", org.json.JSONArray())
                 put("enable_jitter", enableJitterStr == "true")
                 put("jitter_radius_meters", (jitterRadiusStr.toIntOrNull() ?: DEFAULT_JITTER_RADIUS_METERS.toInt()).coerceIn(1, 80))
                 put("jitter_speed", jitterSpeed)
@@ -4182,6 +4211,13 @@ class LocationHooker : XposedModule() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val config = readConfig()
                     if (!shouldBlockRealLocation(config)) return
+                    val identity = param.args.firstOrNull {
+                        it?.javaClass?.name == "android.location.util.identity.CallerIdentity"
+                    }
+                    if (!locationAllowedForCaller(config, callerPackageFromIdentity(identity))) {
+                        param.result = null
+                        return
+                    }
                     val location = param.result as? android.location.Location ?: return
                     val provider = param.thisObject?.let(::systemProviderName)
                     if (provider == null || !isSyntheticSystemProvider(provider) ||
@@ -4193,6 +4229,36 @@ class LocationHooker : XposedModule() {
                     ) param.result = null
                 }
             })
+
+            // Filtering at each registration keeps already-running listeners in sync when
+            // the allowlist changes. The provider cache still contains only fake fixes.
+            XposedHelpers.findClassIfExists(
+                "$managerClassName\$LocationRegistration", classLoader
+            )?.let { registrationClass ->
+                XposedBridge.hookAllMethods(registrationClass, "acceptLocationChange", object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val config = readConfig()
+                        if (!shouldBlockRealLocation(config)) return
+                        if (!locationAllowedForCaller(config, callerPackageFromRegistration(param.thisObject))) {
+                            param.result = null
+                        }
+                    }
+                })
+            }
+            XposedHelpers.findClassIfExists(
+                "$managerClassName\$GetCurrentLocationListenerRegistration", classLoader
+            )?.let { registrationClass ->
+                XposedBridge.hookAllMethods(registrationClass, "acceptLocationChange", object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val config = readConfig()
+                        if (!shouldBlockRealLocation(config)) return
+                        if (!locationAllowedForCaller(config, callerPackageFromRegistration(param.thisObject))) {
+                            // The framework's null path completes the one-shot callback.
+                            param.args[0] = null
+                        }
+                    }
+                })
+            }
 
             XposedBridge.log(
                 "[WeRePosition] system framework fix hook installed at " +

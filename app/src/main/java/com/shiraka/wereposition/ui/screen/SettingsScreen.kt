@@ -52,6 +52,7 @@ fun SettingsScreen(
     var syntheticEnabled by remember(uiState.syntheticRfEnabled) { mutableStateOf(uiState.syntheticRfEnabled) }
     var syntheticWifiCount by remember(uiState.syntheticWifiCount) { mutableFloatStateOf(uiState.syntheticWifiCount.toFloat()) }
     var syntheticCellCount by remember(uiState.syntheticCellCount) { mutableFloatStateOf(uiState.syntheticCellCount.toFloat()) }
+    var recentDisplayCount by remember(uiState.recentLocationDisplayCount) { mutableFloatStateOf(uiState.recentLocationDisplayCount.toFloat()) }
     val clipboardManager = LocalClipboardManager.current
     var showCleanupDialog by remember { mutableStateOf(false) }
     var isCleaningRuntime by remember { mutableStateOf(false) }
@@ -59,12 +60,19 @@ fun SettingsScreen(
     var googleApiTest by remember { mutableStateOf(ApiTestUiState()) }
     var wigleApiTest by remember { mutableStateOf(ApiTestUiState()) }
     var openCellIdApiTest by remember { mutableStateOf(ApiTestUiState()) }
+    var showAppAccessPage by remember { mutableStateOf(false) }
     val apiTestScope = rememberCoroutineScope()
     val savedLanguage = uiState.currentLanguage.ifBlank { viewModel.getSavedLanguage() }
     val selectedLanguageName = LANGUAGES.firstOrNull { it.code == savedLanguage }?.nativeName ?: savedLanguage.ifBlank { "System" }
 
     fun toggleSection(key: String) {
         expandedSection = if (expandedSection == key) null else key
+    }
+
+    if (showAppAccessPage) {
+        LaunchedEffect(Unit) { viewModel.loadInstalledApps() }
+        AppAccessScreen(viewModel = viewModel, uiState = uiState, onBack = { showAppAccessPage = false })
+        return
     }
 
     Column(
@@ -154,6 +162,34 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                 }
+            }
+
+            ExpandableSettingsRow(
+                title = stringResource(R.string.recent_locations),
+                summary = stringResource(R.string.recent_display_count, uiState.recentLocationDisplayCount),
+                expanded = expandedSection == "recent_count",
+                onClick = { toggleSection("recent_count") }
+            ) {
+                Text(stringResource(R.string.recent_display_count, recentDisplayCount.toInt()))
+                Slider(
+                    value = recentDisplayCount,
+                    onValueChange = { recentDisplayCount = it },
+                    onValueChangeFinished = { viewModel.setRecentLocationDisplayCount(recentDisplayCount.toInt()) },
+                    valueRange = 1f..20f,
+                    steps = 18
+                )
+            }
+
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable { showAppAccessPage = true },
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.app_access_title)) },
+                    supportingContent = { Text(stringResource(R.string.app_access_summary)) },
+                    trailingContent = { Icon(Icons.Rounded.ExpandMore, contentDescription = null) },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                )
             }
 
             ExpandableSettingsRow(

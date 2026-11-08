@@ -71,6 +71,9 @@ class MainViewModel(
             },
             savedLocations = settingsRepository.getSavedLocations(),
             recentLocations = settingsRepository.getRecentLocations(),
+            recentLocationDisplayCount = settingsRepository.recentLocationDisplayCount,
+            perAppLocationEnabled = settingsRepository.perAppLocationEnabled,
+            locationAllowedApps = settingsRepository.locationAllowedApps,
             savedRoutes = emptyList(), // Will be populated by Room Flow
             currentLanguage = normalizeLanguageTag(settingsRepository.getLanguage()),
             isLanguageSet = settingsRepository.isLanguageSet(),
@@ -135,6 +138,7 @@ class MainViewModel(
 
     init {
         initialize()
+        refreshRecentPlaceLabels()
         viewModelScope.launch {
             SpooferProvider.rfSnapshots.collect { snapshot ->
                 if (SpooferProvider.isActive) {
@@ -1347,9 +1351,66 @@ class MainViewModel(
         _uiState.update { it.copy(recentLocations = settingsRepository.getRecentLocations()) }
     }
 
+    fun setRecentLocationDisplayCount(count: Int) {
+        settingsRepository.recentLocationDisplayCount = count
+        _uiState.update { it.copy(recentLocationDisplayCount = settingsRepository.recentLocationDisplayCount) }
+        refreshRecentPlaceLabels()
+    }
+
+    fun loadInstalledApps() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val apps = lsposedManager.getInstalledApps(context)
+            _uiState.update { it.copy(installedApps = apps, hookedApps = lsposedManager.getHookedApps(context)) }
+        }
+    }
+
+    fun setPerAppLocationEnabled(enabled: Boolean) {
+        settingsRepository.perAppLocationEnabled = enabled
+        _uiState.update { it.copy(perAppLocationEnabled = enabled) }
+    }
+
+    fun setLocationAppAllowed(packageName: String, allowed: Boolean) {
+        val next = settingsRepository.locationAllowedApps.toMutableSet()
+        if (allowed) next.add(packageName) else next.remove(packageName)
+        settingsRepository.locationAllowedApps = next
+        _uiState.update { it.copy(locationAllowedApps = next) }
+    }
+
+    fun setAppRfScope(packageName: String, enabled: Boolean, onResult: (Boolean) -> Unit): Boolean {
+        return lsposedManager.setRfScope(packageName, enabled) { success ->
+            viewModelScope.launch(Dispatchers.Main) {
+                if (success) _uiState.update { it.copy(hookedApps = lsposedManager.getHookedApps(context)) }
+                onResult(success)
+            }
+        }
+    }
+
+    private fun refreshRecentPlaceLabels() {
+        val recent = settingsRepository.getRecentLocations().take(settingsRepository.recentLocationDisplayCount)
+        viewModelScope.launch(Dispatchers.IO) {
+            recent.forEach { location ->
+                val key = nearbyPlaceKey(location.lat, location.lng)
+                if (_uiState.value.recentPlaceLabels.containsKey(key)) return@forEach
+                val place = resolveNearbyPlaceName(location.lat, location.lng)
+                    .ifBlank { location.name.takeUnless { it.matches(Regex("[-+0-9.,\\s]+")) }.orEmpty() }
+                val country = runCatching {
+                    @Suppress("DEPRECATION")
+                    val address = Geocoder(context, Locale.TRADITIONAL_CHINESE)
+                        .getFromLocation(location.lat, location.lng, 1)?.firstOrNull()
+                    address?.countryName.orEmpty().ifBlank { address?.countryCode.orEmpty() }
+                }.getOrDefault("")
+                _uiState.update {
+                    it.copy(recentPlaceLabels = it.recentPlaceLabels +
+                        (key to com.shiraka.wereposition.data.model.RecentPlaceLabel(place, country)))
+                }
+            }
+        }
+    }
+
     private fun recordRecentLocation(location: SavedLocation) {
         settingsRepository.addRecentLocation(location)
         _uiState.update { it.copy(recentLocations = settingsRepository.getRecentLocations()) }
+        refreshRecentPlaceLabels()
     }
 
     fun addSavedRoute(name: String) {

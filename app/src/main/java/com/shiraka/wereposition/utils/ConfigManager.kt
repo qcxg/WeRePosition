@@ -57,6 +57,7 @@ class ConfigManager(private val rootManager: RootManager) {
         }
 
         val now = System.currentTimeMillis()
+        val accessSettings = SettingsManager(LocationApp.instance)
         val heartbeatUptimeMs = if (active) android.os.SystemClock.uptimeMillis() else 0L
         val runtimeFrameUptimeMs = android.os.SystemClock.uptimeMillis()
         val runtimeFrame = listOf(
@@ -79,6 +80,8 @@ class ConfigManager(private val rootManager: RootManager) {
             put("heartbeat_uptime_ms", heartbeatUptimeMs)
             put("boot_id", bootId)
             put("fail_closed", false)
+            put("location_allowlist_enabled", accessSettings.perAppLocationEnabled)
+            put("location_allowlist", JSONArray(accessSettings.locationAllowedApps.sorted()))
             put("sim_mode", simMode)
             put("sim_bearing", simBearing.toDouble())
             put("sim_speed", 0.0)
@@ -189,6 +192,7 @@ class ConfigManager(private val rootManager: RootManager) {
         val runtimePropertiesCommand = if (active) {
             """
             setprop gsm.wrp.active true
+            setprop gsm.wrp.location_allowlist_enabled ${accessSettings.perAppLocationEnabled}
             setprop gsm.wrp.lat $lat
             setprop gsm.wrp.lng $lng
             setprop gsm.wrp.alt $altitude

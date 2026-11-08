@@ -1,5 +1,8 @@
 package com.shiraka.wereposition.ui.screen
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 
@@ -52,7 +55,8 @@ private data class ManagedLocationGroup(
 fun ManageDataScreen(
     viewModel: MainViewModel,
     uiState: com.shiraka.wereposition.data.model.AppState,
-    isDark: Boolean
+    isDark: Boolean,
+    onOpenScanner: () -> Unit
 ) {
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
@@ -60,6 +64,20 @@ fun ManageDataScreen(
     var mapController by remember { mutableStateOf<AppMapController?>(null) }
     
     var editingItem by remember { mutableStateOf<CompleteLocation?>(null) }
+    var showSamplePreview by remember { mutableStateOf(true) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let { viewModel.exportEnvironmentData(it) } }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            viewModel.importEnvironmentData(it) {
+                Toast.makeText(context, R.string.import_data, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val dataList = uiState.manageDataList
     val coverageLocations by viewModel.coverageLocations.collectAsState()
@@ -142,46 +160,88 @@ fun ManageDataScreen(
             )
         }
     ) { paddingValues ->
-        if (uiState.manageDataIsLoading) {
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else if (dataList.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.no_data_collected), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                // Top Map
-                Box(modifier = Modifier.fillMaxWidth().weight(0.4f)) {
-                    AppMapView(
-                        modifier = Modifier.fillMaxSize(),
-                        onMapReady = { controller ->
-                            mapController = controller
-                            controller.disableUiControls()
-                            controller.setOnCameraChangeListener { _, _ ->
-                                MapCoverageHelper.drawCoverage(
-                                    controller,
-                                    latestCoverageLocations.value
-                                )
-                            }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item(key = "collection-actions") {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(stringResource(R.string.spatial_env_collection), style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            if (uiState.isContinuousScanning)
+                                stringResource(R.string.scanning_reference_points, uiState.environmentRecordCount)
+                            else stringResource(R.string.view_heatmap_start_scan),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(onClick = onOpenScanner, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Rounded.Map, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.env_map_scan))
                         }
-                    )
+                        HorizontalDivider()
+                        Text(stringResource(R.string.env_data_sharing_desc), style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                                modifier = Modifier.weight(1f)
+                            ) { Text(stringResource(R.string.import_data)) }
+                            OutlinedButton(
+                                onClick = { exportLauncher.launch("environment_data.json") },
+                                modifier = Modifier.weight(1f)
+                            ) { Text(stringResource(R.string.export_data)) }
+                        }
+                    }
                 }
-                
-                // Bottom List
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.6f),
-                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 120.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(groupedData, key = { it.ids.joinToString("-") }) { item ->
+            }
+
+            item(key = "preview-toggle") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.sample_preview_title), modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    Switch(checked = showSamplePreview, onCheckedChange = { showSamplePreview = it })
+                }
+            }
+            if (showSamplePreview) {
+                item(key = "preview-taipei") {
+                    SampleEnvironmentCard("台北 101", "25.03397, 121.56447", 4, 2)
+                }
+                item(key = "preview-tokyo") {
+                    SampleEnvironmentCard("東京車站", "35.68124, 139.76713", 6, 1)
+                }
+                item(key = "preview-note") {
+                    Text(stringResource(R.string.sample_preview_note), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            if (coverageLocations.isNotEmpty()) {
+                item(key = "coverage-map") {
+                    Box(Modifier.fillMaxWidth().height(220.dp).clip(MaterialTheme.shapes.large)) {
+                        AppMapView(
+                            modifier = Modifier.fillMaxSize(),
+                            onMapReady = { controller ->
+                                mapController = controller
+                                controller.disableUiControls()
+                                controller.setOnCameraChangeListener { _, _ ->
+                                    MapCoverageHelper.drawCoverage(controller, latestCoverageLocations.value)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            item(key = "records-heading") {
+                Text(stringResource(R.string.title_manage_data), style = MaterialTheme.typography.titleMedium)
+            }
+            if (uiState.manageDataIsLoading) {
+                item { Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+            } else if (groupedData.isEmpty()) {
+                item { Text(stringResource(R.string.no_data_collected), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else {
+                items(groupedData, key = { "record-${it.ids.joinToString("-")}" }) { item ->
                         val isSelected = item.ids.all { selectedIds.contains(it) }
                         DataListItem(
                             group = item,
@@ -210,9 +270,9 @@ fun ManageDataScreen(
                                 editingItem = item.first
                             }
                         )
-                    }
                 }
             }
+
         }
     }
 
@@ -289,6 +349,20 @@ fun ManageDataScreen(
     }
 }
 
+@Composable
+private fun SampleEnvironmentCard(name: String, coordinates: String, wifiCount: Int, cellCount: Int) {
+    ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Text(coordinates, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Wi-Fi $wifiCount", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.sample_cell_count, cellCount), style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DataListItem(
@@ -340,9 +414,11 @@ private fun DataListItem(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Lat: ${String.format("%.5f", group.lat)}, Lng: ${String.format("%.5f", group.lng)}",
+                    text = String.format(Locale.US, "%.5f, %.5f", group.lat, group.lng),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Column(
@@ -441,7 +517,8 @@ private fun groupManagedLocations(
 
 private fun sourceText(count: Int, sources: List<String>): String {
     if (count <= 0) return "0"
-    return if (sources.isEmpty()) "$count" else "$count · ${sources.joinToString("/")}"
+    val labels = sources.map { it.trim().trimStart('/') }.filter { it.isNotBlank() }
+    return if (labels.isEmpty()) "$count" else "$count · ${labels.joinToString(" · ")}"
 }
 
 private fun placeKey(lat: Double, lng: Double): String {

@@ -116,6 +116,8 @@ class SpoofingService : Service() {
         val wifiConnectionMode: String,
         val altitude: Double,
         val satelliteCount: Int,
+        val locationAllowlistEnabled: Boolean,
+        val locationAllowlist: Set<String>,
     )
 
     private data class RuntimePositionFingerprint(
@@ -440,6 +442,8 @@ class SpoofingService : Service() {
             wifiConnectionMode = SpooferProvider.wifiConnectionMode,
             altitude = SpooferProvider.altitude,
             satelliteCount = SpooferProvider.satelliteCount,
+            locationAllowlistEnabled = settingsManager.perAppLocationEnabled,
+            locationAllowlist = settingsManager.locationAllowedApps,
         )
     }
 
@@ -668,6 +672,8 @@ class SpoofingService : Service() {
             put("heartbeat_uptime_ms", heartbeatUptimeMs)
             put("boot_id", bootId)
             put("fail_closed", false)
+            put("location_allowlist_enabled", settingsManager.perAppLocationEnabled)
+            put("location_allowlist", JSONArray(settingsManager.locationAllowedApps.sorted()))
             put("sim_mode", SpooferProvider.simMode)
             put("sim_bearing", loc.bearing.toDouble())
             put("sim_speed", loc.speed.toDouble())
@@ -735,6 +741,7 @@ class SpoofingService : Service() {
             chcon u:object_r:system_data_file:s0 /data/system/wereposition_config.json 2>/dev/null || true
 
             setprop gsm.wrp.active true
+            setprop gsm.wrp.location_allowlist_enabled ${settingsManager.perAppLocationEnabled}
             setprop gsm.wrp.lat ${loc.lat}
             setprop gsm.wrp.lng ${loc.lng}
             setprop gsm.wrp.bearing ${loc.bearing}

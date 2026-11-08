@@ -138,6 +138,18 @@ class SettingsManager(context: Context) {
         return getLocationList("recent_locations")
     }
 
+    var recentLocationDisplayCount: Int
+        get() = prefs.getInt("recent_location_display_count", 7).coerceIn(1, 20)
+        set(value) = prefs.edit().putInt("recent_location_display_count", value.coerceIn(1, 20)).apply()
+
+    var perAppLocationEnabled: Boolean
+        get() = prefs.getBoolean("per_app_location_enabled", false)
+        set(value) = prefs.edit().putBoolean("per_app_location_enabled", value).apply()
+
+    var locationAllowedApps: Set<String>
+        get() = prefs.getStringSet("location_allowed_apps", emptySet())?.toSet().orEmpty()
+        set(value) = prefs.edit().putStringSet("location_allowed_apps", value.toSet()).apply()
+
     private fun getLocationList(key: String): List<SavedLocation> {
         val jsonString = prefs.getString(key, "[]") ?: "[]"
         val list = mutableListOf<SavedLocation>()
@@ -164,7 +176,7 @@ class SettingsManager(context: Context) {
             .filterNot { it.lat == location.lat && it.lng == location.lng }
             .toMutableList()
         list.add(0, location)
-        saveLocationList("recent_locations", list.take(7))
+        saveLocationList("recent_locations", list.take(50))
     }
 
     fun removeSavedLocation(location: SavedLocation) {

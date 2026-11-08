@@ -46,6 +46,13 @@
     <string name="recent_locations">最近位置</string>
     <string name="settings">設定</string>
     <string name="nav_joystick">搖桿</string>
+    <string name="sample_preview_title">範例資料預覽</string>
+    <string name="sample_preview_note">這兩筆虛構範例僅供預覽，不會儲存或用於模擬。</string>
+    <string name="sample_cell_count">基站 %d</string>
+    <string name="recent_location_near">%1$s（%2$s）附近</string>
+    <string name="nearby_place_unknown">附近地點</string>
+    <string name="unknown_country">未知國家</string>
+    <string name="recent_display_count">最近位置顯示：%d 筆</string>
     <string name="nav_joystick_placeholder">搖桿配置將在後續版本加入。</string>
     <string name="synthetic_rf_title">合成 Wi-Fi 與基站</string>
     <string name="synthetic_rf_on">定點模擬時啟用</string>
@@ -208,4 +215,14 @@
     <string name="custom_wigle_token_hint">貼上 WiGLE 帳戶中的「Encoded for use」</string>
     <string name="custom_opencellid_token">OpenCellID API 密鑰</string>
     <string name="custom_opencellid_token_hint">輸入您的 OpenCellID 密鑰...</string>
+    <string name="app_access_title">應用存取控制</string>
+    <string name="app_access_summary">逐應用控制位置可見性與 Wi-Fi／基站 Hook 範圍</string>
+    <string name="app_access_location_mode">僅向選定應用提供位置</string>
+    <string name="app_access_location_desc">模擬期間，選定應用讀取模擬位置，其他應用從系統定位介面讀取空值。關閉後所有應用均可讀取。</string>
+    <string name="app_access_rf_desc">Wi-Fi 與基站注入另用 LSPosed 作用域。更改作用域後請重新啟動目標應用。</string>
+    <string name="app_access_search">搜尋應用</string>
+    <string name="app_access_system_apps">顯示系統應用</string>
+    <string name="app_access_location">位置</string>
+    <string name="app_access_rf">Wi-Fi／基站</string>
+    <string name="app_access_scope_failed">無法更新 LSPosed 作用域</string>
 </resources>

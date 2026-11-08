@@ -73,6 +73,8 @@ enum class AppMapType {
     MAP_3D
 }
 
+data class RecentPlaceLabel(val place: String, val country: String)
+
 data class AppState(
     val mapType: AppMapType = AppMapType.NORMAL,
     val isInitializing: Boolean = true,
@@ -90,6 +92,11 @@ data class AppState(
     val wifiApCount: Int = 0,
     val savedLocations: List<SavedLocation> = emptyList(),
     val recentLocations: List<SavedLocation> = emptyList(),
+    val recentLocationDisplayCount: Int = 7,
+    val recentPlaceLabels: Map<String, RecentPlaceLabel> = emptyMap(),
+    val perAppLocationEnabled: Boolean = false,
+    val locationAllowedApps: Set<String> = emptySet(),
+    val installedApps: List<AppInfoItem> = emptyList(),
     val searchKeyword: String = "",
     val searchMode: SearchMode = SearchMode.NETWORK,
     val searchResults: List<SavedLocation> = emptyList(),

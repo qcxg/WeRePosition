@@ -11,6 +11,8 @@ import android.os.Process
 import com.shiraka.wereposition.LocationApp
 import com.shiraka.wereposition.utils.EnvironmentCoveragePolicy
 import com.shiraka.wereposition.utils.EnvironmentRfResolver
+import com.shiraka.wereposition.utils.SettingsManager
+import org.json.JSONArray
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -244,6 +246,7 @@ class SpooferProvider : ContentProvider() {
         val outputLatitude = position.latitude
         val outputLongitude = position.longitude
         val rfSnapshot = rfSnapshotFor(outputLatitude, outputLongitude)
+        val accessSettings = SettingsManager(requireNotNull(context))
         val cursor = MatrixCursor(
             arrayOf(
                 "active", "lat", "lng", "wifi_json", "cell_json", "bluetooth_json",
@@ -253,7 +256,8 @@ class SpooferProvider : ContentProvider() {
                 "signal_jitter_enabled", "signal_jitter_level", "wifi_connection_mode",
                 "mock_wifi", "mock_cell", "mock_bluetooth",
                 "heartbeat_at", "heartbeat_uptime_ms", "config_updated_at",
-                "config_generation", "runtime_lifecycle_token", "boot_id"
+                "config_generation", "runtime_lifecycle_token", "boot_id",
+                "location_allowlist_enabled", "location_allowlist"
             )
         )
         cursor.addRow(
@@ -286,7 +290,9 @@ class SpooferProvider : ContentProvider() {
                 runtimeHeartbeatAt,
                 runtimeConfigGeneration,
                 runtimeLifecycleToken,
-                runtimeBootId
+                runtimeBootId,
+                if (accessSettings.perAppLocationEnabled) 1 else 0,
+                JSONArray(accessSettings.locationAllowedApps.sorted()).toString()
             )
         )
         return cursor

@@ -45,6 +45,13 @@
     <string name="recent_locations">最近位置</string>
     <string name="settings">设置</string>
     <string name="nav_joystick">摇杆</string>
+    <string name="sample_preview_title">示例数据预览</string>
+    <string name="sample_preview_note">这两条虚构示例仅用于预览，不会存储或参与模拟。</string>
+    <string name="sample_cell_count">基站 %d</string>
+    <string name="recent_location_near">%1$s（%2$s）附近</string>
+    <string name="nearby_place_unknown">附近地点</string>
+    <string name="unknown_country">未知国家</string>
+    <string name="recent_display_count">最近位置显示：%d 条</string>
     <string name="nav_joystick_placeholder">摇杆配置将在后续版本加入。</string>
     <string name="synthetic_rf_title">合成 Wi-Fi 与基站</string>
     <string name="synthetic_rf_on">定点模拟时启用</string>
@@ -209,4 +216,14 @@
 
     <string name="custom_opencellid_token">OpenCellID API 密钥</string>
     <string name="custom_opencellid_token_hint">输入您的 OpenCellID 密钥...</string>
+    <string name="app_access_title">应用访问控制</string>
+    <string name="app_access_summary">逐应用控制位置可见性及 Wi-Fi／基站 Hook 范围</string>
+    <string name="app_access_location_mode">仅向选定应用提供位置</string>
+    <string name="app_access_location_desc">模拟期间，选定应用读取模拟位置，其他应用从系统定位接口读取空值。关闭后所有应用均可读取。</string>
+    <string name="app_access_rf_desc">Wi-Fi 与基站注入单独使用 LSPosed 作用域。更改作用域后请重启目标应用。</string>
+    <string name="app_access_search">搜索应用</string>
+    <string name="app_access_system_apps">显示系统应用</string>
+    <string name="app_access_location">位置</string>
+    <string name="app_access_rf">Wi-Fi／基站</string>
+    <string name="app_access_scope_failed">无法更新 LSPosed 作用域</string>
 </resources>

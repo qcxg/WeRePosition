@@ -10,6 +10,15 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
     fun getSavedLocations(): List<SavedLocation> = settingsManager.getSavedLocations()
 
     fun getRecentLocations(): List<SavedLocation> = settingsManager.getRecentLocations()
+    var recentLocationDisplayCount: Int
+        get() = settingsManager.recentLocationDisplayCount
+        set(value) { settingsManager.recentLocationDisplayCount = value }
+    var perAppLocationEnabled: Boolean
+        get() = settingsManager.perAppLocationEnabled
+        set(value) { settingsManager.perAppLocationEnabled = value }
+    var locationAllowedApps: Set<String>
+        get() = settingsManager.locationAllowedApps
+        set(value) { settingsManager.locationAllowedApps = value }
 
     fun addSavedLocation(location: SavedLocation) = settingsManager.addSavedLocation(location)
 

@@ -265,8 +265,7 @@ fun MainScreen(
                     when (selectedTab) {
                         MainTab.FIXED -> SpoofingScreen(
                             viewModel = viewModel, uiState = uiState, isDark = isDark,
-                            onExpandMap = { isFullScreenMap = true },
-                            onExpandScannerMap = { isScannerMap = true }
+                            onExpandMap = { isFullScreenMap = true }
                         )
                         MainTab.JOYSTICK -> JoystickSettingsScreen(
                             onPlanRoute = {
@@ -275,7 +274,8 @@ fun MainScreen(
                             }
                         )
                         MainTab.DATA -> com.shiraka.wereposition.ui.screen.ManageDataScreen(
-                            viewModel = viewModel, uiState = uiState, isDark = isDark
+                            viewModel = viewModel, uiState = uiState, isDark = isDark,
+                            onOpenScanner = { isScannerMap = true }
                         )
                         MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
                             viewModel = viewModel, uiState = uiState

@@ -30,8 +30,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.*
@@ -80,6 +78,9 @@ import com.shiraka.wereposition.ui.components.AppMapView
 import com.shiraka.wereposition.ui.components.AppMapController
 import com.shiraka.wereposition.data.model.AppMapType
 import com.shiraka.wereposition.ui.components.MapTypeDialog
+import com.shiraka.wereposition.ui.components.GlassOverlaySurface
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.material.icons.rounded.Layers
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -106,8 +107,7 @@ fun SpoofingScreen(
     viewModel: MainViewModel,
     uiState: AppState,
     isDark: Boolean,
-    onExpandMap: () -> Unit,
-    onExpandScannerMap: () -> Unit
+    onExpandMap: () -> Unit
 ) {
     val scrollState = rememberScrollState()
     var showSavedLocations by remember { mutableStateOf(false) }
@@ -119,23 +119,6 @@ fun SpoofingScreen(
     
     val context = LocalContext.current
     val locationUpdatedMessage = stringResource(R.string.location_updated)
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        uri?.let { 
-            viewModel.exportEnvironmentData(it)
-            Toast.makeText(context, "导出成功", Toast.LENGTH_SHORT).show()
-        }
-    }
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let { 
-            viewModel.importEnvironmentData(it) {
-                Toast.makeText(context, "导入合并成功", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
     
     var showCustomCoordDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -146,7 +129,7 @@ fun SpoofingScreen(
     val density = LocalDensity.current
     var mapHeight by remember { mutableStateOf(280.dp) }
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val searchPopupOffsetY = with(density) { (statusBarHeight + 66.dp).roundToPx() }
+    val searchHazeState = rememberHazeState()
 
     fun closeSearchPanel() {
         showSearchPanel = false
@@ -219,12 +202,16 @@ fun SpoofingScreen(
         com.shiraka.wereposition.utils.MapCoverageHelper.drawCoverage(map, coverageLocations)
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .hazeSource(searchHazeState)
     ) {
         Box(modifier = Modifier.fillMaxWidth().height(mapHeight + statusBarHeight)) {
+            val mapHazeState = rememberHazeState()
+            Box(Modifier.fillMaxSize().hazeSource(mapHazeState)) {
             AppMapView(modifier = Modifier.fillMaxSize()) { map ->
                 smallMapRef = map
                 map.disableUiControls()
@@ -273,56 +260,50 @@ fun SpoofingScreen(
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 modifier = Modifier.align(Alignment.Center).size(32.dp).padding(bottom = 16.dp) // 准星底部对齐中心
             )
+            }
 
             Row(
-                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
-                    .padding(top = 8.dp, end = 8.dp),
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 8.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                FilledTonalIconButton(
-                    onClick = { openSearchPanel(SearchMode.NETWORK) },
-                    modifier = Modifier.size(42.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
-                    )
+                GlassOverlaySurface(
+                    hazeState = mapHazeState,
+                    modifier = Modifier.size(42.dp).clickable { openSearchPanel(SearchMode.NETWORK) },
+                    shape = CircleShape
                 ) {
                     Icon(Icons.Rounded.Search, stringResource(R.string.network_search),
                         tint = if (showSearchPanel && uiState.searchMode == SearchMode.NETWORK)
                             MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp))
+                        modifier = Modifier.align(Alignment.Center).size(20.dp))
                 }
-                FilledTonalIconButton(
-                    onClick = { openSearchPanel(SearchMode.LOCAL) },
-                    modifier = Modifier.size(42.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
-                    )
+                GlassOverlaySurface(
+                    hazeState = mapHazeState,
+                    modifier = Modifier.size(42.dp).clickable { openSearchPanel(SearchMode.LOCAL) },
+                    shape = CircleShape
                 ) {
                     Icon(Icons.Rounded.Storage, stringResource(R.string.local_collection),
                         tint = if (showSearchPanel && uiState.searchMode == SearchMode.LOCAL)
                             MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp))
+                        modifier = Modifier.align(Alignment.Center).size(20.dp))
                 }
-                FilledTonalIconButton(
-                    onClick = { showSavedLocations = true },
-                    modifier = Modifier.size(42.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
-                    )
+                GlassOverlaySurface(
+                    hazeState = mapHazeState,
+                    modifier = Modifier.size(42.dp).clickable { showSavedLocations = true },
+                    shape = CircleShape
                 ) {
                     Icon(Icons.Rounded.Bookmarks, stringResource(R.string.collection_list),
-                        tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.align(Alignment.Center).size(20.dp))
                 }
             }
 
-            Surface(
-                onClick = onExpandMap,
-                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 60.dp, end = 8.dp),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
-                tonalElevation = 6.dp
+            GlassOverlaySurface(
+                hazeState = mapHazeState,
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding()
+                    .padding(top = 8.dp, start = 8.dp).clickable(onClick = onExpandMap),
+                shape = CircleShape
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(modifier = Modifier.padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.width(10.dp))
                     Icon(Icons.Rounded.Fullscreen, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
@@ -331,35 +312,35 @@ fun SpoofingScreen(
                 }
             }
             
-            FilledTonalIconButton(
-                onClick = { showMapTypeDialog = true },
+            GlassOverlaySurface(
+                hazeState = mapHazeState,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 8.dp, bottom = 60.dp)
-                    .size(44.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f))
+                    .size(44.dp).clickable { showMapTypeDialog = true },
+                shape = CircleShape
             ) {
                 Icon(
                     Icons.Rounded.Layers,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.align(Alignment.Center).size(20.dp)
                 )
             }
 
-            FilledTonalIconButton(
-                onClick = { viewModel.fetchCurrentLocation(context) { _, _ -> } },
+            GlassOverlaySurface(
+                hazeState = mapHazeState,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 8.dp, bottom = 12.dp)
-                    .size(44.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f))
+                    .size(44.dp).clickable { viewModel.fetchCurrentLocation(context) { _, _ -> } },
+                shape = CircleShape
             ) {
                 Icon(
                     Icons.Rounded.MyLocation, 
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.align(Alignment.Center).size(20.dp)
                 )
             }
 
@@ -426,7 +407,8 @@ fun SpoofingScreen(
                 SectionHeader(Icons.Outlined.History, stringResource(R.string.recent_locations), isDark)
                 Spacer(Modifier.height(8.dp))
                 SavedLocationsCard(
-                    savedLocations = uiState.recentLocations,
+                    savedLocations = uiState.recentLocations.take(uiState.recentLocationDisplayCount),
+                    placeLabels = uiState.recentPlaceLabels,
                     onSelect = { loc ->
                         viewModel.loadSavedLocation(loc)
                     },
@@ -435,99 +417,22 @@ fun SpoofingScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            SectionHeader(Icons.Rounded.Radar, stringResource(R.string.spatial_env_collection), isDark)
-            Spacer(Modifier.height(8.dp))
-            Card(
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                elevation = CardDefaults.cardElevation(0.dp),
-                modifier = Modifier.clickable { 
-                    onExpandScannerMap()
-                }
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.Map, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.env_map_scan), color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        val statusText = if (uiState.isContinuousScanning) stringResource(R.string.scanning_reference_points, uiState.environmentRecordCount) else stringResource(R.string.view_heatmap_start_scan)
-                        Text(statusText, color = AppColors.textSecondary(isDark), fontSize = 11.sp)
-                    }
-                    if (uiState.isContinuousScanning) {
-                        Box(
-                            modifier = Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.secondary)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Icon(Icons.Outlined.ChevronRight, null, tint = AppColors.textSecondary(isDark), modifier = Modifier.size(16.dp))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Card(
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                elevation = CardDefaults.cardElevation(0.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.ImportExport, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.env_data_sharing), color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        Text(stringResource(R.string.env_data_sharing_desc), color = AppColors.textSecondary(isDark), fontSize = 11.sp)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }) {
-                            Text(stringResource(R.string.import_data), color = MaterialTheme.colorScheme.primary)
-                        }
-                        TextButton(onClick = { exportLauncher.launch("environment_data.json") }) {
-                            Text(stringResource(R.string.export_data), color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                }
-            }
-            
             Spacer(Modifier.height(120.dp))
         }
     }
 
     if (showSearchPanel) {
-        Popup(
-            alignment = Alignment.TopCenter,
-            offset = IntOffset(0, searchPopupOffsetY),
-            onDismissRequest = { closeSearchPanel() },
-            properties = PopupProperties(focusable = true, clippingEnabled = false)
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.08f)).clickable { closeSearchPanel() })
+        Column(
+            modifier = Modifier.align(Alignment.TopCenter)
+                .padding(top = statusBarHeight + 66.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+            GlassOverlaySurface(
+                hazeState = searchHazeState,
+                modifier = Modifier.fillMaxWidth().clickable { },
+                shape = MaterialTheme.shapes.extraLarge
             ) {
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                ) {
                     if (uiState.searchMode == SearchMode.NETWORK) {
                         HomeSearchBar(
                             query = searchQuery,
@@ -557,16 +462,15 @@ fun SpoofingScreen(
                             }
                         )
                     }
-                }
+            }
 
-                if (uiState.searchMode == SearchMode.NETWORK) {
-                    AnimatedVisibility(visible = showSearchResults && searchResults.isNotEmpty()) {
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(10.dp),
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-                        ) {
+            if (uiState.searchMode == SearchMode.NETWORK) {
+                AnimatedVisibility(visible = showSearchResults && searchResults.isNotEmpty()) {
+                    GlassOverlaySurface(
+                        hazeState = searchHazeState,
+                        modifier = Modifier.fillMaxWidth().clickable { },
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
                             LocalSearchResultList(
                                 searchResults = searchResults,
                                 onSelect = { poi ->
@@ -579,11 +483,26 @@ fun SpoofingScreen(
                                     closeSearchPanel()
                                 }
                             )
-                        }
                     }
                 }
             }
         }
+    }
+    if (showSavedLocations) {
+        BackHandler { showSavedLocations = false }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.08f)).clickable { showSavedLocations = false })
+        SavedLocationsPanel(
+            savedLocations = uiState.savedLocations,
+            hazeState = searchHazeState,
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 20.dp),
+            onDismiss = { showSavedLocations = false },
+            onSelect = { loc ->
+                viewModel.loadSavedLocation(loc)
+                showSavedLocations = false
+            },
+            onDelete = { loc -> viewModel.removeSavedLocation(loc) }
+        )
+    }
     }
 
     if (showSaveDialog) {
@@ -594,18 +513,6 @@ fun SpoofingScreen(
                 showSaveDialog = false
             },
             onDismiss = { showSaveDialog = false }
-        )
-    }
-
-    if (showSavedLocations) {
-        SavedLocationsDialog(
-            savedLocations = uiState.savedLocations,
-            onDismiss = { showSavedLocations = false },
-            onSelect = { loc ->
-                viewModel.loadSavedLocation(loc)
-                showSavedLocations = false
-            },
-            onDelete = { loc -> viewModel.removeSavedLocation(loc) }
         )
     }
 
@@ -667,12 +574,6 @@ fun SpoofingScreen(
         var environmentDataTab by remember(showEnvironmentDialog) { mutableStateOf(EnvironmentDataTab.WIFI) }
         var expandedWifiIndex by remember(showEnvironmentDialog) { mutableStateOf<Int?>(null) }
         val environmentListState = rememberLazyListState()
-        val showRfDiagnostics by remember {
-            derivedStateOf {
-                environmentListState.firstVisibleItemIndex == 0 &&
-                    environmentListState.firstVisibleItemScrollOffset < 24
-            }
-        }
         LaunchedEffect(environmentDataTab) {
             environmentListState.scrollToItem(0)
             expandedWifiIndex = null
@@ -696,17 +597,6 @@ fun SpoofingScreen(
                         val connectedWifi = wifiSummary.connectedWifi
                         val nearbyArray = wifiSummary.nearbyWifi
                         val cellArray = try { org.json.JSONArray(uiState.collectedCellJson) } catch (e: Exception) { org.json.JSONArray() }
-
-                        AnimatedVisibility(visible = showRfDiagnostics) {
-                            Column {
-                                RfChainDiagnosticsPanel(
-                                    uiState = uiState,
-                                    wifiSummary = wifiSummary,
-                                    cellCount = cellArray.length()
-                                )
-                                Spacer(Modifier.height(12.dp))
-                            }
-                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -753,6 +643,16 @@ fun SpoofingScreen(
                             state = environmentListState,
                             modifier = Modifier.weight(1f)
                         ) {
+                            item(key = "rf-diagnostics") {
+                                Column {
+                                    RfChainDiagnosticsPanel(
+                                        uiState = uiState,
+                                        wifiSummary = wifiSummary,
+                                        cellCount = cellArray.length()
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                }
+                            }
                             when (environmentDataTab) {
                                 EnvironmentDataTab.WIFI -> {
                                     if (wifiItems.isEmpty()) {
@@ -1246,18 +1146,22 @@ fun CoordinateInputCard(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${stringResource(R.string.longitude)}: ${uiState.longitudeInput.ifEmpty { "0.0" }}",
+                        text = "${stringResource(R.string.longitude)}: ${displayCoordinate(uiState.longitudeInput)}",
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${stringResource(R.string.latitude)}: ${uiState.latitudeInput.ifEmpty { "0.0" }}",
+                        text = "${stringResource(R.string.latitude)}: ${displayCoordinate(uiState.latitudeInput)}",
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }
@@ -1273,6 +1177,10 @@ fun CoordinateInputCard(
         }
     }
 }
+
+private fun displayCoordinate(value: String): String = value.toDoubleOrNull()
+    ?.let { String.format(java.util.Locale.US, "%.5f", it) }
+    ?: value.ifEmpty { "0.00000" }
 
 @Composable
 fun coordinateFieldColors() = OutlinedTextFieldDefaults.colors(
@@ -1355,17 +1263,45 @@ fun SectionHeader(icon: ImageVector, title: String, isDark: Boolean) {
 // 已保存位置对话框
 
 @Composable
+fun SavedLocationsPanel(
+    savedLocations: List<SavedLocation>,
+    hazeState: dev.chrisbanes.haze.HazeState,
+    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit,
+    onSelect: (SavedLocation) -> Unit,
+    onDelete: (SavedLocation) -> Unit
+) {
+    GlassOverlaySurface(
+        hazeState = hazeState,
+        modifier = modifier.fillMaxWidth().clickable { },
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        SavedLocationsContent(savedLocations, onDismiss, onSelect, onDelete)
+    }
+}
+
+@Composable
 fun SavedLocationsDialog(
     savedLocations: List<SavedLocation>,
     onDismiss: () -> Unit,
     onSelect: (SavedLocation) -> Unit,
     onDelete: (SavedLocation) -> Unit
 ) {
-    LocalizedDialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
+    LocalizedDialog(onDismissRequest = onDismiss, blurBackground = true) {
+        Surface(shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)) {
+            SavedLocationsContent(savedLocations, onDismiss, onSelect, onDelete)
+        }
+    }
+}
+
+@Composable
+private fun SavedLocationsContent(
+    savedLocations: List<SavedLocation>,
+    onDismiss: () -> Unit,
+    onSelect: (SavedLocation) -> Unit,
+    onDelete: (SavedLocation) -> Unit
+) {
             Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                 Text(stringResource(R.string.saved_locations), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                 Spacer(Modifier.height(12.dp))
@@ -1383,7 +1319,7 @@ fun SavedLocationsDialog(
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(loc.name, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
-                                    Text("${loc.lat}, ${loc.lng}", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                                    Text(String.format(java.util.Locale.US, "%.5f, %.5f", loc.lat, loc.lng), fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                                 }
                                 IconButton(onClick = { onDelete(loc) }) {
                                     Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error)
@@ -1396,8 +1332,6 @@ fun SavedLocationsDialog(
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.close)) }
             }
-        }
-    }
 }
 
 // 首页搜索栏
@@ -1452,11 +1386,8 @@ fun HomeSearchBar(
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit
 ) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         androidx.compose.foundation.text.BasicTextField(
@@ -1471,10 +1402,7 @@ fun HomeSearchBar(
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
             modifier = Modifier
                 .weight(1f)
-                .height(48.dp)
-                .shadow(4.dp, RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(22.dp))
-                .padding(horizontal = 16.dp),
+                .height(48.dp),
             decorationBox = { innerTextField ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Search, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
@@ -1498,17 +1426,15 @@ fun HomeSearchBar(
                 }
             }
         )
-        Spacer(Modifier.width(10.dp))
-        FilledIconButton(
+        Spacer(Modifier.width(8.dp))
+        FilledTonalIconButton(
             onClick = onSearch,
-            modifier = Modifier.size(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
+            modifier = Modifier.size(44.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
-            Icon(Icons.Rounded.Search, stringResource(R.string.search), tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.Search, stringResource(R.string.search), tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
         }
     }
-}
 }
 
 // 首页已保存位置卡片（内嵌列表，非弹窗）
@@ -1516,6 +1442,7 @@ fun HomeSearchBar(
 @Composable
 fun SavedLocationsCard(
     savedLocations: List<SavedLocation>,
+    placeLabels: Map<String, com.shiraka.wereposition.data.model.RecentPlaceLabel>,
     onSelect: (SavedLocation) -> Unit,
     onDelete: (SavedLocation) -> Unit
 ) {
@@ -1535,8 +1462,23 @@ fun SavedLocationsCard(
                     Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(loc.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground)
-                        Text("${loc.lat}, ${loc.lng}", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                        val placeKey = String.format(java.util.Locale.US, "%.6f,%.6f", loc.lat, loc.lng)
+                        val label = placeLabels[placeKey]
+                        Text(
+                            stringResource(
+                                R.string.recent_location_near,
+                                label?.place?.ifBlank { stringResource(R.string.nearby_place_unknown) }
+                                    ?: stringResource(R.string.nearby_place_unknown),
+                                label?.country?.ifBlank { stringResource(R.string.unknown_country) }
+                                    ?: stringResource(R.string.unknown_country)
+                            ),
+                            fontWeight = FontWeight.Medium, fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        Text(String.format(java.util.Locale.US, "%.5f, %.5f", loc.lat, loc.lng),
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                     }
                     IconButton(onClick = { onDelete(loc) }, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
@@ -2175,7 +2117,7 @@ private fun StartSpoofingProgressContent(
 
         if (sources.isNotEmpty()) {
             Text(
-                text = "資料源：${sources.joinToString(" / ")}",
+                text = "資料源：${sources.filter { it.isNotBlank() }.joinToString(" · ")}",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.56f)
             )
