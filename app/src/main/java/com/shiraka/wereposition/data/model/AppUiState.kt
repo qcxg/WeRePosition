@@ -95,6 +95,7 @@ data class AppState(
     val recentLocationDisplayCount: Int = 7,
     val recentPlaceLabels: Map<String, RecentPlaceLabel> = emptyMap(),
     val perAppLocationEnabled: Boolean = false,
+    val pureModeEnabled: Boolean = false,
     val locationAllowedApps: Set<String> = emptySet(),
     val installedApps: List<AppInfoItem> = emptyList(),
     val searchKeyword: String = "",

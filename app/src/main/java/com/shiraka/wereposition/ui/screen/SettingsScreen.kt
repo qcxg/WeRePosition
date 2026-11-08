@@ -181,6 +181,32 @@ fun SettingsScreen(
             }
 
             ElevatedCard(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.pure_mode_title), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(if (uiState.isSpoofingActive || uiState.isSavingConfig)
+                                R.string.pure_mode_locked else R.string.pure_mode_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.pureModeEnabled,
+                        enabled = !uiState.isSpoofingActive && !uiState.isSavingConfig,
+                        onCheckedChange = viewModel::setPureModeEnabled
+                    )
+                }
+            }
+
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable { showAppAccessPage = true },
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {

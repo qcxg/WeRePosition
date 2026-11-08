@@ -73,6 +73,7 @@ class MainViewModel(
             recentLocations = settingsRepository.getRecentLocations(),
             recentLocationDisplayCount = settingsRepository.recentLocationDisplayCount,
             perAppLocationEnabled = settingsRepository.perAppLocationEnabled,
+            pureModeEnabled = settingsRepository.pureModeEnabled,
             locationAllowedApps = settingsRepository.locationAllowedApps,
             savedRoutes = emptyList(), // Will be populated by Room Flow
             currentLanguage = normalizeLanguageTag(settingsRepository.getLanguage()),
@@ -996,7 +997,10 @@ class MainViewModel(
         locationSyncJob = null
         capabilityEvaluationJob?.cancel()
         viewModelScope.launch {
-            locationRepository.stopSpoofing(context)
+            val stoppedSafely = locationRepository.stopSpoofing(context)
+            if (!stoppedSafely && settingsRepository.pureModeEnabled) {
+                android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_stop_failed, android.widget.Toast.LENGTH_LONG).show()
+            }
             _uiState.update {
                 it.copy(isSpoofingActive = false, isSavingConfig = false,
                     syntheticRfActive = false, syntheticWifiActive = false, syntheticCellActive = false)
@@ -1301,7 +1305,10 @@ class MainViewModel(
         locationSyncJob = null
         capabilityEvaluationJob?.cancel()
         viewModelScope.launch {
-            locationRepository.stopSpoofing(context)
+            val stoppedSafely = locationRepository.stopSpoofing(context)
+            if (!stoppedSafely && settingsRepository.pureModeEnabled) {
+                android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_stop_failed, android.widget.Toast.LENGTH_LONG).show()
+            }
             _uiState.update {
                 it.copy(
                     isSpoofingActive = false,
@@ -1367,6 +1374,12 @@ class MainViewModel(
     fun setPerAppLocationEnabled(enabled: Boolean) {
         settingsRepository.perAppLocationEnabled = enabled
         _uiState.update { it.copy(perAppLocationEnabled = enabled) }
+    }
+
+    fun setPureModeEnabled(enabled: Boolean) {
+        if (_uiState.value.isSpoofingActive || _uiState.value.isSavingConfig) return
+        settingsRepository.pureModeEnabled = enabled
+        _uiState.update { it.copy(pureModeEnabled = enabled) }
     }
 
     fun setLocationAppAllowed(packageName: String, allowed: Boolean) {

@@ -43,7 +43,14 @@ class RuntimeCleanupReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                val saved = ConfigManager(RootManager()).saveConfig(0.0, 0.0, false)
+                val rootManager = RootManager()
+                val pureMode = SettingsManager(context.applicationContext).pureModeEnabled
+                val locationDisabled = if (pureMode) {
+                    rootManager.setPureArmed(true)
+                    rootManager.setLocationMasterEnabled(false)
+                } else true
+                val saved = ConfigManager(rootManager).saveConfig(0.0, 0.0, false)
+                if (pureMode && locationDisabled && saved) rootManager.setPureArmed(false)
                 if (saved) {
                     Log.d("RuntimeCleanupReceiver", "runtime config marked inactive after $action")
                 } else {

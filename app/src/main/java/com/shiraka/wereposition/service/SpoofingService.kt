@@ -254,7 +254,7 @@ class SpoofingService : Service() {
                     // Starting while Android's location master switch is off is valid.
                     // Keep the requested lifecycle alive but publish no active runtime
                     // frame until the switch is enabled; the broadcast wakes this loop.
-                    lastReadyLifecycleToken = lifecycleToken
+                    if (!settingsManager.pureModeEnabled) lastReadyLifecycleToken = lifecycleToken
                     Log.i(
                         "SpoofingService",
                         "simulation armed with location master switch off; runtime writer paused"

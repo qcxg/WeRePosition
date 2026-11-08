@@ -31,6 +31,23 @@ class RootManager {
         executeCommand("id").contains("uid=0(root)")
     }
 
+    suspend fun setPureArmed(armed: Boolean): Boolean {
+        val value = armed.toString()
+        return executeCommand(
+            "setprop gsm.wrp.pure_armed $value && [ \"${'$'}(getprop gsm.wrp.pure_armed)\" = \"$value\" ]"
+        ) != "ERROR"
+    }
+
+    suspend fun isPureArmed(): Boolean =
+        executeCommand("getprop gsm.wrp.pure_armed").equals("true", ignoreCase = true)
+
+    suspend fun setLocationMasterEnabled(enabled: Boolean): Boolean {
+        val value = enabled.toString()
+        return executeCommand(
+            "cmd location set-location-enabled $value && [ \"${'$'}(cmd location is-location-enabled)\" = \"$value\" ]"
+        ) != "ERROR"
+    }
+
     suspend fun executeCommand(command: String): String = withContext(Dispatchers.IO) {
         var processToTerminate: Process? = null
         try {
@@ -265,7 +282,12 @@ class RootManager {
         val lastRootFailureLogAt = AtomicLong(0L)
     }
 
-    suspend fun cleanupRuntimeEnvironment(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun cleanupRuntimeEnvironment(restoreLocationEnabled: Boolean = true): Boolean = withContext(Dispatchers.IO) {
+        val restoreCommand = if (restoreLocationEnabled) {
+            "cmd location set-location-enabled true 2>/dev/null || true"
+        } else {
+            ":"
+        }
         val result = executeCommand(
             """
             sleep 2
@@ -276,7 +298,7 @@ class RootManager {
             cmd location providers send-extra-command gps force_psds_injection 2>/dev/null || true
             cmd location set-location-enabled false 2>/dev/null || true
             sleep 1
-            cmd location set-location-enabled true 2>/dev/null || true
+            $restoreCommand
             am force-stop com.google.android.apps.maps 2>/dev/null || true
             """.trimIndent()
         )

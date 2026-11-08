@@ -60,6 +60,13 @@ class LocationRepository(
         if (settingsManager.moduleRestartRequired) {
             throw IllegalStateException("模組已更新，請在方便解鎖時重啟設備後再啟用模擬")
         }
+        val pureMode = settingsManager.pureModeEnabled
+        if (pureMode) {
+            // Arm the system_server guard before changing the location master switch.
+            if (!rootManager.setPureArmed(true) || !rootManager.setLocationMasterEnabled(false)) {
+                throw IllegalStateException("Pure 模式無法安全準備系統定位")
+            }
+        }
         val alt = settingsManager.altitude.toDoubleOrNull() ?: 0.0
         val satCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
         val generation = lifecycleMutex.withLock {
@@ -111,6 +118,11 @@ class LocationRepository(
             throw error
         }
 
+        if (pureMode && !rootManager.setLocationMasterEnabled(true)) {
+            rollbackFailedStart(context, generation)
+            throw IllegalStateException("Pure 模式無法開啟系統定位")
+        }
+
         // SpoofingService is the sole active writer. Waiting for its first committed
         // full snapshot avoids two active writers racing through the generation gate.
         val ready = withTimeoutOrNull(18_000L) {
@@ -129,7 +141,10 @@ class LocationRepository(
         if (lifecycleGeneration.get() == generation) settingsManager.isSpoofingActive = true
     }
 
-    suspend fun stopSpoofing(context: Context) {
+    suspend fun stopSpoofing(context: Context): Boolean {
+        val pureSession = settingsManager.pureModeEnabled || rootManager.isPureArmed()
+        // Shut the master switch before publishing an inactive runtime snapshot.
+        val locationDisabled = !pureSession || rootManager.setLocationMasterEnabled(false)
         val generation = lifecycleMutex.withLock {
             val nextGeneration = lifecycleGeneration.incrementAndGet()
             SpooferProvider.runtimeLifecycleToken = nextGeneration
@@ -145,18 +160,29 @@ class LocationRepository(
             nextGeneration
         }
         sendStopCommand(context, generation)
-        withContext(NonCancellable) {
+        val tombstoneSaved = withContext(NonCancellable) {
             lifecycleMutex.withLock {
                 if (lifecycleGeneration.get() == generation) {
                     if (!persistInactiveConfig()) {
                         Log.e("LocationRepository", "inactive runtime tombstone failed after retry")
+                        false
+                    } else {
+                        true
                     }
+                } else {
+                    false
                 }
             }
         }
+        val disarmed = if (pureSession && locationDisabled && tombstoneSaved) {
+            rootManager.setPureArmed(false)
+        } else !pureSession
+        return locationDisabled && tombstoneSaved && disarmed
     }
 
     suspend fun cleanupRuntimeEnvironment(context: Context): Boolean {
+        val pureSession = settingsManager.pureModeEnabled || rootManager.isPureArmed()
+        val locationDisabled = !pureSession || rootManager.setLocationMasterEnabled(false)
         val generation = lifecycleMutex.withLock {
             val nextGeneration = lifecycleGeneration.incrementAndGet()
             SpooferProvider.runtimeLifecycleToken = nextGeneration
@@ -176,7 +202,11 @@ class LocationRepository(
             lifecycleMutex.withLock {
                 if (lifecycleGeneration.get() != generation) return@withLock false
                 val tombstoneSaved = persistInactiveConfig()
-                rootManager.cleanupRuntimeEnvironment() && tombstoneSaved
+                val cleaned = rootManager.cleanupRuntimeEnvironment(restoreLocationEnabled = !pureSession)
+                val disarmed = if (pureSession && locationDisabled && tombstoneSaved && cleaned) {
+                    rootManager.setPureArmed(false)
+                } else !pureSession
+                cleaned && tombstoneSaved && locationDisabled && disarmed
             }
         }
     }
@@ -199,6 +229,8 @@ class LocationRepository(
      */
     private suspend fun rollbackFailedStart(context: Context, generation: Long) {
         withContext(NonCancellable) {
+            val pureSession = settingsManager.pureModeEnabled || rootManager.isPureArmed()
+            val locationDisabled = !pureSession || rootManager.setLocationMasterEnabled(false)
             val ownsGeneration = lifecycleMutex.withLock {
                 if (lifecycleGeneration.get() != generation ||
                     SpooferProvider.runtimeLifecycleToken != generation
@@ -219,8 +251,12 @@ class LocationRepository(
                     SpooferProvider.runtimeLifecycleToken == generation &&
                     !SpooferProvider.isActive
                 ) {
-                    if (!persistInactiveConfig()) {
+                    val tombstoneSaved = persistInactiveConfig()
+                    if (!tombstoneSaved) {
                         Log.e("LocationRepository", "start rollback tombstone failed after retry")
+                    }
+                    if (pureSession && locationDisabled && tombstoneSaved) {
+                        rootManager.setPureArmed(false)
                     }
                 }
             }

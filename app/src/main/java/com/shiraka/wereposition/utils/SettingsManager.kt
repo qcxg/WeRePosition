@@ -146,6 +146,10 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("per_app_location_enabled", false)
         set(value) = prefs.edit().putBoolean("per_app_location_enabled", value).apply()
 
+    var pureModeEnabled: Boolean
+        get() = prefs.getBoolean("pure_mode_enabled", false)
+        set(value) = prefs.edit().putBoolean("pure_mode_enabled", value).apply()
+
     var locationAllowedApps: Set<String>
         get() = prefs.getStringSet("location_allowed_apps", emptySet())?.toSet().orEmpty()
         set(value) = prefs.edit().putStringSet("location_allowed_apps", value.toSet()).apply()

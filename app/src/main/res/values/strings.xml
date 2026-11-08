@@ -229,4 +229,9 @@
     <string name="app_access_location">Location</string>
     <string name="app_access_rf">Wi-Fi / cell</string>
     <string name="app_access_scope_failed">Could not update LSPosed scope</string>
+    <string name="pure_mode_title">Pure mode</string>
+    <string name="pure_mode_summary">Automatically turn Android location on when simulation starts and off when it stops. Requires root.</string>
+    <string name="pure_mode_locked">Stop simulation before changing Pure mode.</string>
+    <string name="pure_mode_start_failed">Could not safely turn on Pure mode. Android location remains off.</string>
+    <string name="pure_mode_stop_failed">Could not turn off Android location; location data remains blocked.</string>
 </resources>

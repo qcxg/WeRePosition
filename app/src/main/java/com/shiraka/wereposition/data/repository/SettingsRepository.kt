@@ -16,6 +16,9 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
     var perAppLocationEnabled: Boolean
         get() = settingsManager.perAppLocationEnabled
         set(value) { settingsManager.perAppLocationEnabled = value }
+    var pureModeEnabled: Boolean
+        get() = settingsManager.pureModeEnabled
+        set(value) { settingsManager.pureModeEnabled = value }
     var locationAllowedApps: Set<String>
         get() = settingsManager.locationAllowedApps
         set(value) { settingsManager.locationAllowedApps = value }

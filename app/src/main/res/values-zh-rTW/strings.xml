@@ -225,4 +225,9 @@
     <string name="app_access_location">位置</string>
     <string name="app_access_rf">Wi-Fi／基站</string>
     <string name="app_access_scope_failed">無法更新 LSPosed 作用域</string>
+    <string name="pure_mode_title">Pure 模式</string>
+    <string name="pure_mode_summary">開始模擬時自動開啟系統定位，停止時自動關閉。需要 Root 權限。</string>
+    <string name="pure_mode_locked">請先停止模擬，再切換 Pure 模式。</string>
+    <string name="pure_mode_start_failed">無法安全啟用 Pure 模式，系統定位保持關閉。</string>
+    <string name="pure_mode_stop_failed">無法關閉系統定位；位置資料仍保持阻斷。</string>
 </resources>

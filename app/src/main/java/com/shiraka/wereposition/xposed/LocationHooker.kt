@@ -1310,9 +1310,9 @@ class LocationHooker : XposedModule() {
                     "$methodName called with cell simulation active; cellJsonCount=${cellArray?.length() ?: 0}"
                 )
                 when (methodName) {
-                    "getNetworkOperator" -> param.result = cellOperatorNumeric(cell) ?: ""
-                    "getNetworkOperatorName" -> param.result = cellOperatorName(cell)
-                    "getNetworkCountryIso" -> param.result = ""
+                    "getNetworkOperator", "getSimOperator" -> param.result = cellOperatorNumeric(cell) ?: ""
+                    "getNetworkOperatorName", "getSimOperatorName" -> param.result = cellOperatorName(cell)
+                    "getNetworkCountryIso", "getSimCountryIso" -> param.result = ""
                     "getNetworkType", "getDataNetworkType", "getVoiceNetworkType" ->
                         param.result = cellNetworkType(cell)
                     "getDataState" -> param.result = if (cell != null) 2 else 0
@@ -1327,6 +1327,7 @@ class LocationHooker : XposedModule() {
 
         val telephonyMetaMethods = listOf(
             "getNetworkOperator", "getNetworkOperatorName", "getNetworkCountryIso",
+            "getSimOperator", "getSimOperatorName", "getSimCountryIso",
             "getNetworkType", "getDataNetworkType", "getVoiceNetworkType", "getPhoneType",
             "getServiceState", "getServiceStateForSlot", "getSignalStrength",
             "getDataState", "isDataEnabled", "isDataConnectionAllowed"
@@ -3096,6 +3097,9 @@ class LocationHooker : XposedModule() {
     }
 
     private fun shouldBlockRealLocation(config: JSONObject?): Boolean {
+        // Pure mode arms this guard before the Android location switch is enabled.
+        // Keep it active through stop until the switch is off and the tombstone is saved.
+        if (getSystemProperty("gsm.wrp.pure_armed", "false") == "true") return true
         if (shouldSpoofLocation(config)) return true
         // The compact runtime property is published before the full snapshot can be
         // reloaded by every hooked process. Block that activation window as well.
