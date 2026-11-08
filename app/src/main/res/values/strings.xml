@@ -48,7 +48,6 @@
     <string name="synthetic_rf_enable">Generate missing signals</string>
     <string name="synthetic_wifi_count">Wi-Fi networks: %d</string>
     <string name="synthetic_cell_count">Cell towers: %d</string>
-    <string name="synthetic_ssid_prefix">Wi-Fi name prefix</string>
     <string name="synthetic_rf_active">Generated signals active · fictional test data</string>
     <string name="collection_list">Collection List</string>
     <string name="fullscreen_selection">Fullscreen Selection</string>
@@ -68,6 +67,8 @@
     <string name="rf_runtime_active">runtime refreshing</string>
     <string name="rf_runtime_standby">standby</string>
     <string name="rf_state_ready">ready</string>
+    <string name="rf_state_replay">Replay mode</string>
+    <string name="rf_state_generated">Simulation mode</string>
     <string name="rf_state_block_only">block only</string>
     <string name="rf_state_off">off</string>
     <string name="rf_state_loading">loading</string>
@@ -169,7 +170,13 @@
     <string name="select_coord_sys_desc">Choose the underlying coordinate system standard to simulate for %1$s\n(Hints may not be 100%% accurate, please verify)</string>
     <string name="scanning_status_active">Scanning (%1$d)</string>
     <string name="scanning_status_inactive">Not started</string>
-    <string name="title_manage_data">Manage Collected Data</string>
+    <string name="title_manage_data">Local Data</string>
+    <string name="coordinate_input_system">Input coordinate system</string>
+    <string name="theme_colors">Theme colors</string>
+    <string name="theme_dynamic">Use system colors</string>
+    <string name="theme_custom">Custom tone</string>
+    <string name="theme_tone">Tone</string>
+    <string name="theme_hue_value">Hue %1$d°</string>
     <string name="manage_collected_data_desc">View, select, and delete locally collected environment data</string>
     <string name="spoofing_options_title">Simulation Options</string>
     <string name="spoofing_options_desc">Please select the environment data to fake for this point simulation. Unchecked items will be completely blocked (i.e. the App cannot obtain your real data). Latitude and longitude spoofing is included by default.</string>

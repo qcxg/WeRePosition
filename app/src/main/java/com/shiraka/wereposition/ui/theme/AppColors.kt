@@ -2,6 +2,8 @@ package com.shiraka.wereposition.ui.theme
 
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,9 +89,50 @@ val AppTypography = Typography(
 )
 
 object AppColors {
-    fun textSecondary(isDark: Boolean) = if (isDark) TextSecondaryDark else TextSecondaryLight
-    fun surface(isDark: Boolean) = if (isDark) SurfaceDark else SurfaceLight
-    fun cardBackground(isDark: Boolean) = if (isDark) SurfaceCardDark else SurfaceCardCustomLight
-    fun topBarBackground(isDark: Boolean) = if (isDark) SurfaceDark else SurfaceCardCustomLight
-    fun background(isDark: Boolean) = if (isDark) DarkBg else LightBg
+    @Composable fun textSecondary(isDark: Boolean) = MaterialTheme.colorScheme.onSurfaceVariant
+    @Composable fun surface(isDark: Boolean) = MaterialTheme.colorScheme.surface
+    @Composable fun cardBackground(isDark: Boolean) = MaterialTheme.colorScheme.surfaceContainer
+    @Composable fun topBarBackground(isDark: Boolean) = MaterialTheme.colorScheme.surfaceContainer
+    @Composable fun background(isDark: Boolean) = MaterialTheme.colorScheme.background
+}
+
+fun tonedColorScheme(isDark: Boolean, tone: String): androidx.compose.material3.ColorScheme {
+    val hue = tone.removePrefix("hue_").toFloatOrNull()?.coerceIn(0f, 360f) ?: when (tone) {
+        "teal" -> 175f
+        "violet" -> 270f
+        "amber" -> 38f
+        "rose" -> 338f
+        else -> 215f
+    }
+    fun color(saturation: Float, value: Float): Color =
+        Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, value)))
+    val primary = color(if (isDark) 0.42f else 0.66f, if (isDark) 0.9f else 0.55f)
+    val secondary = color(if (isDark) 0.27f else 0.42f, if (isDark) 0.79f else 0.49f)
+    val tertiary = color(if (isDark) 0.33f else 0.48f, if (isDark) 0.84f else 0.54f)
+    val container = color(if (isDark) 0.30f else 0.17f, if (isDark) 0.32f else 0.95f)
+    val base = if (isDark) AppColorSchemeDark else AppColorSchemeLight
+    return base.copy(
+        background = color(if (isDark) 0.12f else 0.025f, if (isDark) 0.075f else 0.985f),
+        onBackground = if (isDark) color(0.04f, 0.92f) else color(0.12f, 0.16f),
+        surface = color(if (isDark) 0.09f else 0.025f, if (isDark) 0.12f else 0.995f),
+        onSurface = if (isDark) color(0.04f, 0.92f) else color(0.12f, 0.16f),
+        onSurfaceVariant = if (isDark) color(0.06f, 0.72f) else color(0.1f, 0.37f),
+        primary = primary,
+        onPrimary = if (isDark) Color.Black else Color.White,
+        primaryContainer = container,
+        onPrimaryContainer = if (isDark) color(0.24f, 0.94f) else color(0.65f, 0.28f),
+        secondary = secondary,
+        onSecondary = if (isDark) Color.Black else Color.White,
+        secondaryContainer = container,
+        onSecondaryContainer = if (isDark) color(0.24f, 0.94f) else color(0.55f, 0.28f),
+        tertiary = tertiary,
+        onTertiary = if (isDark) Color.Black else Color.White,
+        tertiaryContainer = container,
+        onTertiaryContainer = if (isDark) color(0.24f, 0.94f) else color(0.55f, 0.28f),
+        surfaceVariant = if (isDark) color(0.17f, 0.22f) else color(0.09f, 0.94f),
+        surfaceContainer = if (isDark) color(0.15f, 0.16f) else color(0.07f, 0.97f),
+        surfaceContainerHigh = if (isDark) color(0.17f, 0.22f) else color(0.09f, 0.94f),
+        outline = if (isDark) color(0.1f, 0.44f) else color(0.1f, 0.67f),
+        outlineVariant = if (isDark) color(0.11f, 0.3f) else color(0.08f, 0.83f)
+    )
 }

@@ -12,6 +12,8 @@ import com.shiraka.wereposition.LocationApp
 import com.shiraka.wereposition.utils.EnvironmentCoveragePolicy
 import com.shiraka.wereposition.utils.EnvironmentRfResolver
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class SpooferProvider : ContentProvider() {
 
@@ -32,7 +34,9 @@ class SpooferProvider : ContentProvider() {
             val bluetoothJson: String,
             val mockWifi: Boolean,
             val mockCell: Boolean,
-            val mockBluetooth: Boolean
+            val mockBluetooth: Boolean,
+            val syntheticWifi: Boolean = false,
+            val syntheticCell: Boolean = false
         )
 
         data class RuntimePosition(
@@ -58,6 +62,8 @@ class SpooferProvider : ContentProvider() {
 
         @Volatile
         private var runtimeRfSnapshot = EMPTY_RF_SNAPSHOT
+        private val mutableRfSnapshots = MutableStateFlow(EMPTY_RF_SNAPSHOT)
+        val rfSnapshots = mutableRfSnapshots.asStateFlow()
         @Volatile
         private var runtimePosition = RuntimePosition(0.0, 0.0)
         @Volatile
@@ -100,6 +106,7 @@ class SpooferProvider : ContentProvider() {
         @Volatile var mockBluetooth = false
         @Volatile var altitude = 0.0
         @Volatile var satelliteCount = 20
+        @Volatile var syntheticCycleSeed = 0L
 
         fun publishRfSnapshot(
             latitude: Double,
@@ -107,7 +114,9 @@ class SpooferProvider : ContentProvider() {
             wifiJson: String,
             cellJson: String,
             mockWifi: Boolean,
-            mockCell: Boolean
+            mockCell: Boolean,
+            syntheticWifi: Boolean = false,
+            syntheticCell: Boolean = false
         ) {
             // Legacy fields remain for existing callers; readers that need a
             // coherent coordinate/payload pairing use runtimeRfSnapshot.
@@ -120,19 +129,24 @@ class SpooferProvider : ContentProvider() {
             this.mockWifi = mockWifi
             this.mockCell = mockCell
             this.mockBluetooth = false
-            runtimeRfSnapshot = RuntimeRfSnapshot(
+            val snapshot = RuntimeRfSnapshot(
                 coverageCell = EnvironmentCoveragePolicy.cellFor(latitude, longitude),
                 wifiJson = wifiJson,
                 cellJson = cellJson,
                 bluetoothJson = "[]",
                 mockWifi = mockWifi,
                 mockCell = mockCell,
-                mockBluetooth = false
+                mockBluetooth = false,
+                syntheticWifi = syntheticWifi,
+                syntheticCell = syntheticCell
             )
+            runtimeRfSnapshot = snapshot
+            mutableRfSnapshots.value = snapshot
         }
 
         fun clearRfForCoverageTransition() {
             runtimeRfSnapshot = EMPTY_RF_SNAPSHOT
+            mutableRfSnapshots.value = EMPTY_RF_SNAPSHOT
             wifiJson = EnvironmentRfResolver.EMPTY_WIFI_JSON
             cellJson = "[]"
             bluetoothJson = "[]"

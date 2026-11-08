@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.data.model.AppState
-import com.shiraka.wereposition.ui.theme.AccentBlue
 import com.shiraka.wereposition.utils.ExternalApiTester
 import com.shiraka.wereposition.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
@@ -40,6 +39,9 @@ fun SettingsScreen(
     uiState: AppState
 ) {
     val context = LocalContext.current
+    val themePrefs = remember(context) { context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE) }
+    var useDynamicColor by remember { mutableStateOf(themePrefs.getBoolean("theme_dynamic_color", true)) }
+    var selectedTone by remember { mutableStateOf(themePrefs.getString("theme_tone", "blue") ?: "blue") }
     val copiedMessage = stringResource(R.string.copied_to_clipboard)
     val savedMessage = stringResource(R.string.settings_saved)
     val cleanupDoneMessage = stringResource(R.string.cleanup_runtime_env_done)
@@ -50,7 +52,6 @@ fun SettingsScreen(
     var syntheticEnabled by remember(uiState.syntheticRfEnabled) { mutableStateOf(uiState.syntheticRfEnabled) }
     var syntheticWifiCount by remember(uiState.syntheticWifiCount) { mutableFloatStateOf(uiState.syntheticWifiCount.toFloat()) }
     var syntheticCellCount by remember(uiState.syntheticCellCount) { mutableFloatStateOf(uiState.syntheticCellCount.toFloat()) }
-    var syntheticSsidPrefix by remember(uiState.syntheticSsidPrefix) { mutableStateOf(uiState.syntheticSsidPrefix) }
     val clipboardManager = LocalClipboardManager.current
     var showCleanupDialog by remember { mutableStateOf(false) }
     var isCleaningRuntime by remember { mutableStateOf(false) }
@@ -83,6 +84,57 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            ExpandableSettingsRow(
+                title = stringResource(R.string.theme_colors),
+                summary = if (useDynamicColor) stringResource(R.string.theme_dynamic)
+                    else stringResource(R.string.theme_custom),
+                expanded = expandedSection == "theme",
+                onClick = { toggleSection("theme") }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.theme_dynamic), modifier = Modifier.weight(1f))
+                    Switch(checked = useDynamicColor, onCheckedChange = {
+                        useDynamicColor = it
+                        themePrefs.edit().putBoolean("theme_dynamic_color", it).apply()
+                    })
+                }
+                Text(stringResource(R.string.theme_tone), style = MaterialTheme.typography.labelMedium)
+                listOf("blue", "teal", "violet", "amber", "rose").chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { tone ->
+                            FilterChip(
+                                selected = selectedTone == tone,
+                                onClick = {
+                                    selectedTone = tone
+                                    themePrefs.edit().putString("theme_tone", tone).apply()
+                                },
+                                enabled = !useDynamicColor,
+                                label = { Text(tone.replaceFirstChar { it.uppercase() }) }
+                            )
+                        }
+                    }
+                }
+                val hue = selectedTone.removePrefix("hue_").toFloatOrNull() ?: when (selectedTone) {
+                    "teal" -> 175f
+                    "violet" -> 270f
+                    "amber" -> 38f
+                    "rose" -> 338f
+                    else -> 215f
+                }
+                Text(stringResource(R.string.theme_hue_value, hue.toInt()), style = MaterialTheme.typography.bodySmall)
+                Slider(
+                    value = hue,
+                    onValueChange = {
+                        selectedTone = "hue_${it.toInt()}"
+                    },
+                    onValueChangeFinished = {
+                        themePrefs.edit().putString("theme_tone", selectedTone).apply()
+                    },
+                    valueRange = 0f..360f,
+                    enabled = !useDynamicColor
+                )
+            }
+
             ExpandableSettingsRow(
                 title = stringResource(R.string.select_language),
                 summary = selectedLanguageName,
@@ -159,18 +211,10 @@ fun SettingsScreen(
                 Slider(value = syntheticWifiCount, onValueChange = { syntheticWifiCount = it }, valueRange = 0f..8f, steps = 7, enabled = syntheticEnabled)
                 Text(stringResource(R.string.synthetic_cell_count, syntheticCellCount.toInt()), style = MaterialTheme.typography.bodyMedium)
                 Slider(value = syntheticCellCount, onValueChange = { syntheticCellCount = it }, valueRange = 0f..3f, steps = 2, enabled = syntheticEnabled)
-                OutlinedTextField(
-                    value = syntheticSsidPrefix,
-                    onValueChange = { syntheticSsidPrefix = it.take(24) },
-                    label = { Text(stringResource(R.string.synthetic_ssid_prefix)) },
-                    singleLine = true,
-                    enabled = syntheticEnabled,
-                    modifier = Modifier.fillMaxWidth()
-                )
                 SaveSettingsButton {
                     viewModel.setSyntheticRfConfig(
                         syntheticEnabled, syntheticWifiCount.toInt(),
-                        syntheticCellCount.toInt(), syntheticSsidPrefix
+                        syntheticCellCount.toInt()
                     )
                     Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
                 }
@@ -285,7 +329,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(120.dp))
         }
     }
 
@@ -498,8 +542,8 @@ private fun SaveSettingsButton(onClick: () -> Unit) {
 
 @Composable
 private fun settingsTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = AccentBlue,
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
     unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-    focusedLabelColor = AccentBlue,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
     unfocusedLabelColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
 )

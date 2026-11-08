@@ -52,7 +52,10 @@ class LocationRepository(
         jitterSpeed: String = SpooferProvider.jitterSpeed,
         signalJitterEnabled: Boolean = SpooferProvider.signalJitterEnabled,
         signalJitterLevel: Int = SpooferProvider.signalJitterLevel,
-        wifiConnectionMode: String = SpooferProvider.wifiConnectionMode
+        wifiConnectionMode: String = SpooferProvider.wifiConnectionMode,
+        syntheticCycleSeed: Long = 0L,
+        syntheticWifi: Boolean = false,
+        syntheticCell: Boolean = false
     ) {
         if (settingsManager.moduleRestartRequired) {
             throw IllegalStateException("模組已更新，請在方便解鎖時重啟設備後再啟用模擬")
@@ -62,6 +65,7 @@ class LocationRepository(
         val generation = lifecycleMutex.withLock {
             val nextGeneration = lifecycleGeneration.incrementAndGet()
             SpooferProvider.runtimeLifecycleToken = nextGeneration
+            SpooferProvider.syntheticCycleSeed = syntheticCycleSeed
             SpooferProvider.publishRuntimeConfigGeneration(0L)
             SpooferProvider.clearRfForCoverageTransition()
             SpooferProvider.isActive = true
@@ -85,7 +89,9 @@ class LocationRepository(
                 wifiJson,
                 cellJson,
                 mockWifi,
-                mockCell
+                mockCell,
+                syntheticWifi,
+                syntheticCell
             )
             SpooferProvider.altitude = alt
             SpooferProvider.satelliteCount = satCount
@@ -129,6 +135,7 @@ class LocationRepository(
             SpooferProvider.runtimeLifecycleToken = nextGeneration
             SpooferProvider.publishRuntimeConfigGeneration(0L)
             SpooferProvider.isActive = false
+            SpooferProvider.syntheticCycleSeed = 0L
             SpooferProvider.publishCurrentPosition(0.0, 0.0)
             SpooferProvider.publishRuntimeHeartbeat(0L, "")
             SpooferProvider.clearRfForCoverageTransition()

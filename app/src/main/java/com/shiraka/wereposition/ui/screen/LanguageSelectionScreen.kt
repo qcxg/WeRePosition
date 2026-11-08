@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.os.LocaleListCompat
 import com.shiraka.wereposition.R
-import com.shiraka.wereposition.ui.theme.AccentBlue
 import com.shiraka.wereposition.viewmodel.MainViewModel
 
 data class LanguageOption(val name: String, val code: String, val nativeName: String)
@@ -60,13 +59,13 @@ fun LanguageSelectionScreen(viewModel: MainViewModel) {
         ) {
             Box(
                 modifier = Modifier.size(72.dp).clip(CircleShape)
-                    .background(AccentBlue.copy(alpha = 0.1f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Rounded.Language,
                     contentDescription = null,
-                    tint = AccentBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(40.dp)
                 )
             }
@@ -100,7 +99,7 @@ fun LanguageSelectionScreen(viewModel: MainViewModel) {
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text(
                     text = when(selectedLang) {
@@ -125,8 +124,8 @@ fun LanguageItem(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) AccentBlue.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, AccentBlue) else null,
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -138,7 +137,7 @@ fun LanguageItem(
                     text = option.nativeName,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isSelected) AccentBlue else MaterialTheme.colorScheme.onBackground
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = option.name,
@@ -147,7 +146,7 @@ fun LanguageItem(
                 )
             }
             if (isSelected) {
-                RadioButton(selected = true, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = AccentBlue))
+                RadioButton(selected = true, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary))
             }
         }
     }

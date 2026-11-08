@@ -178,7 +178,7 @@ fun ManageDataScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(0.6f),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 120.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(groupedData, key = { it.ids.joinToString("-") }) { item ->
@@ -316,7 +316,7 @@ private fun DataListItem(
                 },
                 onLongClick = onLongClick
             ),
-        color = if (isSelected) com.shiraka.wereposition.ui.theme.AccentBlue.copy(alpha = 0.15f) else com.shiraka.wereposition.ui.theme.AppColors.cardBackground(isDark),
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else com.shiraka.wereposition.ui.theme.AppColors.cardBackground(isDark),
         tonalElevation = 0.dp
     ) {
         Row(

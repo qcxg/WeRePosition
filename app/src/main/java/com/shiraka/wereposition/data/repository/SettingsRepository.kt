@@ -99,10 +99,6 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
         get() = settingsManager.syntheticCellCount
         set(value) { settingsManager.syntheticCellCount = value }
 
-    var syntheticSsidPrefix: String
-        get() = settingsManager.syntheticSsidPrefix
-        set(value) { settingsManager.syntheticSsidPrefix = value }
-
     val syntheticRfOptions: SyntheticRfOptions
         get() = settingsManager.syntheticRfOptions
 

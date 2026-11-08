@@ -84,9 +84,6 @@ import androidx.compose.material.icons.rounded.Layers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import com.shiraka.wereposition.ui.theme.AccentBlue
-import com.shiraka.wereposition.ui.theme.AccentGreen
-import com.shiraka.wereposition.ui.theme.AccentOrange
 import kotlin.math.roundToInt
 import com.shiraka.wereposition.ui.theme.AppColors
 import com.shiraka.wereposition.viewmodel.MainViewModel
@@ -148,9 +145,8 @@ fun SpoofingScreen(
     val focusManager = LocalFocusManager.current
     val density = LocalDensity.current
     var mapHeight by remember { mutableStateOf(280.dp) }
-    val searchPopupOffsetY = with(density) {
-        (WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 66.dp).roundToPx()
-    }
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val searchPopupOffsetY = with(density) { (statusBarHeight + 66.dp).roundToPx() }
 
     fun closeSearchPanel() {
         showSearchPanel = false
@@ -227,74 +223,8 @@ fun SpoofingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
     ) {
-        // 头部
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surfaceContainer,
-                            MaterialTheme.colorScheme.background
-                        )
-                    )
-                )
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Rounded.MyLocation, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(22.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Text(
-                stringResource(R.string.app_name),
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(
-                onClick = { openSearchPanel(SearchMode.NETWORK) },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    Icons.Rounded.Search,
-                    stringResource(R.string.network_search),
-                    tint = if (showSearchPanel && uiState.searchMode == SearchMode.NETWORK) AccentBlue else MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            IconButton(
-                onClick = { openSearchPanel(SearchMode.LOCAL) },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    Icons.Rounded.Storage,
-                    stringResource(R.string.local_collection),
-                    tint = if (showSearchPanel && uiState.searchMode == SearchMode.LOCAL) AccentBlue else MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = { showSavedLocations = true }, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Rounded.Bookmarks, stringResource(R.string.collection_list),
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
-
-        // 地图缩略图
-        Box(modifier = Modifier.fillMaxWidth().height(mapHeight)) {
+        Box(modifier = Modifier.fillMaxWidth().height(mapHeight + statusBarHeight)) {
             AppMapView(modifier = Modifier.fillMaxSize()) { map ->
                 smallMapRef = map
                 map.disableUiControls()
@@ -324,16 +254,70 @@ fun SpoofingScreen(
                 }
             }
 
+            Box(
+                modifier = Modifier.fillMaxWidth().height(statusBarHeight + 104.dp).align(Alignment.TopCenter)
+                    .background(Brush.verticalGradient(listOf(
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.52f),
+                        Color.Transparent
+                    )))
+            )
+            Box(
+                modifier = Modifier.fillMaxWidth().height(48.dp).align(Alignment.BottomCenter)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background)))
+            )
+
             // 十字准星（始终显示在中间）
             Icon(
                 Icons.Rounded.AddLocationAlt, null,
-                tint = AccentBlue.copy(alpha = 0.8f),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 modifier = Modifier.align(Alignment.Center).size(32.dp).padding(bottom = 16.dp) // 准星底部对齐中心
             )
 
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
+                    .padding(top = 8.dp, end = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilledTonalIconButton(
+                    onClick = { openSearchPanel(SearchMode.NETWORK) },
+                    modifier = Modifier.size(42.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
+                    )
+                ) {
+                    Icon(Icons.Rounded.Search, stringResource(R.string.network_search),
+                        tint = if (showSearchPanel && uiState.searchMode == SearchMode.NETWORK)
+                            MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp))
+                }
+                FilledTonalIconButton(
+                    onClick = { openSearchPanel(SearchMode.LOCAL) },
+                    modifier = Modifier.size(42.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
+                    )
+                ) {
+                    Icon(Icons.Rounded.Storage, stringResource(R.string.local_collection),
+                        tint = if (showSearchPanel && uiState.searchMode == SearchMode.LOCAL)
+                            MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp))
+                }
+                FilledTonalIconButton(
+                    onClick = { showSavedLocations = true },
+                    modifier = Modifier.size(42.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
+                    )
+                ) {
+                    Icon(Icons.Rounded.Bookmarks, stringResource(R.string.collection_list),
+                        tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+                }
+            }
+
             Surface(
                 onClick = onExpandMap,
-                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 60.dp, end = 8.dp),
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
                 tonalElevation = 6.dp
@@ -351,14 +335,14 @@ fun SpoofingScreen(
                 onClick = { showMapTypeDialog = true },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 12.dp, bottom = 72.dp)
-                    .size(48.dp),
+                    .padding(end = 8.dp, bottom = 60.dp)
+                    .size(44.dp),
                 colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f))
             ) {
                 Icon(
                     Icons.Rounded.Layers,
                     contentDescription = null,
-                    tint = AccentBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -367,23 +351,17 @@ fun SpoofingScreen(
                 onClick = { viewModel.fetchCurrentLocation(context) { _, _ -> } },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 12.dp, bottom = 24.dp)
-                    .size(48.dp),
+                    .padding(end = 8.dp, bottom = 12.dp)
+                    .size(44.dp),
                 colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f))
             ) {
                 Icon(
                     Icons.Rounded.MyLocation, 
                     contentDescription = null,
-                    tint = AccentBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
             }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth().height(48.dp).align(Alignment.BottomCenter)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background)))
-            )
 
             Box(
                 modifier = Modifier
@@ -437,7 +415,6 @@ fun SpoofingScreen(
             ActionButtons(
                 viewModel,
                 uiState,
-                onExpandMap,
                 onStartFixedSpoofing = {
                     viewModel.resetStartSpoofingProgress()
                     showStartSpoofingDialog = true
@@ -474,10 +451,10 @@ fun SpoofingScreen(
                 ) {
                     Box(
                         modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
-                            .background(AccentGreen.copy(alpha = 0.12f)),
+                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Map, null, tint = AccentGreen, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.Map, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -487,7 +464,7 @@ fun SpoofingScreen(
                     }
                     if (uiState.isContinuousScanning) {
                         Box(
-                            modifier = Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(AccentGreen)
+                            modifier = Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.secondary)
                         )
                         Spacer(Modifier.width(8.dp))
                     }
@@ -506,10 +483,10 @@ fun SpoofingScreen(
                 ) {
                     Box(
                         modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
-                            .background(AccentBlue.copy(alpha = 0.12f)),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.ImportExport, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.ImportExport, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -518,17 +495,16 @@ fun SpoofingScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }) {
-                            Text(stringResource(R.string.import_data), color = AccentBlue)
+                            Text(stringResource(R.string.import_data), color = MaterialTheme.colorScheme.primary)
                         }
                         TextButton(onClick = { exportLauncher.launch("environment_data.json") }) {
-                            Text(stringResource(R.string.export_data), color = AccentBlue)
+                            Text(stringResource(R.string.export_data), color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
             }
             
-            Spacer(Modifier.height(24.dp))
-            Spacer(Modifier.navigationBarsPadding())
+            Spacer(Modifier.height(120.dp))
         }
     }
 
@@ -713,7 +689,7 @@ fun SpoofingScreen(
                     
                     if (uiState.wifiLoadStatus == com.shiraka.wereposition.data.model.WifiLoadStatus.LOADING) {
                         Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = AccentBlue)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
                     } else {
                         val wifiSummary = remember(uiState.collectedWifiJson) { parseWifiPayload(uiState.collectedWifiJson) }
@@ -740,7 +716,7 @@ fun SpoofingScreen(
                                 selected = environmentDataTab == EnvironmentDataTab.WIFI,
                                 text = stringResource(R.string.wifi_fingerprint_count, wifiSummary.totalCount),
                                 icon = Icons.Outlined.Wifi,
-                                color = AccentBlue,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.weight(1f),
                                 onClick = { environmentDataTab = EnvironmentDataTab.WIFI }
                             )
@@ -748,7 +724,7 @@ fun SpoofingScreen(
                                 selected = environmentDataTab == EnvironmentDataTab.CELL,
                                 text = stringResource(R.string.cell_simulation_count, cellArray.length()),
                                 icon = Icons.Outlined.CellTower,
-                                color = AccentOrange,
+                                color = MaterialTheme.colorScheme.tertiary,
                                 modifier = Modifier.weight(1f),
                                 onClick = { environmentDataTab = EnvironmentDataTab.CELL }
                             )
@@ -822,7 +798,7 @@ fun SpoofingScreen(
                     Spacer(Modifier.height(16.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { showEnvironmentDialog = false }) {
-                            Text(stringResource(R.string.confirm), color = AccentBlue)
+                            Text(stringResource(R.string.confirm), color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -852,7 +828,8 @@ private enum class EnvironmentDataTab {
 }
 
 private enum class RfChainState {
-    READY,
+    REPLAY,
+    GENERATED,
     BLOCK_ONLY,
     OFF,
     LOADING
@@ -904,12 +881,12 @@ private fun RfChainDiagnosticsPanel(
     val wifiState = when {
         !uiState.mockWifi -> RfChainState.OFF
         uiState.wifiLoadStatus == WifiLoadStatus.LOADING -> RfChainState.LOADING
-        wifiSummary.totalCount > 0 -> RfChainState.READY
+        wifiSummary.totalCount > 0 -> if (uiState.syntheticWifiActive) RfChainState.GENERATED else RfChainState.REPLAY
         else -> RfChainState.BLOCK_ONLY
     }
     val cellState = when {
         !uiState.mockCell -> RfChainState.OFF
-        cellCount > 0 -> RfChainState.READY
+        cellCount > 0 -> if (uiState.syntheticCellActive) RfChainState.GENERATED else RfChainState.REPLAY
         else -> RfChainState.BLOCK_ONLY
     }
 
@@ -921,7 +898,7 @@ private fun RfChainDiagnosticsPanel(
             .padding(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.SettingsInputAntenna, null, tint = AccentBlue, modifier = Modifier.size(17.dp))
+            Icon(Icons.Outlined.SettingsInputAntenna, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(17.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 stringResource(R.string.rf_chain_diagnostics),
@@ -932,7 +909,7 @@ private fun RfChainDiagnosticsPanel(
             Spacer(Modifier.weight(1f))
             Text(
                 if (uiState.isSpoofingActive) stringResource(R.string.rf_runtime_active) else stringResource(R.string.rf_runtime_standby),
-                color = if (uiState.isSpoofingActive) AccentGreen else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                color = if (uiState.isSpoofingActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -971,19 +948,21 @@ private fun RfChainRow(
     offText: String
 ) {
     val tint = when (state) {
-        RfChainState.READY -> AccentGreen
-        RfChainState.BLOCK_ONLY -> AccentOrange
+        RfChainState.REPLAY -> MaterialTheme.colorScheme.primary
+        RfChainState.GENERATED -> MaterialTheme.colorScheme.tertiary
+        RfChainState.BLOCK_ONLY -> MaterialTheme.colorScheme.tertiary
         RfChainState.OFF -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
-        RfChainState.LOADING -> AccentBlue
+        RfChainState.LOADING -> MaterialTheme.colorScheme.primary
     }
     val stateText = when (state) {
-        RfChainState.READY -> stringResource(R.string.rf_state_ready)
+        RfChainState.REPLAY -> stringResource(R.string.rf_state_replay)
+        RfChainState.GENERATED -> stringResource(R.string.rf_state_generated)
         RfChainState.BLOCK_ONLY -> stringResource(R.string.rf_state_block_only)
         RfChainState.OFF -> stringResource(R.string.rf_state_off)
         RfChainState.LOADING -> stringResource(R.string.rf_state_loading)
     }
     val detail = when (state) {
-        RfChainState.READY -> readyText
+        RfChainState.REPLAY, RfChainState.GENERATED -> readyText
         RfChainState.BLOCK_ONLY -> blockText
         RfChainState.OFF -> offText
         RfChainState.LOADING -> stringResource(R.string.rf_loading_path)
@@ -1049,7 +1028,7 @@ fun WifiStatusCard(uiState: AppState, onClick: () -> Unit) {
             stringResource(R.string.synthetic_rf_active), Icons.Rounded.WarningAmber
         )
         uiState.wifiLoadStatus == WifiLoadStatus.LOADING -> StatusStyle(
-            AccentOrange.copy(alpha = 0.12f), AccentOrange,
+            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f), MaterialTheme.colorScheme.tertiary,
             stringResource(R.string.fetching_wifi), Icons.Outlined.CloudDownload
         )
         hasWifiSimulation || hasCellSimulation -> {
@@ -1063,12 +1042,12 @@ fun WifiStatusCard(uiState: AppState, onClick: () -> Unit) {
                 parts.add(stringResource(R.string.cell_enabled_no_data))
             }
             StatusStyle(
-                AccentGreen.copy(alpha = 0.12f), AccentGreen,
+                MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f), MaterialTheme.colorScheme.secondary,
                 parts.joinToString(" · "), Icons.Outlined.Wifi
             )
         }
         else -> StatusStyle(
-            AccentBlue.copy(alpha = 0.12f), AccentBlue,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), MaterialTheme.colorScheme.primary,
             stringResource(R.string.gps_taken_over), Icons.Outlined.GpsFixed
         )
     }
@@ -1106,7 +1085,7 @@ private fun WifiInfoListRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) AccentBlue.copy(alpha = 0.10f) else Color.Transparent)
+            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent)
             .combinedClickable(
                 onClick = onToggleExpanded,
                 onLongClick = onSelect
@@ -1117,7 +1096,7 @@ private fun WifiInfoListRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.Wifi, null, tint = if (selected) AccentGreen else AccentBlue, modifier = Modifier.size(19.dp))
+            Icon(Icons.Outlined.Wifi, null, tint = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 val ssid = wifi.optString("ssid", "Unknown")
@@ -1137,7 +1116,7 @@ private fun WifiInfoListRow(
                 Icon(
                     Icons.Rounded.CheckCircle,
                     null,
-                    tint = AccentGreen,
+                    tint = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(6.dp))
@@ -1194,7 +1173,7 @@ private fun CellInfoCard(cell: org.json.JSONObject) {
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = AccentOrange.copy(alpha = 0.08f)
+            containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.08f)
         ),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
@@ -1204,7 +1183,7 @@ private fun CellInfoCard(cell: org.json.JSONObject) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.CellTower, null, tint = AccentOrange, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.CellTower, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(type, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                 }
@@ -1297,9 +1276,9 @@ fun CoordinateInputCard(
 
 @Composable
 fun coordinateFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = AccentBlue,
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
     unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-    focusedLabelColor = AccentBlue,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
     unfocusedLabelColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
     focusedTextColor = MaterialTheme.colorScheme.onBackground,
     unfocusedTextColor = MaterialTheme.colorScheme.onBackground,
@@ -1308,13 +1287,13 @@ fun coordinateFieldColors() = OutlinedTextFieldDefaults.colors(
     disabledContainerColor = Color.Transparent,
     disabledBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
     disabledTextColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-    cursorColor = AccentBlue
+    cursorColor = MaterialTheme.colorScheme.primary
 )
 
 // 操作按钮
 
 @Composable
-fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onOpenMap: () -> Unit, onStartFixedSpoofing: () -> Unit) {
+fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onStartFixedSpoofing: () -> Unit) {
     if (uiState.isSpoofingActive) {
         val stopColor by animateColorAsState(
             targetValue = MaterialTheme.colorScheme.error,
@@ -1331,16 +1310,12 @@ fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onOpenMap: () -> 
             Text(stringResource(R.string.stop_simulation), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
     } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
             Button(
                 onClick = onStartFixedSpoofing,
                 enabled = !uiState.isSavingConfig,
-                modifier = Modifier.weight(1f).height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 if (uiState.isSavingConfig) {
                     androidx.compose.material3.CircularProgressIndicator(
@@ -1356,17 +1331,6 @@ fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onOpenMap: () -> 
                     Text(stringResource(R.string.fixed_simulation), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Button(
-                onClick = { viewModel.enterRoutePlanning(); onOpenMap() },
-                modifier = Modifier.weight(1f).height(56.dp),
-                shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
-            ) {
-                Icon(Icons.Rounded.Route, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(stringResource(R.string.route_planning), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
     }
 }
 
@@ -1415,7 +1379,7 @@ fun SavedLocationsDialog(
                                     .padding(vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Rounded.Place, null, tint = AccentBlue)
+                                Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(loc.name, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
@@ -1469,7 +1433,7 @@ fun LocalSearchResultList(
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Rounded.Place, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text(poi.title, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
@@ -1539,9 +1503,9 @@ fun HomeSearchBar(
             onClick = onSearch,
             modifier = Modifier.size(48.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = IconButtonDefaults.filledIconButtonColors(containerColor = AccentBlue)
+            colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Icon(Icons.Rounded.Search, stringResource(R.string.search), tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.Search, stringResource(R.string.search), tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -1568,7 +1532,7 @@ fun SavedLocationsCard(
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Rounded.Place, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(loc.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground)
@@ -1678,11 +1642,29 @@ fun CustomCoordinateDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
-    var lat by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(initialLat) }
-    var lng by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(initialLng) }
+    val currentContext = androidx.compose.ui.platform.LocalContext.current
+    val coordinatePrefs = remember(currentContext) {
+        currentContext.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+    }
+    var coordinateSystem by remember {
+        mutableStateOf(runCatching {
+            com.shiraka.wereposition.utils.CoordinateSystem.valueOf(
+                coordinatePrefs.getString("coordinate_input_system", "WGS84") ?: "WGS84"
+            )
+        }.getOrDefault(com.shiraka.wereposition.utils.CoordinateSystem.WGS84))
+    }
+    val initialPoint = remember(initialLat, initialLng) {
+        com.shiraka.wereposition.utils.GeoPoint(
+            initialLat.toDoubleOrNull() ?: 0.0, initialLng.toDoubleOrNull() ?: 0.0
+        )
+    }
+    val displayPoint = remember(initialPoint, coordinateSystem) {
+        com.shiraka.wereposition.utils.CoordinateConverter.fromWgs84(initialPoint, coordinateSystem)
+    }
+    var lat by remember { mutableStateOf(displayPoint.latitude.toString()) }
+    var lng by remember { mutableStateOf(displayPoint.longitude.toString()) }
     val textSecondary = AppColors.textSecondary(isDark)
 
-    val currentContext = androidx.compose.ui.platform.LocalContext.current
     val currentConfiguration = androidx.compose.ui.platform.LocalConfiguration.current
 
     androidx.compose.material3.AlertDialog(
@@ -1697,6 +1679,28 @@ fun CustomCoordinateDialog(
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalContext provides currentContext, androidx.compose.ui.platform.LocalConfiguration provides currentConfiguration) {
                 Column {
                     androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.shiraka.wereposition.R.string.custom_coord_desc), color = textSecondary, fontSize = 14.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.coordinate_input_system), style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        com.shiraka.wereposition.utils.CoordinateSystem.entries.forEach { system ->
+                            FilterChip(
+                                selected = coordinateSystem == system,
+                                onClick = {
+                                    val entered = com.shiraka.wereposition.utils.GeoPoint(
+                                        lat.toDoubleOrNull() ?: return@FilterChip,
+                                        lng.toDoubleOrNull() ?: return@FilterChip
+                                    )
+                                    val wgs = com.shiraka.wereposition.utils.CoordinateConverter.toWgs84(entered, coordinateSystem)
+                                    val converted = com.shiraka.wereposition.utils.CoordinateConverter.fromWgs84(wgs, system)
+                                    lat = converted.latitude.toString()
+                                    lng = converted.longitude.toString()
+                                    coordinateSystem = system
+                                    coordinatePrefs.edit().putString("coordinate_input_system", system.name).apply()
+                                },
+                                label = { Text(system.name) }
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(16.dp))
                     androidx.compose.material3.OutlinedTextField(
                         value = lng,
@@ -1726,8 +1730,16 @@ fun CustomCoordinateDialog(
         },
         confirmButton = {
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalContext provides currentContext, androidx.compose.ui.platform.LocalConfiguration provides currentConfiguration) {
-                androidx.compose.material3.TextButton(onClick = { onConfirm(lat, lng) }) {
-                    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.shiraka.wereposition.R.string.confirm), color = AccentBlue)
+                androidx.compose.material3.TextButton(onClick = {
+                    val entered = com.shiraka.wereposition.utils.GeoPoint(
+                        lat.toDoubleOrNull() ?: return@TextButton,
+                        lng.toDoubleOrNull() ?: return@TextButton
+                    )
+                    val wgs = com.shiraka.wereposition.utils.CoordinateConverter.toWgs84(entered, coordinateSystem)
+                    if (wgs.latitude !in -90.0..90.0 || wgs.longitude !in -180.0..180.0) return@TextButton
+                    onConfirm(wgs.latitude.toString(), wgs.longitude.toString())
+                }) {
+                    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.shiraka.wereposition.R.string.confirm), color = MaterialTheme.colorScheme.primary)
                 }
             }
         },
@@ -1847,7 +1859,7 @@ fun StartSpoofingDialog(
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Outlined.Wifi, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.Wifi, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(12.dp))
                         Text(stringResource(R.string.mock_wifi_data), modifier = Modifier.weight(1f), fontSize = 15.sp, color = MaterialTheme.colorScheme.onBackground)
                         IconButton(
@@ -1881,7 +1893,7 @@ fun StartSpoofingDialog(
 
                 if (uiState.canMockCell || uiState.opencellidToken.isNotBlank()) {
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.CellTower, null, tint = AccentOrange, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.CellTower, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(12.dp))
                         Text(stringResource(R.string.mock_cell_data), modifier = Modifier.weight(1f), fontSize = 15.sp, color = MaterialTheme.colorScheme.onBackground)
                         IconButton(
@@ -1900,7 +1912,7 @@ fun StartSpoofingDialog(
                     if (pendingMockCell && showCellOptions) {
                         Column(modifier = Modifier.fillMaxWidth().padding(start = 32.dp, end = 4.dp, bottom = 8.dp)) {
                             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.NetworkCell, null, tint = AccentOrange, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.NetworkCell, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Text("信號強度抖動", modifier = Modifier.weight(1f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground)
                                 Switch(checked = pendingSignalJitterEnabled, onCheckedChange = { pendingSignalJitterEnabled = it })
@@ -1913,8 +1925,8 @@ fun StartSpoofingDialog(
                                         valueRange = 0f..100f,
                                         steps = 0,
                                         colors = SliderDefaults.colors(
-                                            thumbColor = AccentOrange,
-                                            activeTrackColor = AccentOrange
+                                            thumbColor = MaterialTheme.colorScheme.tertiary,
+                                            activeTrackColor = MaterialTheme.colorScheme.tertiary
                                         )
                                     )
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1931,7 +1943,7 @@ fun StartSpoofingDialog(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.GraphicEq, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("衛星定位抖動", modifier = Modifier.weight(1f), fontSize = 15.sp, color = MaterialTheme.colorScheme.onBackground)
                     IconButton(
@@ -1967,7 +1979,7 @@ fun StartSpoofingDialog(
                                 stringResource(R.string.jitter_radius_value, pendingJitterRadius.roundToInt()),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = AccentBlue
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                         Slider(
@@ -1976,8 +1988,8 @@ fun StartSpoofingDialog(
                             valueRange = 1f..80f,
                             steps = 0,
                             colors = SliderDefaults.colors(
-                                thumbColor = AccentBlue,
-                                activeTrackColor = AccentBlue
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary
                             )
                         )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -2012,7 +2024,7 @@ fun StartSpoofingDialog(
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.Tune, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.Tune, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("更多自定義參數", modifier = Modifier.weight(1f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                     IconButton(
@@ -2039,8 +2051,8 @@ fun StartSpoofingDialog(
                             singleLine = true,
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AccentBlue,
-                                focusedLabelColor = AccentBlue
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary
                             )
                         )
                         androidx.compose.material3.OutlinedTextField(
@@ -2051,8 +2063,8 @@ fun StartSpoofingDialog(
                             singleLine = true,
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AccentBlue,
-                                focusedLabelColor = AccentBlue
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary
                             )
                         )
                     }
@@ -2083,7 +2095,7 @@ fun StartSpoofingDialog(
                             )
                         },
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text(stringResource(R.string.start_simulation))
                     }
@@ -2120,8 +2132,8 @@ private fun StartSpoofingProgressContent(
                 contentDescription = null,
                 tint = when {
                     isError -> MaterialTheme.colorScheme.error
-                    isSuccess -> AccentGreen
-                    else -> AccentBlue
+                    isSuccess -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.primary
                 },
                 modifier = Modifier.size(24.dp)
             )
@@ -2156,7 +2168,7 @@ private fun StartSpoofingProgressContent(
         if (!isError && !isSuccess) {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(99.dp)),
-                color = AccentBlue,
+                color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
             )
         }
@@ -2208,7 +2220,7 @@ private fun StartSpoofingProgressContent(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
@@ -2240,7 +2252,7 @@ fun parseMarkdown(text: String): androidx.compose.ui.text.AnnotatedString {
                 withStyle(style = SpanStyle(
                     fontFamily = FontFamily.Monospace,
                     background = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                    color = AccentBlue
+                    color = MaterialTheme.colorScheme.primary
                 )) {
                     append("    ")
                     append(line)
@@ -2367,7 +2379,7 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.parseInlineFormatti
                     withStyle(style = SpanStyle(
                         fontFamily = FontFamily.Monospace,
                         background = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                        color = AccentBlue
+                        color = MaterialTheme.colorScheme.primary
                     )) {
                         append(text.substring(i + 1, end))
                     }
@@ -2396,7 +2408,7 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.parseInlineFormatti
                             val linkUrl = text.substring(openParen + 1, closeParen)
                             
                             withStyle(style = SpanStyle(
-                                color = AccentBlue,
+                                color = MaterialTheme.colorScheme.primary,
                                 textDecoration = TextDecoration.Underline
                             )) {
                                 pushStringAnnotation(tag = "URL", annotation = linkUrl)

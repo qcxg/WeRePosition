@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -52,9 +53,6 @@ import com.shiraka.wereposition.data.model.RoutePoint
 import com.shiraka.wereposition.data.model.RoutePlanStage
 import com.shiraka.wereposition.data.model.RouteRunMode
 import com.shiraka.wereposition.data.model.SimMode
-import com.shiraka.wereposition.ui.theme.AccentBlue
-import com.shiraka.wereposition.ui.theme.AccentGreen
-import com.shiraka.wereposition.ui.theme.AccentOrange
 import com.shiraka.wereposition.ui.theme.AppColors
 import com.shiraka.wereposition.viewmodel.MainViewModel
 import kotlin.math.*
@@ -104,7 +102,8 @@ fun FullScreenMapPage(
 
     // 同步路点标记和折线到地图
     var liveMarker by remember { mutableStateOf<AppMapMarker?>(null) }
-    LaunchedEffect(routePoints, mapRef) {
+    val routeColor = MaterialTheme.colorScheme.primary.toArgb()
+    LaunchedEffect(routePoints, mapRef, routeColor) {
         val map = mapRef ?: return@LaunchedEffect
         map.clear()
         liveMarker = null
@@ -113,7 +112,7 @@ fun FullScreenMapPage(
         if (routePoints.size >= 2) {
             map.addPolyline(
                 routePoints.map { Pair(it.lat, it.lng) },
-                android.graphics.Color.parseColor("#FF388BFD"),
+                routeColor,
                 8f
             )
         }
@@ -217,7 +216,7 @@ fun FullScreenMapPage(
         if (!isInPipMode && (stage == RoutePlanStage.SELECTING || stage == RoutePlanStage.IDLE)) {
             Icon(
                 Icons.Rounded.AddLocationAlt, null,
-                tint = AccentBlue.copy(alpha = 0.8f),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 modifier = Modifier.align(Alignment.Center).size(40.dp).padding(bottom = 16.dp)
             )
         }
@@ -226,7 +225,7 @@ fun FullScreenMapPage(
         if (isRunning && isManual) {
             Icon(
                 Icons.Rounded.PersonPin, null,
-                tint = AccentOrange,
+                tint = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.align(Alignment.Center).size(48.dp)
             )
         }
@@ -314,7 +313,7 @@ fun FullScreenMapPage(
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Rounded.Place, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Column {
                                         Text(poi.title, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
@@ -340,7 +339,7 @@ fun FullScreenMapPage(
                     icon = Icons.Rounded.Layers,
                     contentDescription = stringResource(R.string.map_type_label),
                     containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = AccentBlue
+                    contentColor = MaterialTheme.colorScheme.primary
                 ) {
                     showMapTypeDialog = true
                 }
@@ -350,7 +349,7 @@ fun FullScreenMapPage(
                         icon = Icons.Rounded.Route,
                         contentDescription = stringResource(R.string.route_library),
                         containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = AccentBlue
+                        contentColor = MaterialTheme.colorScheme.primary
                     ) {
                         showSavedRoutesDialog = true
                     }
@@ -364,7 +363,7 @@ fun FullScreenMapPage(
                             icon = Icons.Rounded.Bookmarks,
                             contentDescription = stringResource(R.string.collection_list),
                             containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = AccentBlue
+                            contentColor = MaterialTheme.colorScheme.primary
                         ) {
                             showSavedLocations = true
                         }
@@ -373,7 +372,7 @@ fun FullScreenMapPage(
                             icon = Icons.Rounded.MyLocation,
                             contentDescription = stringResource(R.string.locate_to_current),
                             containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = AccentBlue
+                            contentColor = MaterialTheme.colorScheme.primary
                         ) {
                             viewModel.fetchCurrentLocation(context) { lLat, lLng ->
                                 mapRef?.animateCamera(lLat, lLng, 16f)
@@ -414,7 +413,7 @@ fun FullScreenMapPage(
                         .padding(horizontal = 16.dp, vertical = 24.dp)
                         .height(52.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -705,7 +704,7 @@ private fun BottomActionBar(
                         modifier = Modifier.weight(1f).height(52.dp),
                         shape = RoundedCornerShape(14.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Rounded.AddLocation, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
@@ -717,7 +716,7 @@ private fun BottomActionBar(
                         modifier = Modifier.weight(1f).height(52.dp),
                         shape = RoundedCornerShape(14.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
                         Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
@@ -729,7 +728,7 @@ private fun BottomActionBar(
                         modifier = Modifier.weight(1f).height(52.dp),
                         shape = RoundedCornerShape(14.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Rounded.Star, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
@@ -762,7 +761,7 @@ private fun BottomActionBar(
                         onClick = onStartPlanning,
                         modifier = Modifier.weight(1f).height(52.dp),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
                         Icon(Icons.Rounded.PlayArrow, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -827,8 +826,8 @@ private fun RoutePlanConfigDialog(
                         onClick = { onRunModeChange(RouteRunMode.MANUAL) },
                         label = { Text(stringResource(R.string.manual_joystick)) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AccentOrange.copy(alpha = 0.15f),
-                            selectedLabelColor = AccentOrange
+                            selectedContainerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                            selectedLabelColor = MaterialTheme.colorScheme.tertiary
                         )
                     )
                     FilterChip(
@@ -836,8 +835,8 @@ private fun RoutePlanConfigDialog(
                         onClick = { onRunModeChange(RouteRunMode.LOOP) },
                         label = { Text(stringResource(R.string.loop_auto)) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AccentBlue.copy(alpha = 0.15f),
-                            selectedLabelColor = AccentBlue
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            selectedLabelColor = MaterialTheme.colorScheme.primary
                         )
                     )
                 }
@@ -883,8 +882,8 @@ private fun RoutePlanConfigDialog(
                                         )
                                     },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = AccentGreen.copy(alpha = 0.15f),
-                                        selectedLabelColor = AccentGreen
+                                        selectedContainerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                                        selectedLabelColor = MaterialTheme.colorScheme.secondary
                                     )
                                 )
                             }
@@ -952,7 +951,7 @@ private fun RoutePlanConfigDialog(
                         onClick = onStartRoute,
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) { Text(stringResource(R.string.start_simulation), fontWeight = FontWeight.Bold) }
                 }
             }
@@ -1003,7 +1002,7 @@ fun JoystickPanel(viewModel: MainViewModel, maxSpeedMs: Float = 10f) {
             modifier = Modifier
                 .offset { IntOffset(thumbOffset.x.toInt(), thumbOffset.y.toInt()) }
                 .size(52.dp)
-                .background(AccentOrange, CircleShape)
+                .background(MaterialTheme.colorScheme.tertiary, CircleShape)
         )
     }
 }

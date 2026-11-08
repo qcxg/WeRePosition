@@ -80,7 +80,7 @@ class SpoofingService : Service() {
     }
     private val rfResolver by lazy { EnvironmentRfResolver(environmentDao) }
     private val settingsManager by lazy { SettingsManager(applicationContext) }
-    private val syntheticRfGenerator by lazy { SyntheticRfGenerator(applicationContext) }
+    private lateinit var syntheticRfGenerator: SyntheticRfGenerator
     private val rfDatabaseRevision = AtomicLong(0L)
     private var rfInvalidationJob: Job? = null
     private var resolvedRf = EnvironmentRfResolver.ResolvedRfCoverage.empty()
@@ -223,6 +223,9 @@ class SpoofingService : Service() {
                 // state so the cancelled run cannot publish old generations later.
                 previousJob?.cancelAndJoin()
                 currentCoroutineContext().ensureActive()
+                syntheticRfGenerator = SyntheticRfGenerator(
+                    applicationContext, SpooferProvider.syntheticCycleSeed
+                )
                 if (!SpooferProvider.isActive ||
                     SpooferProvider.runtimeLifecycleToken != lifecycleToken ||
                     runGeneration.get() != generation
@@ -520,7 +523,9 @@ class SpoofingService : Service() {
             wifiJson,
             resolvedRf.cellJson,
             settingsManager.mockWifi,
-            settingsManager.mockCell
+            settingsManager.mockCell,
+            resolvedRf.syntheticWifi,
+            resolvedRf.syntheticCell
         )
         return SpooferProvider.rfSnapshotFor(loc.lat, loc.lng)
     }

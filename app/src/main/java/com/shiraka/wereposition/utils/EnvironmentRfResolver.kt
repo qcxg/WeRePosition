@@ -29,7 +29,8 @@ class EnvironmentRfResolver(private val environmentDao: EnvironmentDao) {
         val hasCell: Boolean,
         val hasBluetooth: Boolean,
         val wifiApCount: Int,
-        val synthetic: Boolean = false
+        val syntheticWifi: Boolean = false,
+        val syntheticCell: Boolean = false
     ) {
         companion object {
             fun empty(cell: EnvironmentCoveragePolicy.Cell? = null) = ResolvedRfCoverage(

@@ -19,7 +19,6 @@ import com.shiraka.wereposition.ui.components.AppMapController
 import com.shiraka.wereposition.ui.components.AppMapView
 import com.shiraka.wereposition.data.model.AppMapType
 import com.shiraka.wereposition.ui.components.MapTypeDialog
-import com.shiraka.wereposition.ui.theme.AccentGreen
 import com.shiraka.wereposition.ui.theme.AppColors
 import com.shiraka.wereposition.viewmodel.MainViewModel
 
@@ -99,7 +98,7 @@ fun ScannerMapScreen(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (uiState.isContinuousScanning) AccentGreen else AppColors.textSecondary(isDark))
+                            .background(if (uiState.isContinuousScanning) MaterialTheme.colorScheme.secondary else AppColors.textSecondary(isDark))
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -119,8 +118,8 @@ fun ScannerMapScreen(
         ) {
             FloatingActionButton(
                 onClick = { viewModel.toggleContinuousScanning() },
-                containerColor = if (uiState.isContinuousScanning) MaterialTheme.colorScheme.surface else AccentGreen,
-                contentColor = if (uiState.isContinuousScanning) AccentGreen else Color.White
+                containerColor = if (uiState.isContinuousScanning) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.secondary,
+                contentColor = if (uiState.isContinuousScanning) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSecondary
             ) {
                 Icon(Icons.Rounded.Radar, null)
             }
@@ -138,7 +137,7 @@ fun ScannerMapScreen(
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
                     .size(44.dp)
             ) {
-                Icon(Icons.Rounded.Layers, "Map Type", tint = AccentGreen)
+                Icon(Icons.Rounded.Layers, "Map Type", tint = MaterialTheme.colorScheme.secondary)
             }
         }
     }

@@ -89,13 +89,9 @@ class SettingsManager(context: Context) {
         get() = prefs.getInt("synthetic_cell_count", 1).coerceIn(0, 3)
         set(value) = prefs.edit().putInt("synthetic_cell_count", value.coerceIn(0, 3)).apply()
 
-    var syntheticSsidPrefix: String
-        get() = prefs.getString("synthetic_ssid_prefix", "WRP-Test")?.take(24).orEmpty()
-        set(value) = prefs.edit().putString("synthetic_ssid_prefix", value.trim().take(24)).apply()
-
     val syntheticRfOptions: SyntheticRfOptions
         get() = SyntheticRfOptions(
-            syntheticRfEnabled, syntheticWifiCount, syntheticCellCount, syntheticSsidPrefix
+            syntheticRfEnabled, syntheticWifiCount, syntheticCellCount
         )
 
     var mockBluetooth: Boolean

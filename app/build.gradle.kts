@@ -40,8 +40,8 @@ android {
         minSdk = 34
         //noinspection OldTargetApi
         targetSdk = 36
-        versionCode = 14300
-        versionName = "1.4.3"
+        versionCode = 14400
+        versionName = "1.4.4"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -121,6 +121,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
+    implementation(libs.haze)
 
     // Room
     implementation(libs.room.runtime)

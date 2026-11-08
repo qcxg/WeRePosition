@@ -80,7 +80,6 @@ class MainViewModel(
             syntheticRfEnabled = settingsRepository.syntheticRfEnabled,
             syntheticWifiCount = settingsRepository.syntheticWifiCount,
             syntheticCellCount = settingsRepository.syntheticCellCount,
-            syntheticSsidPrefix = settingsRepository.syntheticSsidPrefix,
             enableJitter = settingsRepository.enableJitter,
             jitterRadiusMeters = settingsRepository.jitterRadiusMeters,
             jitterSpeed = parseJitterSpeed(settingsRepository.jitterSpeed),
@@ -106,7 +105,7 @@ class MainViewModel(
     private val geocodeClient = OkHttpClient()
     private val nearbyNameMemory = mutableMapOf<String, String>()
     private val environmentRfResolver = EnvironmentRfResolver(environmentDao)
-    private val syntheticRfGenerator = SyntheticRfGenerator(context)
+    private var syntheticRfGenerator = SyntheticRfGenerator(context)
     private val capabilityEvaluationGeneration = AtomicLong(0L)
     private var capabilityEvaluationJob: Job? = null
     private var lastCapabilityCell: EnvironmentCoveragePolicy.Cell? = null
@@ -136,6 +135,13 @@ class MainViewModel(
 
     init {
         initialize()
+        viewModelScope.launch {
+            SpooferProvider.rfSnapshots.collect { snapshot ->
+                if (SpooferProvider.isActive) {
+                    publishRuntimeRfSnapshot(snapshot)
+                }
+            }
+        }
     }
 
     // 初始化
@@ -560,7 +566,12 @@ class MainViewModel(
             if (current.latitudeInput.toDoubleOrNull() != lat ||
                 current.longitudeInput.toDoubleOrNull() != lng
             ) return@withContext
-            publishResolvedRfCoverage(resolved)
+            val runtime = SpooferProvider.rfSnapshots.value
+            if (SpooferProvider.isActive && runtime.coverageCell != null) {
+                publishRuntimeRfSnapshot(runtime)
+            } else {
+                publishResolvedRfCoverage(resolved)
+            }
         }
     }
 
@@ -573,13 +584,38 @@ class MainViewModel(
                 collectedWifiJson = resolved.wifiJson,
                 collectedCellJson = resolved.cellJson,
                 collectedBluetoothJson = "[]",
-                syntheticRfActive = resolved.synthetic,
+                syntheticRfActive = resolved.syntheticWifi || resolved.syntheticCell,
+                syntheticWifiActive = resolved.syntheticWifi,
+                syntheticCellActive = resolved.syntheticCell,
                 wifiApCount = resolved.wifiApCount,
                 wifiLoadStatus = if (resolved.hasWifi) {
                     com.shiraka.wereposition.data.model.WifiLoadStatus.DONE
                 } else {
                     com.shiraka.wereposition.data.model.WifiLoadStatus.IDLE
                 }
+            )
+        }
+    }
+
+    private fun publishRuntimeRfSnapshot(snapshot: SpooferProvider.Companion.RuntimeRfSnapshot) {
+        val wifiCount = runCatching {
+            val wifi = org.json.JSONObject(snapshot.wifiJson)
+            (if (wifi.optBoolean("isConnected") && !wifi.isNull("connectedWifi")) 1 else 0) +
+                (wifi.optJSONArray("nearbyWifi")?.length() ?: 0)
+        }.getOrDefault(0)
+        val cellCount = runCatching { org.json.JSONArray(snapshot.cellJson).length() }.getOrDefault(0)
+        _uiState.update {
+            it.copy(
+                collectedWifiJson = snapshot.wifiJson,
+                collectedCellJson = snapshot.cellJson,
+                canMockWifi = wifiCount > 0,
+                canMockCell = cellCount > 0,
+                wifiApCount = wifiCount,
+                wifiLoadStatus = if (wifiCount > 0) com.shiraka.wereposition.data.model.WifiLoadStatus.DONE
+                    else com.shiraka.wereposition.data.model.WifiLoadStatus.IDLE,
+                syntheticRfActive = snapshot.syntheticWifi || snapshot.syntheticCell,
+                syntheticWifiActive = snapshot.syntheticWifi,
+                syntheticCellActive = snapshot.syntheticCell
             )
         }
     }
@@ -862,6 +898,7 @@ class MainViewModel(
                     )
                 )
             }
+            syntheticRfGenerator = SyntheticRfGenerator(context)
             val resolved = resolveRfCoverageForTargetCell(lat, lng)
             val currentTarget = _uiState.value
             if (operationGeneration != runtimeOperationGeneration.get() ||
@@ -875,7 +912,7 @@ class MainViewModel(
 
             val updatedState = _uiState.value
             // Recent locations are a user-facing history, not a store for generated RF.
-            val recentRf = if (resolved.synthetic) environmentRfResolver.resolve(lat, lng) else resolved
+            val recentRf = if (resolved.syntheticWifi || resolved.syntheticCell) environmentRfResolver.resolve(lat, lng) else resolved
             recordRecentLocation(
                 SavedLocation(
                     String.format(java.util.Locale.US, "%.5f, %.5f", lat, lng),
@@ -900,7 +937,10 @@ class MainViewModel(
                     updatedState.jitterSpeed.name,
                     updatedState.signalJitterEnabled,
                     updatedState.signalJitterLevel,
-                    updatedState.wifiConnectionMode.name
+                    updatedState.wifiConnectionMode.name,
+                    syntheticCycleSeed = syntheticRfGenerator.cycleSeed,
+                    syntheticWifi = resolved.syntheticWifi,
+                    syntheticCell = resolved.syntheticCell
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -954,8 +994,10 @@ class MainViewModel(
         viewModelScope.launch {
             locationRepository.stopSpoofing(context)
             _uiState.update {
-                it.copy(isSpoofingActive = false, isSavingConfig = false, syntheticRfActive = false)
+                it.copy(isSpoofingActive = false, isSavingConfig = false,
+                    syntheticRfActive = false, syntheticWifiActive = false, syntheticCellActive = false)
             }
+            evaluateMockCapabilities()
         }
     }
 
@@ -971,6 +1013,8 @@ class MainViewModel(
                     isSpoofingActive = false,
                     isSavingConfig = false,
                     syntheticRfActive = false,
+                    syntheticWifiActive = false,
+                    syntheticCellActive = false,
                     routePlanStage = RoutePlanStage.IDLE,
                     routePoints = emptyList(),
                     routeRunMode = RouteRunMode.MANUAL
@@ -979,6 +1023,7 @@ class MainViewModel(
             val ok = withContext(Dispatchers.IO) {
                 locationRepository.cleanupRuntimeEnvironment(context)
             }
+            evaluateMockCapabilities()
             onComplete(ok)
         }
     }
@@ -1499,18 +1544,18 @@ class MainViewModel(
         startSpoofing()
     }
 
-    fun setSyntheticRfConfig(enabled: Boolean, wifiCount: Int, cellCount: Int, ssidPrefix: String) {
+    fun setSyntheticRfConfig(enabled: Boolean, wifiCount: Int, cellCount: Int) {
         settingsRepository.syntheticRfEnabled = enabled
         settingsRepository.syntheticWifiCount = wifiCount
         settingsRepository.syntheticCellCount = cellCount
-        settingsRepository.syntheticSsidPrefix = ssidPrefix
         _uiState.update {
             it.copy(
                 syntheticRfEnabled = enabled,
                 syntheticWifiCount = wifiCount.coerceIn(0, 8),
                 syntheticCellCount = cellCount.coerceIn(0, 3),
-                syntheticSsidPrefix = ssidPrefix.trim().take(24),
-                syntheticRfActive = false
+                syntheticRfActive = false,
+                syntheticWifiActive = false,
+                syntheticCellActive = false
             )
         }
         SpooferProvider.requestRfRefresh()

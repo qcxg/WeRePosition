@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import java.util.Random
+import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 
@@ -17,24 +18,27 @@ import kotlin.coroutines.resume
 data class SyntheticRfOptions(
     val enabled: Boolean = false,
     val wifiCount: Int = 3,
-    val cellCount: Int = 1,
-    val ssidPrefix: String = "WRP-Test"
+    val cellCount: Int = 1
 )
 
-class SyntheticRfGenerator(private val context: Context) {
-    private data class Network(val mcc: Int, val mnc: Int)
+class SyntheticRfGenerator(
+    private val context: Context,
+    val cycleSeed: Long = SecureRandom().nextLong()
+) {
+    private data class Network(val mcc: Int, val mnc: Int, val brand: String)
     private data class CountryCache(val code: String?, val recordedAt: Long)
 
     // E.212 country profiles. Unknown countries fail closed rather than using a wrong MCC.
     private val networks = mapOf(
-        "TW" to Network(466, 92), "JP" to Network(440, 10),
-        "US" to Network(310, 260), "CN" to Network(460, 0),
-        "HK" to Network(454, 0), "SG" to Network(525, 1),
-        "KR" to Network(450, 5), "GB" to Network(234, 10),
-        "DE" to Network(262, 1), "FR" to Network(208, 1),
-        "AU" to Network(505, 1), "CA" to Network(302, 720),
-        "IN" to Network(404, 10)
+        "TW" to Network(466, 92, "Chunghwa"), "JP" to Network(440, 10, "docomo"),
+        "US" to Network(310, 260, "T-Mobile"), "CN" to Network(460, 0, "ChinaMobile"),
+        "HK" to Network(454, 0, "CSL"), "SG" to Network(525, 1, "Singtel"),
+        "KR" to Network(450, 5, "SKT"), "GB" to Network(234, 10, "O2"),
+        "DE" to Network(262, 1, "Telekom"), "FR" to Network(208, 1, "Orange"),
+        "AU" to Network(505, 1, "Telstra"), "CA" to Network(302, 720, "Rogers"),
+        "IN" to Network(404, 10, "Airtel")
     )
+    // One seed per service lifetime: recalculating a cell cannot rename its APs mid-cycle.
     private val countryCache = ConcurrentHashMap<EnvironmentCoveragePolicy.Cell, CountryCache>()
 
     suspend fun fillMissing(
@@ -47,9 +51,9 @@ class SyntheticRfGenerator(private val context: Context) {
         val cell = local.cell ?: return local
         val country = countryAt(latitude, longitude, cell) ?: return local
         val network = networks[country] ?: return local
-        val random = Random(cell.q * 31L + cell.r * 131L + country.hashCode())
+        val random = Random(cycleSeed xor (cell.q * 31L + cell.r * 131L + country.hashCode()))
         val wifi = if (local.hasWifi || options.wifiCount == 0) null else
-            buildWifi(options.ssidPrefix, country, options.wifiCount.coerceIn(0, 8), random)
+            buildWifi(network, options.wifiCount.coerceIn(0, 8), random)
         val cells = if (local.hasCell || options.cellCount == 0) null else
             buildCells(network, options.cellCount.coerceIn(0, 3), random)
         return local.copy(
@@ -58,7 +62,8 @@ class SyntheticRfGenerator(private val context: Context) {
             hasWifi = local.hasWifi || wifi != null,
             hasCell = local.hasCell || cells != null,
             wifiApCount = if (wifi != null) options.wifiCount.coerceIn(0, 8) else local.wifiApCount,
-            synthetic = wifi != null || cells != null
+            syntheticWifi = wifi != null,
+            syntheticCell = cells != null
         )
     }
 
@@ -96,20 +101,34 @@ class SyntheticRfGenerator(private val context: Context) {
         return code
     }
 
-    private fun buildWifi(prefix: String, country: String, count: Int, random: Random): String {
-        val safePrefix = prefix.trim().take(24).ifBlank { "WRP-Test" }
+    private fun buildWifi(network: Network, count: Int, random: Random): String {
+        val routerBrands = listOf("ASUS", "TP-Link", "NETGEAR", "D-Link")
         val aps = List(count) { index ->
             val bssid = (0 until 6).joinToString(":") { byte ->
-                "%02X".format(Locale.US, if (byte == 0) 0x02 else random.nextInt(256))
+                "%02X".format(Locale.US, if (byte == 0) listOf(0x02, 0x06, 0x0A, 0x0E)[random.nextInt(4)] else random.nextInt(256))
             }
-            val channel = listOf(1, 6, 11)[index % 3]
+            val channel = listOf(1, 6, 11)[random.nextInt(3)]
+            val id = "%04X".format(Locale.US, random.nextInt(0x10000))
+            val routerBrand = routerBrands[random.nextInt(routerBrands.size)]
+            val style = random.nextInt(9)
+            val ssid = when (style) {
+                0 -> "${network.brand}_Fiber_$id"
+                1 -> "${network.brand}-$id"
+                2 -> "${network.brand}${random.nextInt(100, 999)}"
+                3 -> "${network.brand}_5G_${id.takeLast(2)}"
+                4 -> "${routerBrand}_$id"
+                5 -> "${routerBrand}-${id.takeLast(3)}"
+                6 -> "Home_${id.takeLast(3)}"
+                7 -> "WiFi-${random.nextInt(1000, 9999)}"
+                else -> "${routerBrand}${random.nextInt(100, 999)}_5G"
+            }
             JSONObject().apply {
-                put("ssid", "$safePrefix-$country-${index + 1}")
+                put("ssid", ssid)
                 put("bssid", bssid)
-                put("vendor", "Synthetic")
+                put("vendor", if (style < 4) network.brand else routerBrand)
                 put("frequency", 2407 + channel * 5)
                 put("channel", channel)
-                put("level", -52 - index * 7)
+                put("level", if (index == 0) -42 - random.nextInt(18) else -52 - random.nextInt(35))
                 put("capabilities", "[WPA2-PSK-CCMP][ESS]")
                 put("wifiStandard", 4)
                 put("linkSpeed", 72)
@@ -134,7 +153,7 @@ class SyntheticRfGenerator(private val context: Context) {
                     put("pci", random.nextInt(504))
                     put("dbm", -78 - index * 6)
                     put("isRegistered", index == 0)
-                    put("operatorName", "Synthetic")
+                    put("operatorName", network.brand)
                 })
             }
         }.toString()

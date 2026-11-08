@@ -16,21 +16,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.LocationOn
-import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Surface
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -40,10 +40,10 @@ import com.shiraka.wereposition.ui.screen.InitializingScreen
 import com.shiraka.wereposition.ui.screen.JoystickSettingsScreen
 import com.shiraka.wereposition.ui.screen.SpoofingScreen
 import com.shiraka.wereposition.ui.screen.LanguageSelectionScreen
-import com.shiraka.wereposition.ui.theme.AppColorSchemeDark
-import com.shiraka.wereposition.ui.theme.AppColorSchemeLight
-import com.shiraka.wereposition.ui.theme.AppShapes
-import com.shiraka.wereposition.ui.theme.AppTypography
+import com.shiraka.wereposition.ui.components.FloatingGlassNavigationBar
+import com.shiraka.wereposition.ui.components.GlassNavigationItem
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import com.shiraka.wereposition.utils.LocaleUtils
 import com.shiraka.wereposition.viewmodel.MainViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(context)
     }
 
+    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -98,7 +99,25 @@ class MainActivity : ComponentActivity() {
             ) {
                 val uiState by viewModel.uiState.collectAsState()
                 val isDark = isSystemInDarkTheme()
-                val colorScheme = if (isDark) AppColorSchemeDark else AppColorSchemeLight
+                val appPrefs = remember { getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
+                var themeRevision by remember { mutableIntStateOf(0) }
+                DisposableEffect(appPrefs) {
+                    val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                        if (key == "theme_dynamic_color" || key == "theme_tone") themeRevision++
+                    }
+                    appPrefs.registerOnSharedPreferenceChangeListener(listener)
+                    onDispose { appPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+                }
+                val colorScheme = remember(isDark, themeRevision) {
+                    val dynamic = appPrefs.getBoolean("theme_dynamic_color", true)
+                    val tone = appPrefs.getString("theme_tone", "blue") ?: "blue"
+                    if (dynamic) {
+                        if (isDark) dynamicDarkColorScheme(this@MainActivity)
+                        else dynamicLightColorScheme(this@MainActivity)
+                    } else {
+                        com.shiraka.wereposition.ui.theme.tonedColorScheme(isDark, tone)
+                    }
+                }
 
                 // 核心：在 Compose 层级内部通过 CompositionLocalProvider 动态刷新
                 // 使用 remember(uiState.currentLanguage) 确保语言切换时重新计算 Context
@@ -116,7 +135,7 @@ class MainActivity : ComponentActivity() {
                     LocalContext provides wrappedContext,
                     LocalConfiguration provides configuration
                 ) {
-                    MaterialTheme(colorScheme = colorScheme, shapes = AppShapes, typography = AppTypography) {
+                    MaterialExpressiveTheme(colorScheme = colorScheme) {
                         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                             MainScreen(viewModel = viewModel, uiState = uiState, isDark = isDark)
                         }
@@ -177,10 +196,10 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class MainTab(val label: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    FIXED(R.string.fixed_simulation, Icons.Rounded.LocationOn),
-    JOYSTICK(R.string.nav_joystick, Icons.Rounded.SportsEsports),
-    DATA(R.string.title_manage_data, Icons.Rounded.Storage),
-    SETTINGS(R.string.settings, Icons.Rounded.Settings)
+    FIXED(R.string.fixed_simulation, Icons.Outlined.LocationOn),
+    JOYSTICK(R.string.nav_joystick, Icons.Outlined.SportsEsports),
+    DATA(R.string.title_manage_data, Icons.Outlined.Storage),
+    SETTINGS(R.string.settings, Icons.Outlined.Settings)
 }
 
 @Composable
@@ -238,35 +257,38 @@ fun MainScreen(
             viewModel = viewModel, uiState = uiState, isDark = isDark,
             onClose = { isScannerMap = false }
         )
-        else -> Scaffold(
-            bottomBar = {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    MainTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = selectedTab == tab,
-                            onClick = { selectedTab = tab },
-                            icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(stringResource(tab.label)) }
+        else -> {
+            val hazeState = rememberHazeState()
+            val navigationItems = MainTab.entries.map { GlassNavigationItem(stringResource(it.label), it.icon) }
+            Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).hazeSource(hazeState)) {
+                    when (selectedTab) {
+                        MainTab.FIXED -> SpoofingScreen(
+                            viewModel = viewModel, uiState = uiState, isDark = isDark,
+                            onExpandMap = { isFullScreenMap = true },
+                            onExpandScannerMap = { isScannerMap = true }
+                        )
+                        MainTab.JOYSTICK -> JoystickSettingsScreen(
+                            onPlanRoute = {
+                                viewModel.enterRoutePlanning()
+                                isFullScreenMap = true
+                            }
+                        )
+                        MainTab.DATA -> com.shiraka.wereposition.ui.screen.ManageDataScreen(
+                            viewModel = viewModel, uiState = uiState, isDark = isDark
+                        )
+                        MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
+                            viewModel = viewModel, uiState = uiState
                         )
                     }
                 }
-            }
-        ) { padding ->
-            Box(Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding())) {
-                when (selectedTab) {
-                    MainTab.FIXED -> SpoofingScreen(
-                        viewModel = viewModel, uiState = uiState, isDark = isDark,
-                        onExpandMap = { isFullScreenMap = true },
-                        onExpandScannerMap = { isScannerMap = true }
-                    )
-                    MainTab.JOYSTICK -> JoystickSettingsScreen()
-                    MainTab.DATA -> com.shiraka.wereposition.ui.screen.ManageDataScreen(
-                        viewModel = viewModel, uiState = uiState, isDark = isDark
-                    )
-                    MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
-                        viewModel = viewModel, uiState = uiState
-                    )
-                }
+                FloatingGlassNavigationBar(
+                    items = navigationItems,
+                    selectedIndex = selectedTab.ordinal,
+                    onDestinationSelected = { selectedTab = MainTab.entries[it] },
+                    hazeState = hazeState,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
         }
     }

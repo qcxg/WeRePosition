@@ -53,7 +53,6 @@
     <string name="synthetic_rf_enable">生成缺少的信号</string>
     <string name="synthetic_wifi_count">Wi-Fi 数量：%d</string>
     <string name="synthetic_cell_count">基站数量：%d</string>
-    <string name="synthetic_ssid_prefix">Wi-Fi 名称前缀</string>
     <string name="synthetic_rf_active">合成信号启用中 · 虚构测试数据</string>
     <string name="collection_list">收藏列表</string>
     <string name="fullscreen_selection">全屏选点</string>
@@ -73,6 +72,8 @@
     <string name="rf_runtime_active">运行中刷新</string>
     <string name="rf_runtime_standby">待机</string>
     <string name="rf_state_ready">就绪</string>
+    <string name="rf_state_replay">重放模式</string>
+    <string name="rf_state_generated">模拟模式</string>
     <string name="rf_state_block_only">阻断模式</string>
     <string name="rf_state_off">关闭</string>
     <string name="rf_state_loading">加载中</string>
@@ -174,7 +175,13 @@
     <string name="select_coord_sys_desc">为 %1$s 选择要模拟的底层坐标系标准\n(我写的提示不一定是正确的，要自己测)</string>
     <string name="scanning_status_active">采集中 (%1$d)</string>
     <string name="scanning_status_inactive">未开启采集</string>
-    <string name="title_manage_data">管理本地采集数据</string>
+    <string name="title_manage_data">本地数据</string>
+    <string name="coordinate_input_system">输入坐标系</string>
+    <string name="theme_colors">主题颜色</string>
+    <string name="theme_dynamic">跟随系统取色</string>
+    <string name="theme_custom">自选色调</string>
+    <string name="theme_tone">色调</string>
+    <string name="theme_hue_value">色相 %1$d°</string>
     <string name="manage_collected_data_desc">查看、多选、批量删除已采集的环境数据</string>
     <string name="spoofing_options_title">模拟选项</string>
     <string name="spoofing_options_desc">请选择本次定点模拟需要伪造的环境数据。未勾选的项将被彻底屏蔽（即App无法获取您的真实数据）。默认包含经纬度伪造。</string>

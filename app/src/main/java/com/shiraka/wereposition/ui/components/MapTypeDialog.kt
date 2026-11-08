@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.data.model.AppMapType
-import com.shiraka.wereposition.ui.theme.AccentBlue
 
 @Composable
 fun MapTypeDialog(
@@ -103,9 +102,9 @@ private fun MapTypeItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val borderColor = if (isSelected) AccentBlue else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-    val containerColor = if (isSelected) AccentBlue.copy(alpha = 0.08f) else Color.Transparent
-    val contentColor = if (isSelected) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+    val containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent
+    val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 
     OutlinedCard(
         onClick = onClick,

@@ -93,8 +93,12 @@ internal class SystemGnssStatusHook(
     }
 
     private fun capture(instance: Any) {
-        provider = instance
-        schedule(0L)
+        // A synthetic tick calls onReportSvStatus() and re-enters this hook.
+        // Scheduling from every report would turn the 1 Hz timer into a tight loop.
+        if (provider !== instance) {
+            provider = instance
+            schedule(0L)
+        }
     }
 
     private fun schedule(delayMs: Long) {
