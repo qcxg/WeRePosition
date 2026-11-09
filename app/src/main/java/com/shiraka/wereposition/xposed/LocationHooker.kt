@@ -2853,6 +2853,16 @@ class LocationHooker : XposedModule() {
         val speed: Double
     )
 
+    private data class TrustedJoystickFix(
+        val generation: Long,
+        val heartbeatUptimeMs: Long,
+        val latitude: Double,
+        val longitude: Double,
+        val bearing: Double
+    )
+
+    @Volatile private var lastTrustedJoystickFix: TrustedJoystickFix? = null
+
     private fun parseRuntimeFrame(raw: String): RuntimeFrame? {
         val parts = raw.split('|')
         if (parts.size != 8 || parts[0] != "1") return null
@@ -3241,9 +3251,14 @@ class LocationHooker : XposedModule() {
                 markActiveConfigUnavailable(config)
                 XposedBridge.logOpenCellIdEvery(
                     "config:expired",
-                    "readConfig blocked real data after stale active config age=${heartbeatAgeMs}ms",
+                    "readConfig retained the last safe simulation state after stale active config age=${heartbeatAgeMs}ms",
                     30_000L
                 )
+            } else if (config.optBoolean("joystick_mode", false) &&
+                hasValidTargetCoordinates(config)
+            ) {
+                // A recovered writer resumes live movement after a frozen interval.
+                config.put("fail_closed", false)
             }
         } else if (!config.has("fail_closed")) {
             config.put("fail_closed", false)
@@ -3304,6 +3319,17 @@ class LocationHooker : XposedModule() {
             ) return
             val previousUptime = config.optLong("heartbeat_uptime_ms", 0L)
             if (previousUptime > runtimeFrame.heartbeatUptimeMs) return
+            if (config.optBoolean("joystick_mode", false)) {
+                val previousFix = lastTrustedJoystickFix
+                if (previousFix == null || previousFix.generation != configGeneration ||
+                    runtimeFrame.heartbeatUptimeMs >= previousFix.heartbeatUptimeMs
+                ) {
+                    lastTrustedJoystickFix = TrustedJoystickFix(
+                        configGeneration, runtimeFrame.heartbeatUptimeMs,
+                        runtimeFrame.latitude, runtimeFrame.longitude, runtimeFrame.bearing
+                    )
+                }
+            }
             config.put("lat", runtimeFrame.latitude)
             config.put("lng", runtimeFrame.longitude)
             config.put("sim_bearing", runtimeFrame.bearing)
@@ -3389,10 +3415,28 @@ class LocationHooker : XposedModule() {
         // Only an explicit stop fence or a new boot may end an active simulation.
         // A dead writer must never expose a real position while the UI is still armed.
         config.put("active", true)
-        config.put("fail_closed", true)
-        config.put("satellite_count", 0)
         config.put("wifi_json", emptyWifiPayload())
         config.put("cell_json", org.json.JSONArray())
+        if (config.optBoolean("joystick_mode", false)) {
+            val generation = config.optLong("config_generation", 0L)
+            val trusted = lastTrustedJoystickFix?.takeIf { it.generation == generation }
+            if (trusted != null) {
+                config.put("lat", trusted.latitude)
+                config.put("lng", trusted.longitude)
+                config.put("sim_bearing", trusted.bearing)
+            }
+            if (hasValidTargetCoordinates(config)) {
+                // Keep a stationary synthetic fix when live joystick frames stop.
+                // Returning null here makes one-shot requests and Maps lose their
+                // location even though a trusted fake point is still available.
+                config.put("sim_speed", 0.0)
+                config.put("enable_jitter", false)
+                config.put("fail_closed", false)
+                return
+            }
+        }
+        config.put("fail_closed", true)
+        config.put("satellite_count", 0)
     }
 
     private fun readBootId(): String {
@@ -4176,8 +4220,7 @@ class LocationHooker : XposedModule() {
                     val provider = manager?.let(::systemProviderName)
                     val result = param.args.getOrNull(0)
                     if (provider == null || !isSyntheticSystemProvider(provider) ||
-                        !shouldDeliverLocation(config) || result == null ||
-                        !rewriteFrameworkLocationResultInPlace(result, config!!, provider)
+                        !shouldDeliverLocation(config)
                     ) {
                         param.result = null // void onReportLocation: suppress the entire report
                         XposedBridge.logEvery(
@@ -4187,7 +4230,26 @@ class LocationHooker : XposedModule() {
                         )
                         return
                     }
-                    if (!isSyntheticSystemProviderFallback(result, provider)) {
+                    val rewritten = result != null &&
+                        rewriteFrameworkLocationResultInPlace(result, config!!, provider)
+                    val deliveredResult = if (rewritten) result else {
+                        val synthetic = buildCompleteRawLocation(config!!, provider)
+                            ?.let { createFrameworkLocationResult(
+                                manager?.javaClass?.classLoader ?: ClassLoader.getSystemClassLoader(), it
+                            ) }
+                        if (synthetic == null || param.args.isEmpty()) {
+                            param.result = null
+                            XposedBridge.logEvery(
+                                "systemFixSuppressed:$provider",
+                                "[WeRePosition] blocked a provider report without a safe synthetic replacement",
+                                10_000L
+                            )
+                            return
+                        }
+                        param.args[0] = synthetic
+                        synthetic
+                    }
+                    if (!isSyntheticSystemProviderFallback(deliveredResult, provider)) {
                         lastRealSystemProviderReportAtMs[provider] =
                             android.os.SystemClock.elapsedRealtime()
                     }
@@ -4228,15 +4290,25 @@ class LocationHooker : XposedModule() {
                         param.result = null
                         return
                     }
-                    val location = param.result as? android.location.Location ?: return
                     val provider = param.thisObject?.let(::systemProviderName)
                     if (provider == null || !isSyntheticSystemProvider(provider) ||
-                        !shouldDeliverLocation(config) ||
-                        !applySpoofedLocationToObject(
-                            location, config!!, provider,
-                            SpoofedTimestamps(location.time, location.elapsedRealtimeNanos)
-                        )
-                    ) param.result = null
+                        !shouldDeliverLocation(config)
+                    ) {
+                        param.result = null
+                        return
+                    }
+                    // A provider can have no cached fix when the joystick starts or
+                    // after a quiet GNSS interval. Return the trusted synthetic point
+                    // to one-shot readers instead of a null result.
+                    val location = (param.result as? android.location.Location)
+                        ?: android.location.Location(provider)
+                    val timestamps = SpoofedTimestamps(
+                        System.currentTimeMillis(),
+                        android.os.SystemClock.elapsedRealtimeNanos()
+                    )
+                    param.result = if (applySpoofedLocationToObject(
+                        location, config!!, provider, timestamps
+                    )) location else null
                 }
             })
 
