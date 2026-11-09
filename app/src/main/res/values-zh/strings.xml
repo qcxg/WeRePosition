@@ -231,6 +231,8 @@
     <string name="pure_mode_locked">请先停止模拟，再切换 Pure 模式。</string>
     <string name="pure_mode_start_failed">无法安全启用 Pure 模式，系统定位保持关闭。</string>
     <string name="pure_mode_stop_failed">无法关闭系统定位；位置数据仍保持阻断。</string>
+    <string name="pure_mode_location_on">系统定位开关已关联开启</string>
+    <string name="pure_mode_location_off">系统定位开关已关联关闭</string>
     <string name="joystick_ready">摇杆模式已启动 · 拖动摇杆移动</string>
     <string name="joystick_start_hint">启动摇杆模式后显示悬浮控制盘</string>
     <string name="joystick_speed">最高速度 %.1f m/s</string>
@@ -240,7 +242,14 @@
     <string name="joystick_overlay_description">启动摇杆模式后，可在其他 App 上控制模拟位置。</string>
     <string name="joystick_show_overlay">显示悬浮摇杆</string>
     <string name="joystick_hide_overlay">收起悬浮摇杆</string>
-    <string name="joystick_overlay_permission">首次使用需要授予“显示在其他应用上层”权限。拖动轮盘外圈可一起移动两个控件；拖动填充滑条可调速度。</string>
+    <string name="joystick_overlay_permission">首次使用需要授予“显示在其他应用上层”权限。拖动轮盘外圈可移动整组控件，速度由填充滑条调整；两侧按钮可退出模拟或锁定位置。</string>
+    <string name="joystick_enable_location_first">请先开启位置模式；5 秒内再次点击可关联启动</string>
+    <string name="joystick_linked_start">正在关联启动位置模式与摇杆</string>
+    <string name="joystick_rf_disabled">摇杆模式下 Wi-Fi／基站模拟暂停</string>
+    <string name="joystick_exit_simulation">退出整个位置模拟</string>
+    <string name="joystick_lock_overlay">锁定悬浮窗位置</string>
+    <string name="joystick_overlay_locked">悬浮窗位置已锁定</string>
+    <string name="joystick_overlay_unlocked">悬浮窗位置已解锁</string>
     <string name="joystick_speed_bounds">悬浮速度范围</string>
     <string name="joystick_speed_bounds_hint">设置悬浮滑条可选的最低与最高速度。</string>
     <string name="joystick_direction_title">前进方向</string>

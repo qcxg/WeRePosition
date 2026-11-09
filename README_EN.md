@@ -29,6 +29,7 @@ The project follows two rules:
 - Ordinary `LocationManager` requests remain untouched. The module does not swallow requests, rewrite `Location` getters or parcels, or run per-client location timers.
 - GMS and completely unscoped ordinary apps receive the framework location through their normal registrations.
 - Fixed point, the independent floating joystick, and automatic out-and-back routes share the service runtime path. The joystick needs no route points, leaves the home map at its selected starting point, and restores that point when closed. See [joystick design and verification](ai_readme/joystick_refactor_plan.md).
+- The joystick starts separately after location simulation is active. If location mode is off, the first tap explains the prerequisite and a second tap within five seconds starts both. Wi-Fi/cell simulation and location jitter pause while the joystick is visible and resume afterward. The overlay can lock its position or exit the entire simulation.
 
 ### Bounded natural drift
 

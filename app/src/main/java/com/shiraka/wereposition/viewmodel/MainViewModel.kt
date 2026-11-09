@@ -104,6 +104,20 @@ class MainViewModel(
     )
     val uiState: StateFlow<AppState> = _uiState.asStateFlow()
 
+    fun refreshRuntimeStatus() {
+        if (_uiState.value.isSavingConfig) return
+        val active = settingsRepository.isSpoofingActive &&
+            SpooferProvider.isActive && SpoofingService.isRunning
+        _uiState.update { state ->
+            if (state.isSpoofingActive == active) state else state.copy(
+                isSpoofingActive = active,
+                syntheticRfActive = if (active) state.syntheticRfActive else false,
+                syntheticWifiActive = if (active) state.syntheticWifiActive else false,
+                syntheticCellActive = if (active) state.syntheticCellActive else false
+            )
+        }
+    }
+
     private val _coverageLocations = MutableStateFlow<List<com.shiraka.wereposition.data.db.LocationRecord>>(emptyList())
     val coverageLocations: StateFlow<List<com.shiraka.wereposition.data.db.LocationRecord>> =
         _coverageLocations.asStateFlow()
@@ -987,6 +1001,10 @@ class MainViewModel(
                     )
                 )
             }
+            if (settingsRepository.pureModeEnabled) {
+                android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_location_on,
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -1004,6 +1022,9 @@ class MainViewModel(
             val stoppedSafely = locationRepository.stopSpoofing(context)
             if (!stoppedSafely && settingsRepository.pureModeEnabled) {
                 android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_stop_failed, android.widget.Toast.LENGTH_LONG).show()
+            } else if (stoppedSafely && settingsRepository.pureModeEnabled) {
+                android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_location_off,
+                    android.widget.Toast.LENGTH_SHORT).show()
             }
             _uiState.update {
                 it.copy(isSpoofingActive = false, isSavingConfig = false,
@@ -1241,6 +1262,10 @@ class MainViewModel(
             _uiState.update {
                 it.copy(isSpoofingActive = true)
             }
+            if (settingsRepository.pureModeEnabled) {
+                android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_location_on,
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }
             startRouteUiSync()
         }
     }
@@ -1272,6 +1297,9 @@ class MainViewModel(
             val stoppedSafely = locationRepository.stopSpoofing(context)
             if (!stoppedSafely && settingsRepository.pureModeEnabled) {
                 android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_stop_failed, android.widget.Toast.LENGTH_LONG).show()
+            } else if (stoppedSafely && settingsRepository.pureModeEnabled) {
+                android.widget.Toast.makeText(context, com.shiraka.wereposition.R.string.pure_mode_location_off,
+                    android.widget.Toast.LENGTH_SHORT).show()
             }
             _uiState.update {
                 it.copy(

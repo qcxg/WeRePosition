@@ -234,6 +234,8 @@
     <string name="pure_mode_locked">Stop simulation before changing Pure mode.</string>
     <string name="pure_mode_start_failed">Could not safely turn on Pure mode. Android location remains off.</string>
     <string name="pure_mode_stop_failed">Could not turn off Android location; location data remains blocked.</string>
+    <string name="pure_mode_location_on">Android location was turned on with simulation</string>
+    <string name="pure_mode_location_off">Android location was turned off with simulation</string>
     <string name="joystick_ready">Joystick mode active · drag to move</string>
     <string name="joystick_start_hint">Start joystick mode to show the floating control</string>
     <string name="joystick_speed">Maximum speed %.1f m/s</string>
@@ -243,7 +245,14 @@
     <string name="joystick_overlay_description">Start joystick mode to control the simulated position over other apps.</string>
     <string name="joystick_show_overlay">Show floating joystick</string>
     <string name="joystick_hide_overlay">Hide floating joystick</string>
-    <string name="joystick_overlay_permission">The first use requires permission to display over other apps. Drag the wheel rim to move both controls; drag the filled slider to adjust speed.</string>
+    <string name="joystick_overlay_permission">The first use requires permission to display over other apps. Drag the wheel rim to move the controls, use the filled slider for speed, or use the side buttons to exit simulation and lock the overlay.</string>
+    <string name="joystick_enable_location_first">Turn on location mode first; tap again within 5 seconds to start both</string>
+    <string name="joystick_linked_start">Starting location mode and joystick together</string>
+    <string name="joystick_rf_disabled">Wi-Fi and cell simulation pause during joystick mode</string>
+    <string name="joystick_exit_simulation">Exit location simulation</string>
+    <string name="joystick_lock_overlay">Lock overlay position</string>
+    <string name="joystick_overlay_locked">Overlay position locked</string>
+    <string name="joystick_overlay_unlocked">Overlay position unlocked</string>
     <string name="joystick_speed_bounds">Floating speed range</string>
     <string name="joystick_speed_bounds_hint">Set the slowest and fastest values available on the floating slider.</string>
     <string name="joystick_direction_title">Movement direction</string>

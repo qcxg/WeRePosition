@@ -29,6 +29,7 @@
 - 不攔截或吞掉 `LocationManager` 請求，不改寫 `Location` getter／Parcel，也不建立每個 App 的額外派發計時器。
 - GMS 與未加入 module scope 的一般 App 都從 framework 取得定位；GMS 和 Fused Location 不應加入 module scope。GNSS status 與 NMEA 是可選的客戶端補充層。
 - 固定點、獨立懸浮搖桿與自動往返路線共用服務端運行管線。搖桿不依賴路點；地圖上保留開始時選定的位置，結束搖桿時恢復該起點。參見 [搖桿設計與驗證](ai_readme/joystick_refactor_plan.md)。
+- 搖桿只能在位置模擬已啟用時單獨開啟；若尚未啟用，首次點擊會提示，5 秒內再次點擊才連動啟動。搖桿期間 Wi-Fi／基站模擬與位置抖動暫停，收起搖桿後恢復原設定；浮窗可鎖定位置或直接退出整個模擬。
 
 ### 抖動與自然漂移
 

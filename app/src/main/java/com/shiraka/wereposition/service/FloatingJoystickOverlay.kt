@@ -13,6 +13,7 @@ import android.hardware.SensorManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.widget.Toast
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.Surface
@@ -32,7 +33,8 @@ import kotlin.math.sin
 internal class FloatingJoystickOverlay(
     private val context: Context,
     private val onMove: (Double, Float, Float, Double) -> Unit,
-    private val onRelease: () -> Unit
+    private val onRelease: () -> Unit,
+    private val onExitSimulation: () -> Unit
 ) : SensorEventListener {
     private val density = context.resources.displayMetrics.density
     private val settings = SettingsManager(context)
@@ -45,10 +47,17 @@ internal class FloatingJoystickOverlay(
     private val sliderWidth = (132 * density).roundToInt()
     private val sliderHeight = (36 * density).roundToInt()
     private val sliderGap = (8 * density).roundToInt()
+    private val controlSize = (24 * density).roundToInt()
+    private val controlInset = (8 * density).roundToInt()
+    private val controlRaise = (9 * density).roundToInt()
     private var wheelEnd = (settings.joystickOverlayEndDp * density).roundToInt()
     private var wheelBottom = (settings.joystickOverlayBottomDp * density).roundToInt()
     private var wheelDialog: Dialog? = null
     private var sliderDialog: Dialog? = null
+    private var exitDialog: Dialog? = null
+    private var lockDialog: Dialog? = null
+    private var lockView: ControlButtonView? = null
+    private var overlayLocked = settings.joystickOverlayLocked
     private var wheelView: WheelView? = null
     private var sliderView: SpeedSliderView? = null
     private var speed = settings.joystickSpeedMs
@@ -90,6 +99,19 @@ internal class FloatingJoystickOverlay(
             sliderDialog = createWindow(slider, sliderWidth, sliderHeight,
                 sliderEnd(), sliderBottom(), false)
             sliderView = slider
+            exitDialog = createWindow(ControlButtonView(context, false) {
+                onExitSimulation()
+            }, controlSize, controlSize, exitEnd(), controlBottom(), true)
+            val lock = ControlButtonView(context, true) {
+                overlayLocked = !overlayLocked
+                settings.joystickOverlayLocked = overlayLocked
+                lockView?.invalidate()
+                Toast.makeText(context, if (overlayLocked) R.string.joystick_overlay_locked
+                    else R.string.joystick_overlay_unlocked, Toast.LENGTH_SHORT).show()
+            }
+            lockView = lock
+            lockDialog = createWindow(lock, controlSize, controlSize,
+                lockEnd(), controlBottom(), true)
             rotationSensor?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
             lastTickNanos = SystemClock.elapsedRealtimeNanos()
             handler.post(tick)
@@ -108,8 +130,13 @@ internal class FloatingJoystickOverlay(
         intensity = 0f
         wheelDialog?.dismiss()
         sliderDialog?.dismiss()
+        exitDialog?.dismiss()
+        lockDialog?.dismiss()
         wheelDialog = null
         sliderDialog = null
+        exitDialog = null
+        lockDialog = null
+        lockView = null
         wheelView = null
         sliderView = null
         if (wasMoving) onRelease()
@@ -157,15 +184,21 @@ internal class FloatingJoystickOverlay(
 
     private fun sliderBottom(): Int = wheelBottom - sliderHeight - sliderGap
 
+    private fun controlBottom(): Int = wheelBottom - (sliderGap + controlSize) / 2 + controlRaise
+
+    private fun exitEnd(): Int = sliderEnd() + sliderWidth - controlSize / 2 - controlInset
+
+    private fun lockEnd(): Int = sliderEnd() - controlSize / 2 + controlInset
+
     private fun clampOverlayPosition() {
         val metrics = windowManager.currentWindowMetrics
         val safe = metrics.windowInsets.getInsetsIgnoringVisibility(
             WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
         )
         val edge = (8 * density).roundToInt()
-        val minEnd = safe.right + edge
+        val minEnd = safe.right + edge + (sliderWidth - wheelSize) / 2 + controlSize / 2
         val maxEnd = (metrics.bounds.width() - safe.left - edge -
-            maxOf(wheelSize, sliderWidth - (sliderWidth - wheelSize) / 2))
+            ((sliderWidth + wheelSize) / 2 + controlSize / 2))
             .coerceAtLeast(minEnd)
         wheelEnd = wheelEnd.coerceIn(minEnd, maxEnd)
         val minBottom = safe.bottom + sliderHeight + sliderGap + edge
@@ -183,6 +216,12 @@ internal class FloatingJoystickOverlay(
         }
         sliderDialog?.window?.let { window ->
             window.attributes = window.attributes.apply { x = sliderEnd(); y = sliderBottom() }
+        }
+        exitDialog?.window?.let { window ->
+            window.attributes = window.attributes.apply { x = exitEnd(); y = controlBottom() }
+        }
+        lockDialog?.window?.let { window ->
+            window.attributes = window.attributes.apply { x = lockEnd(); y = controlBottom() }
         }
     }
 
@@ -214,6 +253,61 @@ internal class FloatingJoystickOverlay(
             (previous + shortestTurn * 0.25 + 360.0) % 360.0
         } ?: raw
         wheelView?.invalidate()
+    }
+
+    private inner class ControlButtonView(
+        context: Context,
+        private val isLock: Boolean,
+        private val action: () -> Unit
+    ) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = context.getColor(android.R.color.system_accent1_600)
+            style = Paint.Style.STROKE
+            strokeWidth = 2 * density
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+
+        init {
+            contentDescription = context.getString(if (isLock) R.string.joystick_lock_overlay
+                else R.string.joystick_exit_simulation)
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val c = controlSize / 2f
+            if (!isLock) {
+                canvas.drawLine(c - 5 * density, c - 5 * density,
+                    c + 5 * density, c + 5 * density, paint)
+                canvas.drawLine(c + 5 * density, c - 5 * density,
+                    c - 5 * density, c + 5 * density, paint)
+            } else {
+                val left = c - 5 * density
+                val right = c + 5 * density
+                val shackleTop = if (overlayLocked) c - 7 * density else c - 9 * density
+                canvas.drawRoundRect(left, c - density, right, c + 7 * density,
+                    2 * density, 2 * density, paint)
+                if (overlayLocked) {
+                    canvas.drawArc(c - 4 * density, shackleTop, c + 4 * density,
+                        c + 3 * density, 180f, 180f, false, paint)
+                } else {
+                    canvas.drawArc(c - 2 * density, shackleTop, c + 6 * density,
+                        c + density, 180f, 180f, false, paint)
+                }
+            }
+        }
+
+        override fun onTouchEvent(event: MotionEvent): Boolean = when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> true
+            MotionEvent.ACTION_UP -> { performClick(); true }
+            MotionEvent.ACTION_CANCEL -> true
+            else -> true
+        }
+
+        override fun performClick(): Boolean {
+            super.performClick()
+            action()
+            return true
+        }
     }
 
     private inner class WheelView(context: Context) : View(context) {
@@ -268,6 +362,7 @@ internal class FloatingJoystickOverlay(
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     if (hypot(event.x - center, event.y - center) >= 41 * density) {
+                        if (overlayLocked) return true
                         overlayPointerId = event.getPointerId(0)
                         lastRawX = event.rawX
                         lastRawY = event.rawY

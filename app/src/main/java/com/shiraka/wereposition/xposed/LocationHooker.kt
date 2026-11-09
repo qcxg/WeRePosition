@@ -4326,7 +4326,12 @@ class LocationHooker : XposedModule() {
                     val shouldContinue = shouldDeliverLocation(lastConfig)
                     synchronized(systemInjectorLock) {
                         if (systemInjectorStarted && systemInjectorTick === tick && shouldContinue) {
-                            systemLocationHandler.postDelayed(tick, 1_000L)
+                            val intervalMs = if (lastConfig?.optBoolean("joystick_mode", false) == true) {
+                                500L
+                            } else {
+                                1_000L
+                            }
+                            systemLocationHandler.postDelayed(tick, intervalMs)
                         } else if (systemInjectorTick === tick) {
                             systemInjectorStarted = false
                             systemInjectorTick = null
@@ -4356,9 +4361,12 @@ class LocationHooker : XposedModule() {
 
     private fun shouldInjectSystemProviderFallback(provider: String, nowElapsedMs: Long): Boolean {
         val startedAt = systemInjectorStartedAtElapsedMs
-        if (startedAt <= 0L || nowElapsedMs - startedAt < systemInjectorInitialGraceMs) return false
+        val joystickMode = lastConfig?.optBoolean("joystick_mode", false) == true
+        val initialGraceMs = if (joystickMode) 500L else systemInjectorInitialGraceMs
+        val quietWindowMs = if (joystickMode) 1_200L else systemProviderQuietWindowMs
+        if (startedAt <= 0L || nowElapsedMs - startedAt < initialGraceMs) return false
         val lastRealReport = lastRealSystemProviderReportAtMs[provider] ?: return true
-        return nowElapsedMs - lastRealReport >= systemProviderQuietWindowMs
+        return nowElapsedMs - lastRealReport >= quietWindowMs
     }
 
     private fun injectSystemProviderFixes() {

@@ -48,6 +48,10 @@ class SettingsManager(context: Context) {
     val joystickOverlayBottomDp: Int
         get() = prefs.getInt("joystick_overlay_bottom_dp", 176)
 
+    var joystickOverlayLocked: Boolean
+        get() = prefs.getBoolean("joystick_overlay_locked", false)
+        set(value) = prefs.edit().putBoolean("joystick_overlay_locked", value).apply()
+
     fun setJoystickOverlayPosition(endDp: Int, bottomDp: Int) {
         prefs.edit()
             .putInt("joystick_overlay_end_dp", endDp)

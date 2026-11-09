@@ -2,7 +2,9 @@ package com.shiraka.wereposition.ui.screen
 
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -23,10 +25,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.data.model.AppState
+import com.shiraka.wereposition.data.model.StartSpoofingPhase
 import com.shiraka.wereposition.service.SpoofingService
 import com.shiraka.wereposition.utils.SettingsManager
 import com.shiraka.wereposition.viewmodel.MainViewModel
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @Composable
 fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRoute: () -> Unit) {
@@ -38,6 +42,12 @@ fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRo
     var maxSpeed by remember { mutableFloatStateOf(settings.joystickMaxSpeedMs) }
     var overlayVisible by remember { mutableStateOf(SpoofingService.isJoystickVisible) }
     var pendingStart by remember { mutableStateOf(false) }
+    var linkedStartTapAt by remember { mutableLongStateOf(0L) }
+    var pendingPermissionLinkedStart by remember { mutableStateOf(false) }
+
+    fun showToast(message: Int) {
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
 
     fun setOverlayVisible(show: Boolean) {
         context.startService(Intent(context, SpoofingService::class.java).apply {
@@ -45,18 +55,27 @@ fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRo
             putExtra(SpoofingService.EXTRA_JOYSTICK_VISIBLE, show)
         })
         overlayVisible = show
+        if (show && (uiState.mockWifi || uiState.mockCell)) {
+            showToast(R.string.joystick_rf_disabled)
+        }
     }
 
-    fun beginMode() {
-        if (uiState.isSpoofingActive && SpoofingService.isRunning) setOverlayVisible(true)
-        else {
+    fun beginMode(linkedStart: Boolean = false) {
+        if (uiState.isSpoofingActive && SpoofingService.isRunning) {
+            setOverlayVisible(true)
+        } else if (linkedStart) {
+            viewModel.resetStartSpoofingProgress()
             pendingStart = true
+            showToast(R.string.joystick_linked_start)
             viewModel.startSpoofing(allowPartial = true)
+        } else {
+            showToast(R.string.joystick_enable_location_first)
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (Settings.canDrawOverlays(context)) beginMode()
+        if (Settings.canDrawOverlays(context)) beginMode(pendingPermissionLinkedStart)
+        pendingPermissionLinkedStart = false
     }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -65,12 +84,19 @@ fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRo
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(uiState.isSpoofingActive, pendingStart) {
+    LaunchedEffect(uiState.isSpoofingActive, uiState.startSpoofingProgress.phase, pendingStart) {
         if (pendingStart && uiState.isSpoofingActive && SpoofingService.isRunning) {
             setOverlayVisible(true)
             pendingStart = false
-        } else if (!uiState.isSpoofingActive && !uiState.isSavingConfig) {
+        } else if (pendingStart && uiState.startSpoofingProgress.phase == StartSpoofingPhase.ERROR) {
+            pendingStart = false
+        } else if (!uiState.isSpoofingActive && !pendingStart) {
             overlayVisible = false
+        }
+    }
+    LaunchedEffect(pendingStart) {
+        if (pendingStart) {
+            delay(25_000L)
             pendingStart = false
         }
     }
@@ -133,10 +159,26 @@ fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRo
             if (overlayVisible) {
                 pendingStart = false
                 setOverlayVisible(false)
-                viewModel.stopSpoofing()
-            } else if (Settings.canDrawOverlays(context)) beginMode()
-            else permissionLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${context.packageName}")))
+            } else {
+                val linkedStart = if (uiState.isSpoofingActive && SpoofingService.isRunning) {
+                    false
+                } else {
+                    val now = SystemClock.elapsedRealtime()
+                    if (linkedStartTapAt == 0L || now - linkedStartTapAt > 5_000L) {
+                        linkedStartTapAt = now
+                        showToast(R.string.joystick_enable_location_first)
+                        return@Button
+                    }
+                    linkedStartTapAt = 0L
+                    true
+                }
+                if (Settings.canDrawOverlays(context)) beginMode(linkedStart)
+                else {
+                    pendingPermissionLinkedStart = linkedStart
+                    permissionLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")))
+                }
+            }
         }, enabled = !uiState.isSavingConfig, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.SportsEsports, null)
             Spacer(Modifier.width(8.dp))

@@ -15,6 +15,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.shiraka.wereposition.data.db.AppDatabase
+import com.shiraka.wereposition.data.repository.LocationRepository
 import com.shiraka.wereposition.data.model.RoutePoint
 import com.shiraka.wereposition.data.model.SimulatedLocation
 import com.shiraka.wereposition.provider.SpooferProvider
@@ -46,6 +47,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicLong
+import org.koin.core.context.GlobalContext
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -109,6 +111,7 @@ class SpoofingService : Service() {
         val startTimestamp: Long,
         val routeJson: String,
         val isRouteMode: Boolean,
+        val joystickMode: Boolean,
         val wifiJson: String,
         val cellJson: String,
         val mockWifi: Boolean,
@@ -456,11 +459,12 @@ class SpoofingService : Service() {
             startTimestamp = SpooferProvider.startTimestamp,
             routeJson = SpooferProvider.routeJson,
             isRouteMode = SpooferProvider.isRouteMode,
+            joystickMode = isJoystickVisible,
             wifiJson = rfSnapshot.wifiJson,
             cellJson = rfSnapshot.cellJson,
             mockWifi = rfSnapshot.mockWifi,
             mockCell = rfSnapshot.mockCell,
-            enableJitter = SpooferProvider.enableJitter,
+            enableJitter = SpooferProvider.enableJitter && !isJoystickVisible,
             jitterRadiusMeters = SpooferProvider.jitterRadiusMeters,
             jitterSpeed = SpooferProvider.jitterSpeed,
             signalJitterEnabled = SpooferProvider.signalJitterEnabled,
@@ -515,6 +519,15 @@ class SpoofingService : Service() {
     private suspend fun resolveRuntimeRfSnapshot(
         loc: SimulatedLocation
     ): SpooferProvider.Companion.RuntimeRfSnapshot {
+        if (isJoystickVisible) {
+            // RF replay requires a stable coverage cell. During joystick movement the
+            // user's RF switches are temporarily off, without changing their settings.
+            SpooferProvider.publishRfSnapshot(
+                loc.lat, loc.lng, EnvironmentRfResolver.EMPTY_WIFI_JSON, "[]",
+                false, false
+            )
+            return SpooferProvider.rfSnapshotFor(loc.lat, loc.lng)
+        }
         val targetCell = EnvironmentCoveragePolicy.cellFor(loc.lat, loc.lng)
         val databaseRevision = rfDatabaseRevision.get()
         val requestRevision = SpooferProvider.currentRfRefreshRevision()
@@ -616,7 +629,8 @@ class SpoofingService : Service() {
         val overlay = joystickOverlay ?: FloatingJoystickOverlay(
             this,
             onMove = ::moveFromFloatingJoystick,
-            onRelease = ::stopFloatingJoystickMotion
+            onRelease = ::stopFloatingJoystickMotion,
+            onExitSimulation = ::exitSimulationFromOverlay
         ).also { joystickOverlay = it }
         isJoystickVisible = overlay.show()
         if (isJoystickVisible) locationStateWake.trySend(Unit)
@@ -632,9 +646,28 @@ class SpoofingService : Service() {
         if (restoreStart && start != null && SpooferProvider.isActive) {
             SpooferProvider.publishAnchorPosition(start.first, start.second)
             SpooferProvider.publishCurrentPosition(start.first, start.second, 0f, 0f)
-            SpooferProvider.requestRfRefresh()
         }
+        if (SpooferProvider.isActive) SpooferProvider.requestRfRefresh()
         locationStateWake.trySend(Unit)
+    }
+
+    private fun exitSimulationFromOverlay() {
+        hideFloatingJoystick(restoreStart = false)
+        serviceScope.launch {
+            val stopped = runCatching {
+                GlobalContext.get().get<LocationRepository>().stopSpoofing(applicationContext)
+            }.getOrDefault(false)
+            if (settingsManager.pureModeEnabled) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        this@SpoofingService,
+                        if (stopped) com.shiraka.wereposition.R.string.pure_mode_location_off
+                        else com.shiraka.wereposition.R.string.pure_mode_stop_failed,
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     private fun moveFromFloatingJoystick(
@@ -776,13 +809,14 @@ class SpoofingService : Service() {
             put("start_timestamp", SpooferProvider.startTimestamp)
             put("route_points", safeJsonArray(SpooferProvider.routeJson))
             put("is_route_mode", SpooferProvider.isRouteMode)
+            put("joystick_mode", isJoystickVisible)
             put("wifi_json", safeWifiJson(rfSnapshot.wifiJson))
             put("cell_json", safeJsonArray(rfSnapshot.cellJson))
             put("bluetooth_json", JSONArray())
             put("mock_wifi", rfSnapshot.mockWifi)
             put("mock_cell", rfSnapshot.mockCell)
             put("mock_bluetooth", false)
-            put("enable_jitter", SpooferProvider.enableJitter)
+            put("enable_jitter", SpooferProvider.enableJitter && !isJoystickVisible)
             put("jitter_radius_meters", SpooferProvider.jitterRadiusMeters.coerceIn(1, 80))
             put("jitter_speed", SpooferProvider.jitterSpeed)
             put("signal_jitter_enabled", SpooferProvider.signalJitterEnabled)

@@ -145,6 +145,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshRuntimeStatus()
+    }
+
     companion object {
         private val SUPPORTED_LANGUAGE_TAGS = setOf("en", "zh", "zh-TW")
     }
