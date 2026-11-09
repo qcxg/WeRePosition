@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -33,9 +37,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.viewmodel.MainViewModel
@@ -108,18 +114,36 @@ fun AppAccessScreen(viewModel: MainViewModel, uiState: AppState, onBack: () -> U
                 }
             }
             items(filtered, key = { it.packageName }) { app ->
+                val appIcon = remember(app.packageName) {
+                    runCatching { context.packageManager.getApplicationIcon(app.packageName)
+                        .toBitmap(96, 96).asImageBitmap() }.getOrNull()
+                }
                 ElevatedCard {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(app.appName, style = MaterialTheme.typography.titleSmall)
-                        Text(app.packageName, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(R.string.app_access_location), modifier = Modifier.weight(1f))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (appIcon != null) Image(appIcon, null, Modifier.size(40.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(app.appName, style = MaterialTheme.typography.titleSmall)
+                                Text(app.packageName, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Checkbox(
                                 checked = app.packageName in uiState.locationAllowedApps,
-                                onCheckedChange = { viewModel.setLocationAppAllowed(app.packageName, it) }
+                                onCheckedChange = { viewModel.setLocationAppAllowed(app.packageName, it) },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = if (uiState.perAppLocationEnabled) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outline,
+                                    uncheckedColor = MaterialTheme.colorScheme.outline
+                                )
                             )
-                            Text(stringResource(R.string.app_access_rf), modifier = Modifier.weight(1f))
+                            Text(stringResource(R.string.app_access_location), style = MaterialTheme.typography.labelMedium,
+                                color = if (uiState.perAppLocationEnabled) MaterialTheme.colorScheme.onSurface
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Checkbox(
                                 checked = app.packageName in rfPackages,
                                 onCheckedChange = {
@@ -130,11 +154,15 @@ fun AppAccessScreen(viewModel: MainViewModel, uiState: AppState, onBack: () -> U
                                     }
                                 }
                             )
+                            Text(stringResource(R.string.app_access_rf), style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
                 }
             }
-            if (filtered.isEmpty()) {
+            if (uiState.appScopeLoading) {
+                item { CircularProgressIndicator() }
+            } else if (filtered.isEmpty()) {
                 item { Text(stringResource(R.string.no_data_collected)) }
             }
         }

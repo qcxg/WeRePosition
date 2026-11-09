@@ -7,6 +7,7 @@
 3. `EnvironmentRfResolver` reads only captured or imported Room records in the exact target coverage cell.
 4. `SyntheticRfGenerator` is an optional fallback for missing fixed-position RF data. It reverse-geocodes the WGS-84 target, selects a supported E.212 country profile, and returns in-memory JSON. Unknown countries and failed lookups return no generated RF. Generated data is never inserted into Room.
 5. `SpoofingService` resolves the current coordinate and RF snapshot, then publishes it through `SpooferProvider` and runtime files. The provider accepts reads only from the app, Android system, and packages in the LSPosed scope.
+   The floating joystick has a separate input overlay and moves a service-owned runtime anchor. Its 100 ms input loop and 250 ms service frame do not update the selected point shown on the home map. Closing the joystick restores its starting anchor.
 6. `LocationHooker` loads the runtime snapshot in selected processes. Framework position reports are rewritten in `system_server`; client Wi-Fi and cell APIs are hooked only in selected apps. `SystemGnssStatusHook` rewrites `GnssStatusProvider` reports before listener delivery and provides periodic status while the real GNSS stream is quiet. The older client GNSS path remains as a compatibility fallback pending device validation. `SatelliteSkyGenerator` owns sky geometry, `GnssStatusFactory` constructs valid status objects, and `HookCompatibility` contains the libxposed adapter.
 
 ## Data boundaries
@@ -19,3 +20,10 @@
 ## Remaining decomposition
 
 `LocationHooker` still owns several hook families and runtime configuration loading. Move one family at a time into dedicated collaborators with process-state ownership and regression coverage. `MainViewModel` still combines map, collection, and runtime start flows; extract those coordinators after their inputs and cancellation rules are made explicit.
+
+## Map and overlay rendering
+
+- The home map writes a new target only after an idle drag in fixed mode. It never writes a target while the floating joystick is visible.
+- Coverage polygons are keyed by world cell and updated incrementally, so camera idle does not remove and recreate unchanged cells.
+- The floating wheel and speed control are separate overlay windows. Their translucent surfaces do not request live cross-window blur, which otherwise forces repeated composition of underlying map and app surfaces. The speed control is a full-width filled capsule with no thumb.
+- The automatic point-to-point route remains a separate legacy flow. A new route or fixed start closes any active floating joystick. The unused manual route flag and unimplemented road-routing toggle were removed.

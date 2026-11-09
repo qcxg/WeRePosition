@@ -5,8 +5,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,6 +22,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -31,9 +36,7 @@ import com.shiraka.wereposition.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.shiraka.wereposition.ui.components.AppMapView
-import com.shiraka.wereposition.ui.components.AppMapController
-import com.shiraka.wereposition.utils.MapCoverageHelper
+import kotlin.math.roundToInt
 
 private data class ManagedLocationGroup(
     val ids: List<Long>,
@@ -56,15 +59,14 @@ fun ManageDataScreen(
     viewModel: MainViewModel,
     uiState: com.shiraka.wereposition.data.model.AppState,
     isDark: Boolean,
-    onOpenScanner: () -> Unit
+    onOpenScanner: () -> Unit,
+    onLocate: (Double, Double) -> Unit
 ) {
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
     var showClearAllConfirm by remember { mutableStateOf(false) }
-    var mapController by remember { mutableStateOf<AppMapController?>(null) }
     
     var editingItem by remember { mutableStateOf<CompleteLocation?>(null) }
-    var showSamplePreview by remember { mutableStateOf(true) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -80,8 +82,6 @@ fun ManageDataScreen(
     }
 
     val dataList = uiState.manageDataList
-    val coverageLocations by viewModel.coverageLocations.collectAsState()
-    val latestCoverageLocations = rememberUpdatedState(coverageLocations)
     val groupedData = remember(dataList, uiState.nearbyPlaceNames) {
         groupManagedLocations(dataList, uiState.nearbyPlaceNames)
     }
@@ -89,18 +89,6 @@ fun ManageDataScreen(
         viewModel.refreshNearbyPlaceNames(dataList)
     }
     
-    LaunchedEffect(mapController, uiState.mapType) {
-        mapController?.setMapType(uiState.mapType)
-    }
-
-    LaunchedEffect(mapController, coverageLocations) {
-        val controller = mapController ?: return@LaunchedEffect
-        if (coverageLocations.isNotEmpty()) {
-            val latest = coverageLocations.first()
-            controller.moveCamera(latest.lat, latest.lng, 15f)
-        }
-        MapCoverageHelper.drawCoverage(controller, coverageLocations)
-    }
 
     Scaffold(
         topBar = {
@@ -163,11 +151,10 @@ fun ManageDataScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(paddingValues),
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             item(key = "collection-actions") {
-                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(stringResource(R.string.spatial_env_collection), style = MaterialTheme.typography.titleLarge)
                         Text(
                             if (uiState.isContinuousScanning)
@@ -176,13 +163,11 @@ fun ManageDataScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Button(onClick = onOpenScanner, modifier = Modifier.fillMaxWidth()) {
+                        FilledTonalButton(onClick = onOpenScanner, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Rounded.Map, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(R.string.env_map_scan))
                         }
-                        HorizontalDivider()
-                        Text(stringResource(R.string.env_data_sharing_desc), style = MaterialTheme.typography.bodySmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(
                                 onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
@@ -194,43 +179,6 @@ fun ManageDataScreen(
                             ) { Text(stringResource(R.string.export_data)) }
                         }
                     }
-                }
-            }
-
-            item(key = "preview-toggle") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.sample_preview_title), modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    Switch(checked = showSamplePreview, onCheckedChange = { showSamplePreview = it })
-                }
-            }
-            if (showSamplePreview) {
-                item(key = "preview-taipei") {
-                    SampleEnvironmentCard("台北 101", "25.03397, 121.56447", 4, 2)
-                }
-                item(key = "preview-tokyo") {
-                    SampleEnvironmentCard("東京車站", "35.68124, 139.76713", 6, 1)
-                }
-                item(key = "preview-note") {
-                    Text(stringResource(R.string.sample_preview_note), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            if (coverageLocations.isNotEmpty()) {
-                item(key = "coverage-map") {
-                    Box(Modifier.fillMaxWidth().height(220.dp).clip(MaterialTheme.shapes.large)) {
-                        AppMapView(
-                            modifier = Modifier.fillMaxSize(),
-                            onMapReady = { controller ->
-                                mapController = controller
-                                controller.disableUiControls()
-                                controller.setOnCameraChangeListener { _, _ ->
-                                    MapCoverageHelper.drawCoverage(controller, latestCoverageLocations.value)
-                                }
-                            }
-                        )
-                    }
-                }
             }
 
             item(key = "records-heading") {
@@ -259,9 +207,7 @@ fun ManageDataScreen(
                                 }
                             },
                             onClick = {
-                                viewModel.updateLatitude(String.format(Locale.US, "%.6f", item.lat))
-                                viewModel.updateLongitude(String.format(Locale.US, "%.6f", item.lng))
-                                mapController?.animateCamera(item.lat, item.lng, 17f)
+                                onLocate(item.lat, item.lng)
                             },
                             onDeleteSingle = {
                                 viewModel.deleteManageData(item.ids)
@@ -349,20 +295,6 @@ fun ManageDataScreen(
     }
 }
 
-@Composable
-private fun SampleEnvironmentCard(name: String, coordinates: String, wifiCount: Int, cellCount: Int) {
-    ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Text(coordinates, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Wi-Fi $wifiCount", style = MaterialTheme.typography.labelMedium)
-                Text(stringResource(R.string.sample_cell_count, cellCount), style = MaterialTheme.typography.labelMedium)
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DataListItem(
@@ -378,90 +310,69 @@ private fun DataListItem(
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val timeStr = remember(group.timestamp) { dateFormat.format(Date(group.timestamp)) }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(
-                onClick = { 
-                    if (isSelectionMode) onSelect() 
-                    else onClick()
-                },
-                onLongClick = onLongClick
-            ),
-        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else com.shiraka.wereposition.ui.theme.AppColors.cardBackground(isDark),
-        tonalElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isSelectionMode) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onSelect() },
-                    modifier = Modifier.padding(end = 16.dp)
-                )
-            }
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = String.format(Locale.US, "%.5f, %.5f", group.lat, group.lng),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    IconTextRow(Icons.Rounded.Wifi, sourceText(group.wifiCount, group.wifiSources))
-                    IconTextRow(Icons.Rounded.CellTower, sourceText(group.cellCount, group.cellSources))
-                    if (group.bluetoothCount > 0) {
-                        IconTextRow(Icons.Rounded.Bluetooth, sourceText(group.bluetoothCount, group.bluetoothSources))
-                    }
-                }
-                
-                if (group.nearbyName.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "此地點位於 ${group.nearbyName} 附近",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                    )
+    val density = LocalDensity.current
+    val revealWidth = with(density) { 80.dp.toPx() }
+    var dragOffset by remember(group.ids) { mutableFloatStateOf(0f) }
+    var dragging by remember(group.ids) { mutableStateOf(false) }
+    var revealDelete by remember(group.ids) { mutableStateOf(false) }
+    val offset by animateFloatAsState(
+        targetValue = if (dragging) dragOffset else if (revealDelete) -revealWidth else 0f,
+        label = "recordSwipe"
+    )
+    Column {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))) {
+            Box(Modifier.align(Alignment.CenterEnd).width(80.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                IconButton(onClick = onDeleteSingle) {
+                    Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error)
                 }
             }
-
-            if (!isSelectionMode) {
-                Row {
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            Icons.Rounded.Edit,
-                            contentDescription = stringResource(R.string.edit_location_data),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+            Surface(
+                modifier = Modifier.fillMaxWidth()
+                    .offset { IntOffset(offset.roundToInt(), 0) }
+                    .pointerInput(group.ids, isSelectionMode) {
+                        if (!isSelectionMode) detectHorizontalDragGestures(
+                            onDragStart = { dragging = true; dragOffset = if (revealDelete) -revealWidth else 0f },
+                            onHorizontalDrag = { change, amount ->
+                                change.consume()
+                                dragOffset = (dragOffset + amount).coerceIn(-revealWidth, 0f)
+                            },
+                            onDragEnd = { revealDelete = dragOffset < -revealWidth / 2f; dragging = false },
+                            onDragCancel = { dragging = false }
                         )
                     }
-                    IconButton(onClick = onDeleteSingle) {
-                        Icon(
-                            Icons.Rounded.DeleteOutline,
-                            contentDescription = stringResource(R.string.delete),
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-                        )
+                    .combinedClickable(
+                        onClick = { if (isSelectionMode) onSelect() else onEdit() },
+                        onLongClick = onLongClick
+                    ),
+                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp
+            ) {
+                Row(Modifier.fillMaxWidth().padding(start = 10.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (isSelectionMode) Checkbox(isSelected, onCheckedChange = { onSelect() })
+                    Icon(Icons.Rounded.Place, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(group.nearbyName.ifBlank { timeStr }, style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(String.format(Locale.US, "%.5f, %.5f · %s", group.lat, group.lng, timeStr),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Wi-Fi ${group.wifiCount} · ${stringResource(R.string.sample_cell_count, group.cellCount)}" +
+                            if (group.bluetoothCount > 0) " · Bluetooth ${group.bluetoothCount}" else "",
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (group.wifiSources.contains("虛擬資料") || group.cellSources.contains("虛擬資料")) {
+                            Text(stringResource(R.string.synthetic_record), style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
+                    if (!isSelectionMode) IconButton(onClick = onClick) {
+                        Icon(Icons.Rounded.MyLocation, stringResource(R.string.open_on_map), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     }
 }
 
@@ -538,6 +449,7 @@ private fun sourceLabelsForGroup(group: List<CompleteLocation>, kind: String): L
 
     val groupText = group.joinToString(" ") { "${it.location.placeName} ${it.location.remark}" }
     val labels = mutableListOf<String>()
+    if (groupText.contains("[SYNTHETIC_DATA]")) return listOf("虛擬資料")
     if (kind == "wifi" && groupText.contains("WiGLE", ignoreCase = true)) {
         labels += "由 WiGLE 導入"
     }

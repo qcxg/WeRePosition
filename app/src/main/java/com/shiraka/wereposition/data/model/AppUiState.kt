@@ -60,13 +60,6 @@ enum class RoutePlanStage {
 }
 
 /** 路线运行模式 */
-enum class RouteRunMode {
-    /** 手动模式：摇杆控制移动方向和速度 */
-    MANUAL,
-    /** 循环模式：按路线自动来回移动 */
-    LOOP
-}
-
 enum class AppMapType {
     NORMAL,
     SATELLITE,
@@ -98,6 +91,7 @@ data class AppState(
     val pureModeEnabled: Boolean = false,
     val locationAllowedApps: Set<String> = emptySet(),
     val installedApps: List<AppInfoItem> = emptyList(),
+    val appScopeLoading: Boolean = false,
     val searchKeyword: String = "",
     val searchMode: SearchMode = SearchMode.NETWORK,
     val searchResults: List<SavedLocation> = emptyList(),
@@ -106,16 +100,10 @@ data class AppState(
     // 路线规划
     val routePoints: List<RoutePoint> = emptyList(),
     val routePlanStage: RoutePlanStage = RoutePlanStage.IDLE,
-    /** 路线运行模式（手动 / 循环） */
-    val routeRunMode: RouteRunMode = RouteRunMode.MANUAL,
     /** 循环模式使用的速度 */
     val routeSimMode: SimMode = SimMode.WALKING,
     /** 自定义速度 (m/s)，仅当 routeSimMode == CUSTOM 时使用 */
     val customSpeedMs: Double = 1.5,
-    /** 是否使用真实路线规划 */
-    val useRealRoute: Boolean = false,
-    /** 是否正在向地图API请求真实路线 */
-    val isFetchingRoute: Boolean = false,
     /** 首页地图已确认的选点（点击地图后出现确认按钮，确认后填充坐标） */
     val mapConfirmedPoint: Pair<Double, Double>? = null,
     val googleApiKey: String = "",

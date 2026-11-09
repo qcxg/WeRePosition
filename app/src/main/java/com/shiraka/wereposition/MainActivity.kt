@@ -268,6 +268,8 @@ fun MainScreen(
                             onExpandMap = { isFullScreenMap = true }
                         )
                         MainTab.JOYSTICK -> JoystickSettingsScreen(
+                            viewModel = viewModel,
+                            uiState = uiState,
                             onPlanRoute = {
                                 viewModel.enterRoutePlanning()
                                 isFullScreenMap = true
@@ -275,7 +277,11 @@ fun MainScreen(
                         )
                         MainTab.DATA -> com.shiraka.wereposition.ui.screen.ManageDataScreen(
                             viewModel = viewModel, uiState = uiState, isDark = isDark,
-                            onOpenScanner = { isScannerMap = true }
+                            onOpenScanner = { isScannerMap = true },
+                            onLocate = { lat, lng ->
+                                viewModel.confirmMapPoint(lat, lng)
+                                selectedTab = MainTab.FIXED
+                            }
                         )
                         MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
                             viewModel = viewModel, uiState = uiState

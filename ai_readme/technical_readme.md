@@ -1,6 +1,6 @@
 # WeRePosition Current Simulation Pipeline
 
-Last maintained: 2026-07-20 (repository cleanup, removal of unreachable compatibility hooks, and release documentation)
+Last maintained: 2026-11-09 (floating joystick separation, rendering and documentation audit)
 
 This document is the current source of truth for how WeRePosition simulates GNSS, Wi-Fi, cellular, and related environment signals. It is written for future coding agents and developers so the implementation stays understandable and does not drift into hidden generated telemetry.
 
@@ -45,7 +45,7 @@ Active spoofing state is written to:
 
 JSON config files are written through a generation-tagged `.tmp` file followed by `mv` to the final path. Full snapshots are written on static/RF change and as a 60-second fallback, not once per movement tick. `RuntimeConfigWriteCoordinator` serializes in-process commits and advances only after an acknowledged write succeeds. Every root writer also holds `/data/local/tmp/wereposition_runtime.lock`, opened as a shell-function redirection so Android toybox `flock` inherits a valid fd. Generation ordering uses decimal-string comparison because Android shell arithmetic is not reliably 64-bit. An admitted old full snapshot therefore cannot finish after a successful stop snapshot and reactivate the runtime.
 
-`gsm.wrp.frame` is the active hot path. It is one bounded property value containing protocol version, active state, the last successful full-snapshot generation, monotonic heartbeat, E7 coordinates, bearing, and speed. A moving run changes only this frame at 1 Hz; a stationary run refreshes it every 10 seconds. The Hook validates the frame and, when its generation matches the cached JSON snapshot, clones/overlays memory without touching disk, ContentProvider, or preferences. A frame generation change is the signal to reload the full JSON snapshot.
+`gsm.wrp.frame` is the active hot path. It is one bounded property value containing protocol version, active state, the last successful full-snapshot generation, monotonic heartbeat, E7 coordinates, bearing, and speed. The floating joystick can update this frame about every 250 ms while visible; ordinary moving modes use the regular service cadence and a stationary run refreshes it every 10 seconds. The Hook validates the frame and, when its generation matches the cached JSON snapshot, clones/overlays memory without touching disk, ContentProvider, or preferences. A frame generation change is the signal to reload the full JSON snapshot.
 
 `LocationHooker.readConfig()` reads only the expected path for its process: UID 1000 uses `/data/system`, other hooked clients use `/data/local/tmp`. It never probes both paths, and after the first permission denial that process permanently disables disk reads and uses the exported ContentProvider instead. XSharedPreferences is not queried by the runtime path. Rich Wi-Fi/cell JSON is never carried in legacy properties. The SystemProperties change callback is global, so it performs only compact property reads and equality checks; unrelated property changes do not trigger JSON parsing or I/O.
 
@@ -74,7 +74,7 @@ Routine success and failure logs in hot hook/scanner paths use fixed-cardinality
 
 Collected environment records remain in Room/SQLite. The active Room flow/projection loads only rows with replayable Wi-Fi or cell relations; historical Bluetooth tables and management/import compatibility remain in the schema but are not materialized by runtime simulation. Map rendering, UI capability checks, and runtime resolution all use `EnvironmentCoveragePolicy`: a world-fixed Web Mercator hex grid with a 30 m circumradius. `EnvironmentRfResolver` queries a conservative DAO bound and then requires the stored row and target to have the exact same cell ID. Sampling density cannot enlarge coverage, and no distance-based fallback may borrow RF data across an edge.
 
-Fixed-point, route, and manual-joystick movement share one output path. `MainViewModel` updates in-memory anchors/options and requests refreshes, but never writes runtime files. `SpoofingService` is the sole continuous writer; it re-resolves RF after an exact-cell change, a Room invalidation, an explicit refresh request, or material movement within a cell before publishing the next heartbeat/config. Do not restore a second active-runtime writer in `MainViewModel`.
+Fixed-point, automatic route, and floating joystick movement share one output path. `MainViewModel` updates fixed-point and route options, but never writes runtime files. The joystick overlay passes direction and speed to `SpoofingService`; that service alone integrates joystick motion and publishes runtime output. It re-resolves RF after an exact-cell change, a Room invalidation, an explicit refresh request, or material movement within a cell. Do not restore a second active-runtime writer in `MainViewModel`.
 
 The start-spoofing dialog uses content height up to a screen-bounded maximum, then scrolls. Collapsed sections are removed from layout instead of reserving blank space or animating platform-window remeasurement. It stays visible after confirmation as a compact progress surface. Local exact-cell RF cache hits enable immediately; API misses identify WiGLE/OpenCellID as separate sources and offer either retry or "use current state" startup. User-enabled RF channels remain enabled even when their exact-cell payload is empty, in which case diagnostics show `block only` and hooks hide real RF data.
 
@@ -90,7 +90,7 @@ Start/API work is guarded by both a UI operation generation and a repository/ser
 
 ### Data Source
 
-GNSS coordinates come from the selected target coordinate or the host app's legacy route/joystick path. Fixed-point behavior is the currently verified primary mode; route-coupled manual control is scheduled for replacement in `joystick_refactor_plan.md`. Standard Android location is independent of Wi-Fi/cell payload availability. Wi-Fi and cell hooks are optional RF supplements; they never gate whether a normal `LocationManager` consumer can obtain a fix.
+GNSS coordinates come from the selected WGS-84 target, the separate automatic route, or the service-owned floating joystick. Standard Android location is independent of Wi-Fi/cell payload availability. Wi-Fi and cell hooks are optional RF supplements; they never gate whether a normal `LocationManager` consumer can obtain a fix.
 
 The host/UI coordinate, saved points, RF database, runtime `lat`/`lng`, GNSS generation, and Android framework fix are all WGS-84. A future GCJ-02 or BD-09 integration must convert only at that external map or data-source boundary.
 
@@ -99,7 +99,7 @@ The host/UI coordinate, saved points, RF database, runtime `lat`/`lng`, GNSS gen
 There is exactly one owner for ordinary location cadence: the module instance loaded by `onSystemServerStarting`.
 
 ```text
-SpoofingService fixed / legacy route / manual output point
+SpoofingService fixed / automatic route / floating joystick output point
   -> system_server 1 Hz cadence
   -> current real AbstractLocationProvider.reportLocation(LocationResult)
   -> LocationProviderManager.onReportLocation() before-hook replaces or suppresses provider input
@@ -131,8 +131,8 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 - A complete fix includes paired latitude/longitude, horizontal accuracy, optional altitude plus vertical accuracy, wall time, elapsed realtime, and motion fields. MSL altitude from an old real fix is removed. Speed/bearing and their accuracies are either set together for moving simulation or removed together for stationary simulation.
 - Wall time is current; elapsed realtime is non-decreasing and never manufactured in the future. Drift cadence uses `SystemClock.elapsedRealtime()`, not wall clock, so network time corrections cannot freeze jitter.
 - The location master switch remains authoritative for delivery, not lifecycle admission. Simulation may be armed while the switch is off; the foreground service stays asleep with no active runtime frame/RF output, then writes its first full snapshot automatically when the switch is enabled. Turning it off during a run pauses output and turning it back on resumes with a fresh full snapshot.
-- While fixed spoofing is active, dragging the home map and leaving it idle updates the shared anchor; the next service heartbeat publishes it instead of `MainViewModel` writing runtime config directly.
-- The foreground service is the single moving-output and active-runtime writer for fixed, route, and manual modes. It keeps moving coordinates fresh through the compact frame at 1 Hz, refreshes a stationary frame every 10 seconds, and rewrites full runtime JSON only on content/RF changes or the 60-second safety fallback. It does not apply final random jitter before publication.
+- While fixed spoofing is active, dragging the home map and leaving it idle updates the shared anchor. While the floating joystick is visible, home-map dragging never changes the runtime anchor or the selected home-map point. Closing the joystick restores its starting anchor.
+- The foreground service is the single moving-output and active-runtime writer for fixed, route, and joystick modes. The floating joystick keeps moving coordinates fresh through the compact frame at up to about 250 ms intervals, a stationary run refreshes its frame every 10 seconds, and full runtime JSON is rewritten only on content/RF changes or the 60-second safety fallback. It does not apply final random jitter before publication.
 - Jitter is sampled only on the authoritative framework cadence. `jitter_radius_meters` is the requested roaming envelope, not only a distant clamp. Slow/medium/fast use different OU time scales and hold a coordinate sample for about 2.8 / 1.5 / 0.8 seconds, producing approximately 3 / 2 / 1-fix advancement at 1 Hz while timestamps remain fresh. When any RF switch is enabled, the final WGS-84 OU sample is bounded to the anchor's exact `EnvironmentCoveragePolicy` cell; this prevents a delivered coordinate from crossing into a cell whose RF payload was not resolved. With all RF switches off, the full configured drift envelope remains available. The location fields are written together, so paired latitude/longitude can never belong to different samples.
 - `onSystemServerStarting` installs the framework hook groups once per PID. Later `onPackageReady` callbacks in that PID are ignored by the process installation guard.
 - GMS receives ordinary framework reports through its normal registrations and is not injected by this module.
@@ -163,13 +163,13 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 - GNSS object compatibility depends on Android version. Prefer public getter hooks and avoid private field mutation.
 - The provider cadence and `onReportLocation` hook have been checked on the connected API 37 device. Other framework versions need their provider-manager method order verified before deployment.
 - The current stable path does not rewrite magnetometer data or force `Location` bearing APIs in fixed spoofing mode. Compass calibration, magnetic-field accuracy, and app-side compass behavior remain handled by the system/physical sensor stack. Route, joystick, and moving simulation modes can still expose course-over-ground through `Location` speed/bearing.
-- Legacy route/manual UI was not part of the 2026-07-13 regression pass. Its known coupling and planned removal/rewrite are documented in `joystick_refactor_plan.md`; that work must preserve the same service writer and framework hook chain.
+- The unused manual route flag and the unimplemented road-routing toggle were removed. Automatic out-and-back routes remain separate from the floating joystick. Device validation is still required after installing new hook bytecode in already running target processes.
 
 ## Wi-Fi Simulation
 
 ### Trusted Wi-Fi Sources
 
-Wi-Fi simulation accepts only:
+Replayable real Wi-Fi data comes from:
 
 - Real local scans from `EnvironmentScanner.scanWifi()`.
 - Previously stored local environment records from Room.
@@ -241,7 +241,7 @@ This is an app-side readiness check. Full confirmation that a target process con
 
 ### Trusted Cell Sources
 
-Cell simulation accepts only:
+Replayable real cell data comes from:
 
 - Real local scans from `EnvironmentScanner.scanCell()`.
 - Previously stored local environment records from Room.
@@ -254,7 +254,7 @@ Cell simulation accepts only:
 - returned cells cannot be normalized,
 - the request fails.
 
-### Removed Synthetic Paths
+### Explicit Synthetic RF And Removed Hidden Fallbacks
 
 The following paths are intentionally removed or disabled:
 
@@ -263,6 +263,8 @@ The following paths are intentionally removed or disabled:
 - generated LAC/CID fallback for `getCellLocation()` when `cell_json` is empty.
 
 If `cell_json` is empty while active and `mock_cell=true`, the hook returns empty or null cell structures. This keeps real base stations blocked without creating hidden fake towers.
+
+An opt-in setting may generate fictional country-matched Wi-Fi and cell JSON through `SyntheticRfGenerator` when no local RF exists. The generated snapshot is in memory for the simulation cycle, is labelled as simulation in the UI, and is never saved to the Room collection. This is separate from the removed hidden coordinate-derived fallbacks above.
 
 ### Local Cell Storage
 
@@ -337,7 +339,7 @@ The previous experimental magnetic-field hook is removed from the stable hook ch
 - Remote API imports must be labeled as `由 WiGLE 導入` / `由 OpenCellID 導入`, not reused as place names.
 - The app UI groups environment records with the same coordinate into one visible location and shows RF source labels beside the Wi-Fi/cell counts.
 - Nearby place names resolve through Google Places Nearby Search first, then Google Geocoding and Android `Geocoder`, with `WeRePosition_Debug` logs for success and failure.
-- Recent locations are separate from saved favorites: the home screen shows the latest seven used locations, while the top bookmark button opens the saved favorites list.
+- Recent locations are separate from saved favorites: the home screen shows a user-configurable number of used locations, while the top bookmark button opens saved favorites.
 - Recent locations must be written only after the current coordinate's Wi-Fi/cell payload has been resolved; loading a saved/recent point re-evaluates local RF data for that coordinate.
 - If Android object construction needs missing optional fields, use harmless structural defaults and keep identity fields from trusted data.
 

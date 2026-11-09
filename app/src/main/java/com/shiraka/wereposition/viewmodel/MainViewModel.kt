@@ -7,10 +7,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.LocationServices
 import com.shiraka.wereposition.data.db.RfCoverageLocation
+import com.shiraka.wereposition.data.db.LocationRecord
+import com.shiraka.wereposition.data.db.WifiDevice
+import com.shiraka.wereposition.data.db.LocationWifi
+import com.shiraka.wereposition.data.db.CellDevice
+import com.shiraka.wereposition.data.db.LocationCell
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.data.model.RoutePoint
 import com.shiraka.wereposition.data.model.RoutePlanStage
-import com.shiraka.wereposition.data.model.RouteRunMode
 import com.shiraka.wereposition.data.model.SavedLocation
 import com.shiraka.wereposition.data.model.SimMode
 import com.shiraka.wereposition.data.model.AppMapType
@@ -1024,8 +1028,7 @@ class MainViewModel(
                     syntheticWifiActive = false,
                     syntheticCellActive = false,
                     routePlanStage = RoutePlanStage.IDLE,
-                    routePoints = emptyList(),
-                    routeRunMode = RouteRunMode.MANUAL
+                    routePoints = emptyList()
                 )
             }
             val ok = withContext(Dispatchers.IO) {
@@ -1034,30 +1037,6 @@ class MainViewModel(
             evaluateMockCapabilities()
             onComplete(ok)
         }
-    }
-
-    // 摇杆控制
-
-    fun moveByJoystick(bearing: Double, intensity: Float, maxSpeedMs: Float) {
-        val elapsedSec = 0.1
-        val distance = maxSpeedMs * intensity * elapsedSec
-        val R = 6378137.0
-        val bearingRad = Math.toRadians(bearing)
-        val lat = _uiState.value.latitudeInput.toDoubleOrNull() ?: return
-        val lng = _uiState.value.longitudeInput.toDoubleOrNull() ?: return
-        val latRad = Math.toRadians(lat)
-        val lngRad = Math.toRadians(lng)
-        val newLatRad = Math.asin(
-            kotlin.math.sin(latRad) * kotlin.math.cos(distance / R) +
-            kotlin.math.cos(latRad) * kotlin.math.sin(distance / R) * kotlin.math.cos(bearingRad)
-        )
-        val newLngRad = lngRad + kotlin.math.atan2(
-            kotlin.math.sin(bearingRad) * kotlin.math.sin(distance / R) * kotlin.math.cos(latRad),
-            kotlin.math.cos(distance / R) - kotlin.math.sin(latRad) * kotlin.math.sin(newLatRad)
-        )
-        val newLat = Math.toDegrees(newLatRad)
-        val newLng = EnvironmentCoveragePolicy.normalizeLongitude(Math.toDegrees(newLngRad))
-        updatePosition(newLat, newLng, bearing.toFloat())
     }
 
     // 路线规划状态机
@@ -1099,11 +1078,6 @@ class MainViewModel(
                 routePlanStage = RoutePlanStage.SELECTING
             )
         }
-    }
-
-    /** 设置路线运行模式 */
-    fun setRouteRunMode(mode: RouteRunMode) {
-        _uiState.update { it.copy(routeRunMode = mode) }
     }
 
     fun saveRoute(name: String, points: List<RoutePoint>) {
@@ -1160,7 +1134,7 @@ class MainViewModel(
 
     fun updateSpoofingPositionFromMap(lat: Double, lng: Double): Boolean {
         val state = _uiState.value
-        if (!state.isSpoofingActive) return false
+        if (!state.isSpoofingActive || SpoofingService.isJoystickVisible) return false
         if (lng !in -180.0..180.0 || lat !in -90.0..90.0) return false
 
         val oldLat = state.latitudeInput.toDoubleOrNull()
@@ -1191,14 +1165,9 @@ class MainViewModel(
 
     /** 清除地图选点状态 */
 
-    fun setUseRealRoute(use: Boolean) {
-        _uiState.update { it.copy(useRealRoute = use) }
-    }
-
     /**
      * 开始路线模拟。
-     * - 手动模式：启动 spoofing（STILL），由摇杆驱动 moveByJoystick 实时更新坐标。
-     * - 循环模式：启动 spoofing，自动沿路线点按速度移动，到终点后反向循环。
+     * 啟動自動路線模擬，沿路線點移動，到終點後反向循環。
      */
     fun startRoutePlanning() {
         val state = _uiState.value
@@ -1223,8 +1192,6 @@ class MainViewModel(
             )
         }
 
-        val isLoop = state.routeRunMode == RouteRunMode.LOOP
-
         val operationGeneration = runtimeOperationGeneration.incrementAndGet()
         runtimeStartJob?.cancel()
         runtimeStartJob = viewModelScope.launch {
@@ -1241,8 +1208,8 @@ class MainViewModel(
             try {
                 locationRepository.startSpoofing(
                     context, startPoint.lat, startPoint.lng,
-                    if (isLoop) state.routeSimMode.name else "STILL",
-                    0f, now, pointsToRun, isLoop,
+                    state.routeSimMode.name,
+                    0f, now, pointsToRun, true,
                     resolved.wifiJson, resolved.cellJson,
                     runtimeState.mockWifi,
                     runtimeState.mockCell,
@@ -1274,9 +1241,7 @@ class MainViewModel(
             _uiState.update {
                 it.copy(isSpoofingActive = true)
             }
-            if (isLoop) {
-                startRouteUiSync()
-            }
+            startRouteUiSync()
         }
     }
 
@@ -1292,8 +1257,7 @@ class MainViewModel(
         _uiState.update {
             it.copy(
                 routePlanStage = RoutePlanStage.IDLE,
-                routePoints = emptyList(),
-                routeRunMode = RouteRunMode.MANUAL
+                routePoints = emptyList()
             )
         }
     }
@@ -1313,8 +1277,7 @@ class MainViewModel(
                 it.copy(
                     isSpoofingActive = false,
                     routePlanStage = RoutePlanStage.IDLE,
-                    routePoints = emptyList(),
-                    routeRunMode = RouteRunMode.MANUAL
+                    routePoints = emptyList()
                 )
             }
         }
@@ -1365,9 +1328,11 @@ class MainViewModel(
     }
 
     fun loadInstalledApps() {
+        _uiState.update { it.copy(installedApps = emptyList(), hookedApps = emptyList(), appScopeLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
-            val apps = lsposedManager.getInstalledApps(context)
-            _uiState.update { it.copy(installedApps = apps, hookedApps = lsposedManager.getHookedApps(context)) }
+            val apps = runCatching { lsposedManager.getInstalledApps(context) }.getOrDefault(emptyList())
+            val currentScope = lsposedManager.getHookedApps(context)
+            _uiState.update { it.copy(installedApps = apps, hookedApps = currentScope, appScopeLoading = false) }
         }
     }
 
@@ -1476,8 +1441,8 @@ class MainViewModel(
         }
     }
 
-    /** Manual movement updates the anchor; SpoofingService publishes the next heartbeat. */
-    private fun updatePosition(lat: Double, lng: Double, bearing: Float) {
+    /** Map selection updates the fixed anchor; SpoofingService publishes the next heartbeat. */
+    private fun updatePosition(lat: Double, lng: Double, bearing: Float, speedMs: Float = 0f) {
         _uiState.update {
             it.copy(
                 latitudeInput = String.format("%.6f", lat),
@@ -1492,8 +1457,8 @@ class MainViewModel(
         SpooferProvider.isRouteMode = false
         SpooferProvider.routeJson = "[]"
         SpooferProvider.simBearing = bearing
-        SpooferProvider.simSpeed = 0f
-        SpooferProvider.publishCurrentPosition(lat, lng, bearing, 0f)
+        SpooferProvider.simSpeed = speedMs
+        SpooferProvider.publishCurrentPosition(lat, lng, bearing, speedMs)
         if (wasAutomaticRoute || SpooferProvider.startTimestamp <= 0L) {
             SpooferProvider.startTimestamp = System.currentTimeMillis()
         }
@@ -1729,12 +1694,47 @@ class MainViewModel(
     fun loadManageData() {
         _uiState.update { it.copy(manageDataIsLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
+            if (!settingsRepository.sampleEnvironmentSeeded) {
+                runCatching {
+                    seedSampleEnvironmentRecords()
+                    settingsRepository.sampleEnvironmentSeeded = true
+                }.onFailure { android.util.Log.e("MainViewModel", "sample environment seed failed", it) }
+            }
             val list = environmentDao.getAllCompleteLocations()
             withContext(Dispatchers.Main) {
                 _uiState.update { it.copy(manageDataList = list, manageDataIsLoading = false) }
                 evaluateMockCapabilities()
             }
             refreshNearbyPlaceNames(list)
+        }
+    }
+
+    /** Two ordinary, deletable database records for checking RF replay and list layout. */
+    private suspend fun seedSampleEnvironmentRecords() {
+        data class Sample(val name: String, val lat: Double, val lng: Double, val mcc: Int, val mnc: Int,
+            val ssids: List<String>, val tac: Int, val ci: Int)
+        val samples = listOf(
+            Sample("台北 101", 25.03397, 121.56447, 466, 92,
+                listOf("Chunghwa-WiFi-101", "TW_Cafe_5G"), 20831, 72149031),
+            Sample("東京車站", 35.68124, 139.76713, 440, 10,
+                listOf("docomo-WiFi-Tokyo", "JR_East_Free_WiFi"), 10294, 33621874)
+        )
+        samples.forEachIndexed { sampleIndex, sample ->
+            val locationId = environmentDao.insertLocation(LocationRecord(
+                lat = sample.lat, lng = sample.lng, placeName = sample.name,
+                remark = "[SYNTHETIC_DATA]"
+            ))
+            sample.ssids.forEachIndexed { wifiIndex, ssid ->
+                val bssid = String.format(Locale.US, "02:57:%02x:%02x:%02x:%02x",
+                    sampleIndex + 1, wifiIndex + 1, 0x20 + sampleIndex, 0x30 + wifiIndex)
+                environmentDao.insertWifiDevice(WifiDevice(bssid, ssid, 2412 + wifiIndex * 5,
+                    "[WPA2-PSK-CCMP][ESS]"))
+                environmentDao.insertLocationWifi(LocationWifi(locationId, bssid, -54 - wifiIndex * 9))
+            }
+            val cellKey = "sample-${sample.mcc}-${sample.mnc}-${sample.ci}"
+            environmentDao.insertCellDevice(CellDevice(cellKey, "LTE", sample.mcc, sample.mnc,
+                tac = sample.tac, ci = sample.ci, pci = 100 + sampleIndex))
+            environmentDao.insertLocationCell(LocationCell(locationId, cellKey, -85, true))
         }
     }
 

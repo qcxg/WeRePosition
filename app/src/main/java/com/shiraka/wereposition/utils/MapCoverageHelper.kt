@@ -12,8 +12,12 @@ object MapCoverageHelper {
      * cell; they must not expand the claimed coverage into nearby empty space.
      */
     fun drawCoverage(controller: AppMapController, locations: List<LocationRecord>) {
-        controller.clearCoverage()
-        if (locations.isEmpty()) return
+        val fillColor = android.graphics.Color.argb(62, 46, 204, 113)
+        val strokeColor = android.graphics.Color.argb(128, 46, 204, 113)
+        if (locations.isEmpty()) {
+            controller.setCoveragePolygons(emptyMap(), fillColor, strokeColor, 1.25f)
+            return
+        }
 
         val visible = controller.visibleBounds()
         val filteredLocations = if (visible == null) {
@@ -25,7 +29,10 @@ object MapCoverageHelper {
             // merely because its stored sample is just outside the edge.
             val paddingLatitude = max(abs(visible.minLat), abs(visible.maxLat))
             val padding = EnvironmentCoveragePolicy.coordinatePadding(paddingLatitude)
-                ?: return
+                ?: run {
+                    controller.setCoveragePolygons(emptyMap(), fillColor, strokeColor, 1.25f)
+                    return
+                }
             locations.filter { location ->
                 location.lat in
                     (visible.minLat - padding.latitudeDegrees)..
@@ -44,16 +51,14 @@ object MapCoverageHelper {
             occupiedCells += cell
         }
 
-        val fillColor = android.graphics.Color.argb(62, 46, 204, 113)
-        val strokeColor = android.graphics.Color.argb(128, 46, 204, 113)
-        occupiedCells.forEach { cell ->
-            controller.addCoveragePolygon(
-                points = EnvironmentCoveragePolicy.corners(cell),
-                fillColorInt = fillColor,
-                strokeColorInt = strokeColor,
-                strokeWidth = 1.25f
-            )
-        }
+        controller.setCoveragePolygons(
+            occupiedCells.associate { cell ->
+                "${cell.q}:${cell.r}" to EnvironmentCoveragePolicy.corners(cell)
+            },
+            fillColor,
+            strokeColor,
+            1.25f
+        )
     }
 
     private fun longitudeInBounds(longitude: Double, rawMin: Double, rawMax: Double): Boolean {

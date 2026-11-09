@@ -1,5 +1,7 @@
 # Dependency audit (2026-11-05)
 
+This is a dated dependency snapshot. The 2026-11-09 joystick and rendering changes did not update dependency versions; verify Maven metadata again before making version decisions.
+
 Stable versions were checked against the published Maven metadata in [Google Maven](https://dl.google.com/dl/android/maven2/) and [Maven Central](https://repo.maven.apache.org/maven2/). A newer version is an upgrade candidate, not a compatibility guarantee. The current versions below reflect this rebrand and API 37 build migration.
 
 | Dependency | Current | Latest stable found | Status |

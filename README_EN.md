@@ -18,7 +18,7 @@ Android developer-options mock locations can be identified through mock flags, A
 The project follows two rules:
 
 - Android's developer-options mock-location assignment is not the runtime mechanism.
-- It never invents Wi-Fi AP or cell identities when trusted data is unavailable. Enabled RF channels fail closed instead of exposing the physical surroundings.
+- Fictional Wi-Fi and cell data requires explicit opt-in and is labelled as simulated. Otherwise, enabled RF channels with no payload fail closed.
 
 ## Features
 
@@ -28,7 +28,7 @@ The project follows two rules:
 - A complete canonical WGS-84 fix is created after provider validation and before framework cache, filtering, privacy, and native delivery.
 - Ordinary `LocationManager` requests remain untouched. The module does not swallow requests, rewrite `Location` getters or parcels, or run per-client location timers.
 - GMS and completely unscoped ordinary apps receive the framework location through their normal registrations.
-- Fixed point is the currently verified primary mode. Legacy route/joystick UI remains in the tree but was not part of this regression pass; the next phase will make joystick control independent and may remove automatic routes. See the [joystick refactor plan](ai_readme/joystick_refactor_plan.md).
+- Fixed point, the independent floating joystick, and automatic out-and-back routes share the service runtime path. The joystick needs no route points, leaves the home map at its selected starting point, and restores that point when closed. See [joystick design and verification](ai_readme/joystick_refactor_plan.md).
 
 ### Bounded natural drift
 
@@ -43,12 +43,14 @@ The project follows two rules:
 
 ### Trusted RF replay
 
-Trusted sources are limited to:
+Replayable real sources include:
 
 - local Wi-Fi/cell collection;
 - saved Room database records;
 - live WiGLE Wi-Fi results;
 - live OpenCellID cellular results.
+
+An explicit setting can generate fictional Wi-Fi and cell data matched to the target country when replay data is missing. These records are not stored as collected data and are labelled as simulation in the UI.
 
 When enabled, the module can replace Wi-Fi connection/scan callbacks and cellular info/location/callbacks. An enabled channel with no valid payload returns an empty or null simulated result instead of leaking real nearby data.
 
@@ -89,9 +91,9 @@ Optional scoped app hooks
   -> Wi-Fi / Cell / GNSS status / NMEA supplements
 ```
 
-Fixed-point, route, and manual-joystick movement all update the same `SpooferProvider` anchor. `MainViewModel` does not write runtime files; the next `SpoofingService` heartbeat publishes the position and RF payload through one pipeline. Lifecycle-transition and heartbeat writes are serialized by `RuntimeConfigWriteCoordinator`, so an older generation cannot overwrite newer state.
+The service owns runtime publication for fixed point, automatic route, and floating joystick movement. During joystick movement it publishes the compact position frame at up to about 250 ms intervals; ordinary fixed and route modes retain their existing cadence. `RuntimeConfigWriteCoordinator` serializes lifecycle and service writes so an older generation cannot overwrite newer state.
 
-> Route and the current route-coupled joystick are legacy features. Their presence does not mean they passed this regression cycle; future work must not add another location hook or runtime writer to support them.
+> Automatic routes remain a separate feature. The unused manual route flag and unimplemented road-routing toggle were removed. The floating joystick adds no second runtime writer or location hook.
 
 Runtime configuration is written atomically through generation-tagged temporary files and rename. Hooked processes verify the heartbeat and boot ID; stale active state fails closed and a previous-boot config cannot silently reactivate spoofing.
 
@@ -99,7 +101,7 @@ Runtime configuration is written atomically through generation-tagged temporary 
 
 - Android 14 (API 34) or later.
 - KernelSU, Magisk, or APatch root.
-- LSPosed/libxposed with the module enabled for the Android framework and GMS.
+- LSPosed/libxposed with the module enabled for the Android framework. Keep Google Play services and Fused Location outside the module scope.
 - Add an individual app to scope only when its direct RF, GNSS-status, or NMEA reads must also be simulated.
 - A Google Maps API key for map/search features; WiGLE and OpenCellID credentials are optional.
 
@@ -132,9 +134,9 @@ After changing module code or its scope, reboot so `system_server` and target pr
 ## Usage
 
 1. Install the APK and grant root access.
-2. Enable the module for the Android framework and GMS in LSPosed.
+2. Enable the module for the Android framework in LSPosed; leave Google Play services and Fused Location out of scope.
 3. Add only apps that need direct RF/GNSS/NMEA supplements, then reboot.
-4. Select a target point in WeRePosition; the legacy route mode is not the recommended primary flow.
+4. Select a target point in WeRePosition, then use fixed point, the floating joystick, or an automatic out-and-back route as needed.
 5. Enable only the Wi-Fi, cellular, and drift options needed for the test.
 6. Start simulation and verify the location/environment in the tested app.
 
@@ -142,7 +144,7 @@ After changing module code or its scope, reboot so `system_server` and target pr
 
 - Use this tool only on devices and apps you own or are authorized to test.
 - It does not guarantee bypass of any platform policy or risk-control system.
-- Missing trusted RF data is blocked rather than synthesized.
+- Missing RF data is blocked by default. Fictional data is generated and labelled only after explicit opt-in.
 - You are responsible for applicable law and service terms.
 
 ## License

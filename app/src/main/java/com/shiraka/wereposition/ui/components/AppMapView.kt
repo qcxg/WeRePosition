@@ -33,9 +33,13 @@ data class MapVisibleBounds(
 
 interface AppMapController {
     fun clear()
-    fun clearCoverage()
     fun addPolyline(points: List<Pair<Double, Double>>, colorInt: Int, width: Float)
-    fun addCoveragePolygon(points: List<Pair<Double, Double>>, fillColorInt: Int, strokeColorInt: Int, strokeWidth: Float)
+    fun setCoveragePolygons(
+        cells: Map<String, List<Pair<Double, Double>>>,
+        fillColorInt: Int,
+        strokeColorInt: Int,
+        strokeWidth: Float
+    )
     fun addCircle(lat: Double, lng: Double, radius: Double, fillColorInt: Int, strokeColorInt: Int, strokeWidth: Float)
     fun addMarker(lat: Double, lng: Double, title: String, type: MarkerType): AppMapMarker
     fun animateCamera(lat: Double, lng: Double, zoom: Float? = null)
@@ -54,7 +58,7 @@ interface AppMapController {
 class GMapControllerImpl(private val map: GoogleMap) : AppMapController {
     private var isDarkMode: Boolean = false
     private var currentMapType: AppMapType = AppMapType.NORMAL
-    private val coveragePolygons = mutableListOf<com.google.android.gms.maps.model.Polygon>()
+    private val coveragePolygons = mutableMapOf<String, com.google.android.gms.maps.model.Polygon>()
 
     override fun setDarkMode(isDark: Boolean, context: android.content.Context) {
         isDarkMode = isDark
@@ -74,10 +78,6 @@ class GMapControllerImpl(private val map: GoogleMap) : AppMapController {
         map.clear()
         coveragePolygons.clear()
     }
-    override fun clearCoverage() {
-        coveragePolygons.forEach { polygon -> polygon.remove() }
-        coveragePolygons.clear()
-    }
     override fun addPolyline(points: List<Pair<Double, Double>>, colorInt: Int, width: Float) {
         map.addPolyline(
             GPolylineOptions().color(colorInt).width(width).apply {
@@ -85,15 +85,25 @@ class GMapControllerImpl(private val map: GoogleMap) : AppMapController {
             }
         )
     }
-    override fun addCoveragePolygon(points: List<Pair<Double, Double>>, fillColorInt: Int, strokeColorInt: Int, strokeWidth: Float) {
-        val polygon = map.addPolygon(
-            com.google.android.gms.maps.model.PolygonOptions()
-                .fillColor(fillColorInt)
-                .strokeColor(strokeColorInt)
-                .strokeWidth(strokeWidth)
-                .apply { points.forEach { add(GLatLng(it.first, it.second)) } }
-        )
-        coveragePolygons += polygon
+    override fun setCoveragePolygons(
+        cells: Map<String, List<Pair<Double, Double>>>,
+        fillColorInt: Int,
+        strokeColorInt: Int,
+        strokeWidth: Float
+    ) {
+        val removed = coveragePolygons.keys - cells.keys
+        removed.forEach { id -> coveragePolygons.remove(id)?.remove() }
+        cells.forEach { (id, points) ->
+            if (id !in coveragePolygons) {
+                coveragePolygons[id] = map.addPolygon(
+                    com.google.android.gms.maps.model.PolygonOptions()
+                        .fillColor(fillColorInt)
+                        .strokeColor(strokeColorInt)
+                        .strokeWidth(strokeWidth)
+                        .apply { points.forEach { add(GLatLng(it.first, it.second)) } }
+                )
+            }
+        }
     }
     override fun addCircle(lat: Double, lng: Double, radius: Double, fillColorInt: Int, strokeColorInt: Int, strokeWidth: Float) {
         map.addCircle(

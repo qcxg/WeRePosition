@@ -18,7 +18,7 @@
 本專案遵守兩個重要原則：
 
 - 不把 Android Developer Options mock-location assignment 作為主要機制。
-- 不在缺少可信資料時偷偷生成 Wi-Fi AP 或基站身份；沒有可信 RF payload 時返回空資料並阻斷真實資料外洩。
+- 可在設定中明確啟用虛構 Wi-Fi／基站資料；未啟用或無可用 payload 時阻斷真實 RF 資料。
 
 ## 主要能力
 
@@ -28,7 +28,7 @@
 - 經緯度、精度、海拔、運動欄位、wall time 與 elapsed realtime 在同一個樣本一次寫完；一般 App 仍走 Android 原生權限、AppOps、間隔與距離過濾鏈。
 - 不攔截或吞掉 `LocationManager` 請求，不改寫 `Location` getter／Parcel，也不建立每個 App 的額外派發計時器。
 - GMS 與未加入 module scope 的一般 App 都從 framework 取得定位；GMS 和 Fused Location 不應加入 module scope。GNSS status 與 NMEA 是可選的客戶端補充層。
-- 固定點是目前已驗證的主模式。舊路線／搖桿入口仍在程式內，但未納入本輪回歸；下一階段將把搖桿改成獨立控制並考慮移除自動路線，詳見 [搖桿重構計畫](ai_readme/joystick_refactor_plan.md)。
+- 固定點、獨立懸浮搖桿與自動往返路線共用服務端運行管線。搖桿不依賴路點；地圖上保留開始時選定的位置，結束搖桿時恢復該起點。參見 [搖桿設計與驗證](ai_readme/joystick_refactor_plan.md)。
 
 ### 抖動與自然漂移
 
@@ -43,12 +43,14 @@
 
 ### Wi-Fi / 基站環境模擬
 
-可信資料來源只包括：
+可重放的真實資料來源包括：
 
 - 實機本地掃描並保存的環境資料。
 - Room 資料庫中的歷史採集點。
 - WiGLE API 返回的 Wi-Fi AP。
 - OpenCellID API 返回的基站資料。
+
+設定中另有明確開關，可用與目標國家相符的虛構 Wi-Fi／基站資料補足缺口；它不會寫入採集資料庫，介面會標示為「模擬模式」。
 
 當 active 且對應模擬開關啟用時：
 
@@ -60,7 +62,7 @@
 
 - 支援實地掃描 Wi-Fi 與基站。
 - 支援本地資料查看、編輯、匯入與匯出。
-- 首頁顯示最近使用的 7 個位置；收藏列表保留為頂部書籤入口。
+- 首頁最近位置的顯示與保留條數可在設定中調整；收藏列表保留為頂部書籤入口。
 - 管理頁會把相同經緯度的環境記錄合併成一條，並在 Wi-Fi / 基站數量後標出「由 WiGLE / OpenCellID 導入」或本地采集來源。
 - 採集資料使用 Room/SQLite 保存；只有含可重放 Wi-Fi 或基站關聯的記錄會即時映射到世界固定的 Web Mercator 六角格，六角格外接半徑為 30m。舊 Bluetooth 關聯只為資料庫升級與歷史資料管理保留，不參與掃描或運行期模擬。
 - 地圖、開始前能力檢查與運行期 RF 解析共用 `EnvironmentCoveragePolicy` 的完全相同格 ID；`EnvironmentRfResolver`／DAO 只讀取目標所在格，密集采樣不會擴大範圍，跨格也不會借用資料。
@@ -89,14 +91,14 @@ WeRePosition App
   |-- ConfigManager: 啟停邊界配置
   |-- SpooferProvider
         |
-        | 單一 moving-anchor 管線（含現有 legacy route / manual）
+        | 固定點、自動路線與獨立懸浮搖桿共用的運行管線
         v
 Config channels
   |-- /data/local/tmp/wereposition_config.json
   |-- /data/system/wereposition_config.json
   |-- wereposition_prefs
   |-- gsm.wrp.* system properties
-  |-- exported ContentProvider fallback
+  |-- 受作用域限制的 ContentProvider fallback
         |
         v
 LSPosed injected processes
@@ -106,9 +108,9 @@ LSPosed injected processes
   |-- fail-closed when active config is stale
 ```
 
-固定點、路線與手動搖桿都只更新 `SpooferProvider` 中的 anchor；`MainViewModel` 不直接寫入運行期檔案，下一個 `SpoofingService` heartbeat 會以同一條管線發布位置及該格 RF payload。啟停邊界與服務 heartbeat 的寫入由 `RuntimeConfigWriteCoordinator` 序列化，較舊 generation 不得覆蓋較新的狀態。
+固定點與自動路線由 `MainViewModel` 發起，懸浮搖桿由 `SpoofingService` 積分移動；三者最終都由服務寫入運行期資料。搖桿移動時最多約每 250 ms 更新精簡位置 frame；一般固定點與自動路線仍按原有節奏更新。啟停邊界與服務寫入由 `RuntimeConfigWriteCoordinator` 序列化，較舊 generation 不得覆蓋較新的狀態。
 
-> 路線與目前的 route-coupled 搖桿屬 legacy 功能，保留不代表已完成本輪實機驗證；後續應按重構計畫處理，不要為它另加定位 hook 或第二個 writer。
+> 自動路線仍是獨立功能；舊的手動路線旗標及未接通的真實道路規劃選項已移除。懸浮搖桿不建立第二個 runtime writer 或定位 hook。
 
 配置 JSON 使用帶 generation 的 `.tmp` + `mv` 原子寫入，避免 hooked process 讀到半截或過時配置。Hook 端會檢查 heartbeat 與 boot id：同一開機週期中 active 配置失效時 fail-closed；正常停止或重啟後不應復活舊的模擬狀態。
 
@@ -153,7 +155,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 1. 安裝 APK，授予 Root 權限。
 2. 在 LSPosed 中啟用模組並只啟用系統框架作用域；不要勾選 Google Play 服務或 Fused Location。需要 RF 或 GNSS/NMEA 補充時再加入相應 App。
 3. 修改 module 或 scope 後重啟手機，確保 `system_server` 載入同一版本的唯一定位鏈。
-4. 在 WeRePosition 中選擇目標點；舊路線模式目前不作為推薦主流程。
+4. 在 WeRePosition 中選擇目標點，再按需要使用定點、懸浮搖桿或自動往返路線。
 5. 根據需要啟用 Wi-Fi、基站與抖動配置。
 6. 開始模擬後，在目標 App 中驗證定位與環境資料。
 
@@ -161,7 +163,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 - 本工具只應用於你擁有或被授權測試的設備與 App。
 - 本工具不保證繞過任何第三方平台規則或風控。
-- 缺少可信 RF 資料時，本工具選擇阻斷真實資料，而不是自動造假。
+- 缺少 RF 資料時，預設阻斷真實資料；只有明確啟用虛構資料設定時才生成並標示模擬資料。
 - 使用者需自行承擔違反法律、服務條款或平台規則造成的後果。
 
 ## 開源協議

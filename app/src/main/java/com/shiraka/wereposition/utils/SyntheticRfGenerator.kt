@@ -114,13 +114,13 @@ class SyntheticRfGenerator(
             val ssid = when (style) {
                 0 -> "${network.brand}_Fiber_$id"
                 1 -> "${network.brand}-$id"
-                2 -> "${network.brand}${random.nextInt(100, 999)}"
+                2 -> "${network.brand}${100 + random.nextInt(899)}"
                 3 -> "${network.brand}_5G_${id.takeLast(2)}"
                 4 -> "${routerBrand}_$id"
                 5 -> "${routerBrand}-${id.takeLast(3)}"
                 6 -> "Home_${id.takeLast(3)}"
-                7 -> "WiFi-${random.nextInt(1000, 9999)}"
-                else -> "${routerBrand}${random.nextInt(100, 999)}_5G"
+                7 -> "WiFi-${1000 + random.nextInt(8999)}"
+                else -> "${routerBrand}${100 + random.nextInt(899)}_5G"
             }
             JSONObject().apply {
                 put("ssid", ssid)

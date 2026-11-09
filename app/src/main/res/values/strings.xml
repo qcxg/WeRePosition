@@ -39,7 +39,7 @@
     <string name="saved_locations">Collection List</string>
     <string name="recent_locations">Recent Locations</string>
     <string name="settings">Settings</string>
-    <string name="nav_joystick">Joystick</string>
+    <string name="nav_joystick">Joystick &amp; routes</string>
     <string name="sample_preview_title">Sample data preview</string>
     <string name="sample_preview_note">These two fictional examples are for preview only and are not saved or used for simulation.</string>
     <string name="sample_cell_count">Cells %d</string>
@@ -234,4 +234,23 @@
     <string name="pure_mode_locked">Stop simulation before changing Pure mode.</string>
     <string name="pure_mode_start_failed">Could not safely turn on Pure mode. Android location remains off.</string>
     <string name="pure_mode_stop_failed">Could not turn off Android location; location data remains blocked.</string>
+    <string name="joystick_ready">Joystick mode active · drag to move</string>
+    <string name="joystick_start_hint">Start joystick mode to show the floating control</string>
+    <string name="joystick_speed">Maximum speed %.1f m/s</string>
+    <string name="joystick_speed_hint">Drag distance controls speed. Release to stop.</string>
+    <string name="synthetic_record">Synthetic data · replayable</string>
+    <string name="open_on_map">Locate on home map</string>
+    <string name="joystick_overlay_description">Start joystick mode to control the simulated position over other apps.</string>
+    <string name="joystick_show_overlay">Show floating joystick</string>
+    <string name="joystick_hide_overlay">Hide floating joystick</string>
+    <string name="joystick_overlay_permission">The first use requires permission to display over other apps. Drag the wheel rim to move both controls; drag the filled slider to adjust speed.</string>
+    <string name="joystick_speed_bounds">Floating speed range</string>
+    <string name="joystick_speed_bounds_hint">Set the slowest and fastest values available on the floating slider.</string>
+    <string name="joystick_direction_title">Movement direction</string>
+    <string name="joystick_direction_north">North up</string>
+    <string name="joystick_direction_device">Follow device</string>
+    <string name="joystick_north_hint">Pushing up always moves north.</string>
+    <string name="joystick_device_hint">Pushing up moves toward the top of your device. Movement pauses until a heading is available.</string>
+    <string name="joystick_start_mode">Start joystick mode</string>
+    <string name="joystick_stop_mode">Stop joystick mode</string>
 </resources>

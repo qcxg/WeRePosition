@@ -45,7 +45,7 @@
     <string name="saved_locations">收藏列表</string>
     <string name="recent_locations">最近位置</string>
     <string name="settings">設定</string>
-    <string name="nav_joystick">搖桿</string>
+    <string name="nav_joystick">搖桿與路線</string>
     <string name="sample_preview_title">範例資料預覽</string>
     <string name="sample_preview_note">這兩筆虛構範例僅供預覽，不會儲存或用於模擬。</string>
     <string name="sample_cell_count">基站 %d</string>
@@ -230,4 +230,23 @@
     <string name="pure_mode_locked">請先停止模擬，再切換 Pure 模式。</string>
     <string name="pure_mode_start_failed">無法安全啟用 Pure 模式，系統定位保持關閉。</string>
     <string name="pure_mode_stop_failed">無法關閉系統定位；位置資料仍保持阻斷。</string>
+    <string name="joystick_ready">搖桿模式已啟動 · 拖動搖桿移動</string>
+    <string name="joystick_start_hint">啟動搖桿模式後顯示懸浮控制盤</string>
+    <string name="joystick_speed">最高速度 %.1f m/s</string>
+    <string name="joystick_speed_hint">拖動距離決定當前速度，放開即停下。</string>
+    <string name="synthetic_record">虛擬資料 · 可重放</string>
+    <string name="open_on_map">在首頁地圖定位</string>
+    <string name="joystick_overlay_description">啟動搖桿模式後，可在其他 App 上控制模擬位置。</string>
+    <string name="joystick_show_overlay">顯示懸浮搖桿</string>
+    <string name="joystick_hide_overlay">收起懸浮搖桿</string>
+    <string name="joystick_overlay_permission">首次使用需要授予「顯示在其他應用上層」權限。拖動輪盤外圈可一起移動兩個控件；拖動填充滑條可調速度。</string>
+    <string name="joystick_speed_bounds">懸浮速度範圍</string>
+    <string name="joystick_speed_bounds_hint">設定懸浮滑條可選的最低與最高速度。</string>
+    <string name="joystick_direction_title">前進方向</string>
+    <string name="joystick_direction_north">固定北朝上</string>
+    <string name="joystick_direction_device">跟隨裝置朝向</string>
+    <string name="joystick_north_hint">往上推時固定向北移動。</string>
+    <string name="joystick_device_hint">往上推時朝手機頂端所指方向移動；取得朝向前暫停移動。</string>
+    <string name="joystick_start_mode">啟動搖桿模式</string>
+    <string name="joystick_stop_mode">關閉搖桿模式</string>
 </resources>

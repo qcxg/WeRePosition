@@ -6,7 +6,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -36,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -51,7 +48,6 @@ import com.shiraka.wereposition.data.model.AppMapType
 import com.shiraka.wereposition.ui.components.MapTypeDialog
 import com.shiraka.wereposition.data.model.RoutePoint
 import com.shiraka.wereposition.data.model.RoutePlanStage
-import com.shiraka.wereposition.data.model.RouteRunMode
 import com.shiraka.wereposition.data.model.SimMode
 import com.shiraka.wereposition.ui.theme.AppColors
 import com.shiraka.wereposition.viewmodel.MainViewModel
@@ -91,8 +87,6 @@ fun FullScreenMapPage(
     }
 
     val stage = uiState.routePlanStage
-    val isRunning = stage == RoutePlanStage.RUNNING
-    val isManual = uiState.routeRunMode == RouteRunMode.MANUAL
     val routePoints = uiState.routePoints
 
     // 同步地图类型
@@ -123,12 +117,7 @@ fun FullScreenMapPage(
                 else -> MarkerType.DEFAULT
             }
             
-            // 如果开启了真实路线且处于运行状态，则不绘制中间密集的轨迹点
-            if (uiState.useRealRoute && uiState.routePlanStage == RoutePlanStage.RUNNING && type == MarkerType.DEFAULT) {
-                return@forEachIndexed
-            }
-            
-            map.addMarker(p.lat, p.lng, if (type == MarkerType.RED && uiState.useRealRoute && uiState.routePlanStage == RoutePlanStage.RUNNING) "终点" else "${idx + 1}", type)
+            map.addMarker(p.lat, p.lng, "${idx + 1}", type)
         }
 
         // 确保被 clear() 清除的实时位置图标能够重新绘制
@@ -221,15 +210,6 @@ fun FullScreenMapPage(
             )
         }
 
-        // 手动模式运行时的定位标志
-        if (isRunning && isManual) {
-            Icon(
-                Icons.Rounded.PersonPin, null,
-                tint = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.align(Alignment.Center).size(48.dp)
-            )
-        }
-
         // 顶部栏（含搜索）
         if (!isInPipMode) {
             Column(
@@ -238,7 +218,6 @@ fun FullScreenMapPage(
             TopBar(
                 stage = stage,
                 routePointCount = routePoints.size,
-                isManual = isManual,
                 onBack = onClose,
                 canUndo = stage == RoutePlanStage.SELECTING && routePoints.isNotEmpty(),
                 onUndo = { viewModel.undoLastRoutePoint() }
@@ -382,15 +361,6 @@ fun FullScreenMapPage(
                 }
             }
 
-            // 摇杆（仅手动模式运行中）
-            AnimatedVisibility(
-                visible = isRunning && isManual,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 180.dp),
-                enter = slideInVertically(tween(250)) { it / 2 } + fadeIn(tween(250)),
-                exit = slideOutVertically(tween(200)) { it / 2 } + fadeOut(tween(200))
-            ) {
-                JoystickPanel(viewModel = viewModel, maxSpeedMs = uiState.routeSimMode.speedMs.toFloat())
-            }
         }
 
         // IDLE阶段（全屏选点模式）只显示单一确认选点按钮
@@ -457,35 +427,9 @@ fun FullScreenMapPage(
                 showConfigDialog = false
                 viewModel.startRoutePlanning()
             },
-            onRunModeChange = viewModel::setRouteRunMode,
             onSpeedChange = viewModel::setRouteSimMode,
-            onCustomSpeedChange = viewModel::setCustomSpeedMs,
-            onUseRealRouteChange = viewModel::setUseRealRoute
+            onCustomSpeedChange = viewModel::setCustomSpeedMs
         )
-    }
-
-    if (uiState.isFetchingRoute) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
-                .pointerInput(Unit) { }, // Block interactions
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier.padding(24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    Text("正在规划真实路线...", fontSize = 16.sp)
-                }
-            }
-        }
     }
 
     if (showMapTypeDialog) {
@@ -601,7 +545,6 @@ fun FullScreenMapPage(
 private fun TopBar(
     stage: RoutePlanStage,
     routePointCount: Int,
-    isManual: Boolean,
     onBack: () -> Unit,
     canUndo: Boolean,
     onUndo: () -> Unit
@@ -638,7 +581,7 @@ private fun TopBar(
                         RoutePlanStage.IDLE -> ""
                         RoutePlanStage.SELECTING -> stringResource(R.string.selecting_points_hint, routePointCount)
                         RoutePlanStage.READY -> stringResource(R.string.route_ready_hint, routePointCount)
-                        RoutePlanStage.RUNNING -> if (isManual) stringResource(R.string.joystick_controlling) else stringResource(R.string.route_looping)
+                        RoutePlanStage.RUNNING -> stringResource(R.string.route_looping)
                     },
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
@@ -793,10 +736,8 @@ private fun RoutePlanConfigDialog(
     uiState: AppState,
     onDismiss: () -> Unit,
     onStartRoute: () -> Unit,
-    onRunModeChange: (RouteRunMode) -> Unit,
     onSpeedChange: (SimMode) -> Unit,
-    onCustomSpeedChange: (Double) -> Unit = {},
-    onUseRealRouteChange: (Boolean) -> Unit = {}
+    onCustomSpeedChange: (Double) -> Unit = {}
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -814,36 +755,8 @@ private fun RoutePlanConfigDialog(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // 模式选择
-                Text(
-                    stringResource(R.string.control_mode),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FilterChip(
-                        selected = uiState.routeRunMode == RouteRunMode.MANUAL,
-                        onClick = { onRunModeChange(RouteRunMode.MANUAL) },
-                        label = { Text(stringResource(R.string.manual_joystick)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
-                            selectedLabelColor = MaterialTheme.colorScheme.tertiary
-                        )
-                    )
-                    FilterChip(
-                        selected = uiState.routeRunMode == RouteRunMode.LOOP,
-                        onClick = { onRunModeChange(RouteRunMode.LOOP) },
-                        label = { Text(stringResource(R.string.loop_auto)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
-
-                // 循环模式速度选择
-                AnimatedVisibility(uiState.routeRunMode == RouteRunMode.LOOP) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 路線頁只配置自動路線；手動控制由系統懸浮搖桿處理。
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             stringResource(R.string.loop_auto),
                             fontSize = 12.sp,
@@ -904,37 +817,6 @@ private fun RoutePlanConfigDialog(
                                 shape = RoundedCornerShape(10.dp)
                             )
                         }
-                    }
-                }
-
-                // 手动模式说明
-                AnimatedVisibility(uiState.routeRunMode == RouteRunMode.MANUAL) {
-                    Text(
-                        stringResource(R.string.joystick_description),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                }
-
-                // 真实路线规划设置
-                AnimatedVisibility(uiState.routePoints.size >= 2) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onUseRealRouteChange(!uiState.useRealRoute) }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        androidx.compose.material3.Checkbox(
-                            checked = uiState.useRealRoute,
-                            onCheckedChange = { onUseRealRouteChange(it) }
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text("使用真实路线规划", fontSize = 14.sp)
-                            Text("通过API获取实际道路轨迹，遇到红绿灯自动停下15秒", fontSize = 10.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
-                        }
-                    }
                 }
 
                 // 操作按钮
@@ -956,54 +838,6 @@ private fun RoutePlanConfigDialog(
                 }
             }
         }
-    }
-}
-
-// 摇杆面板
-
-@Composable
-fun JoystickPanel(viewModel: MainViewModel, maxSpeedMs: Float = 10f) {
-    var thumbOffset by remember { mutableStateOf(Offset.Zero) }
-    val maxRadius = 120f
-    var joystickState by remember { mutableStateOf(Pair(0.0, 0f)) }
-
-    LaunchedEffect(joystickState) {
-        val (angle, intensity) = joystickState
-        if (intensity > 0) {
-            while (true) {
-                val bearing = (Math.toDegrees(angle) + 90 + 360) % 360
-                viewModel.moveByJoystick(bearing, intensity, maxSpeedMs)
-                kotlinx.coroutines.delay(100)
-            }
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .size(160.dp)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f), CircleShape)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = { thumbOffset = Offset.Zero; joystickState = Pair(0.0, 0f) },
-                    onDragCancel = { thumbOffset = Offset.Zero; joystickState = Pair(0.0, 0f) }
-                ) { change, dragAmount ->
-                    change.consume()
-                    val raw = thumbOffset + dragAmount
-                    val dist = sqrt(raw.x * raw.x + raw.y * raw.y)
-                    thumbOffset = if (dist <= maxRadius) raw else raw * (maxRadius / dist)
-                    val angle = atan2(thumbOffset.y.toDouble(), thumbOffset.x.toDouble())
-                    val intensity = (sqrt(thumbOffset.x * thumbOffset.x + thumbOffset.y * thumbOffset.y) / maxRadius).coerceIn(0f, 1f)
-                    joystickState = Pair(angle, intensity)
-                }
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .offset { IntOffset(thumbOffset.x.toInt(), thumbOffset.y.toInt()) }
-                .size(52.dp)
-                .background(MaterialTheme.colorScheme.tertiary, CircleShape)
-        )
     }
 }
 

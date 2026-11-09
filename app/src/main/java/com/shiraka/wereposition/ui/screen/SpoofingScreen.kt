@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -79,6 +80,7 @@ import com.shiraka.wereposition.ui.components.AppMapController
 import com.shiraka.wereposition.data.model.AppMapType
 import com.shiraka.wereposition.ui.components.MapTypeDialog
 import com.shiraka.wereposition.ui.components.GlassOverlaySurface
+import com.shiraka.wereposition.service.SpoofingService
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.material.icons.rounded.Layers
@@ -225,6 +227,10 @@ fun SpoofingScreen(
                         map,
                         latestCoverageLocations.value
                     )
+                    if (SpoofingService.isJoystickVisible) {
+                        mapSettleJob?.cancel()
+                        return@setOnCameraChangeListener
+                    }
                     if (!latestUiState.value.isSpoofingActive) {
                         viewModel.confirmMapPoint(lat, lng)
                         return@setOnCameraChangeListener
@@ -233,6 +239,7 @@ fun SpoofingScreen(
                     mapSettleJob = scope.launch {
                         delay(1500L)
                         if (latestUiState.value.isSpoofingActive &&
+                            !SpoofingService.isJoystickVisible &&
                             viewModel.updateSpoofingPositionFromMap(lat, lng)
                         ) {
                             Toast.makeText(context, locationUpdatedMessage, Toast.LENGTH_SHORT).show()
@@ -268,8 +275,9 @@ fun SpoofingScreen(
             ) {
                 GlassOverlaySurface(
                     hazeState = mapHazeState,
-                    modifier = Modifier.size(42.dp).clickable { openSearchPanel(SearchMode.NETWORK) },
-                    shape = CircleShape
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    onClick = { openSearchPanel(SearchMode.NETWORK) }
                 ) {
                     Icon(Icons.Rounded.Search, stringResource(R.string.network_search),
                         tint = if (showSearchPanel && uiState.searchMode == SearchMode.NETWORK)
@@ -278,8 +286,9 @@ fun SpoofingScreen(
                 }
                 GlassOverlaySurface(
                     hazeState = mapHazeState,
-                    modifier = Modifier.size(42.dp).clickable { openSearchPanel(SearchMode.LOCAL) },
-                    shape = CircleShape
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    onClick = { openSearchPanel(SearchMode.LOCAL) }
                 ) {
                     Icon(Icons.Rounded.Storage, stringResource(R.string.local_collection),
                         tint = if (showSearchPanel && uiState.searchMode == SearchMode.LOCAL)
@@ -288,8 +297,9 @@ fun SpoofingScreen(
                 }
                 GlassOverlaySurface(
                     hazeState = mapHazeState,
-                    modifier = Modifier.size(42.dp).clickable { showSavedLocations = true },
-                    shape = CircleShape
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    onClick = { showSavedLocations = true }
                 ) {
                     Icon(Icons.Rounded.Bookmarks, stringResource(R.string.collection_list),
                         tint = MaterialTheme.colorScheme.onSurface,
@@ -300,8 +310,9 @@ fun SpoofingScreen(
             GlassOverlaySurface(
                 hazeState = mapHazeState,
                 modifier = Modifier.align(Alignment.TopStart).statusBarsPadding()
-                    .padding(top = 8.dp, start = 8.dp).clickable(onClick = onExpandMap),
-                shape = CircleShape
+                    .padding(top = 8.dp, start = 8.dp),
+                shape = CircleShape,
+                onClick = onExpandMap
             ) {
                 Row(modifier = Modifier.padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.width(10.dp))
@@ -317,8 +328,9 @@ fun SpoofingScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 8.dp, bottom = 60.dp)
-                    .size(44.dp).clickable { showMapTypeDialog = true },
-                shape = CircleShape
+                    .size(44.dp),
+                shape = CircleShape,
+                onClick = { showMapTypeDialog = true }
             ) {
                 Icon(
                     Icons.Rounded.Layers,
@@ -333,8 +345,9 @@ fun SpoofingScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 8.dp, bottom = 12.dp)
-                    .size(44.dp).clickable { viewModel.fetchCurrentLocation(context) { _, _ -> } },
-                shape = CircleShape
+                    .size(44.dp),
+                shape = CircleShape,
+                onClick = { viewModel.fetchCurrentLocation(context) { _, _ -> } }
             ) {
                 Icon(
                     Icons.Rounded.MyLocation, 
@@ -423,6 +436,9 @@ fun SpoofingScreen(
 
     if (showSearchPanel) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.08f)).clickable { closeSearchPanel() })
+        val visibleResults = if (uiState.searchMode == SearchMode.LOCAL && searchQuery.isNotBlank()) {
+            searchResults.filter { it.title.contains(searchQuery, true) || it.snippet.contains(searchQuery, true) }
+        } else searchResults
         Column(
             modifier = Modifier.align(Alignment.TopCenter)
                 .padding(top = statusBarHeight + 66.dp, start = 16.dp, end = 16.dp),
@@ -430,17 +446,18 @@ fun SpoofingScreen(
         ) {
             GlassOverlaySurface(
                 hazeState = searchHazeState,
-                modifier = Modifier.fillMaxWidth().clickable { },
-                shape = MaterialTheme.shapes.extraLarge
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                onClick = {},
+                strongTint = true
             ) {
-                    if (uiState.searchMode == SearchMode.NETWORK) {
                         HomeSearchBar(
                             query = searchQuery,
                             searchMode = uiState.searchMode,
                             onQueryChange = { searchQuery = it },
                             onSearch = {
                                 focusManager.clearFocus()
-                                if (searchQuery.isNotBlank()) {
+                                if (uiState.searchMode == SearchMode.NETWORK && searchQuery.isNotBlank()) {
                                     performPoiSearch(context, searchQuery) { results ->
                                         searchResults = results
                                         showSearchResults = results.isNotEmpty()
@@ -448,31 +465,16 @@ fun SpoofingScreen(
                                 }
                             }
                         )
-                    } else {
-                        LocalSearchResultList(
-                            searchResults = searchResults,
-                            onSelect = { poi ->
-                                val pLat = poi.lat
-                                val pLng = poi.lng
-                                viewModel.updateLatitude(String.format("%.6f", pLat))
-                                viewModel.updateLongitude(String.format("%.6f", pLng))
-                                smallMapRef?.animateCamera(pLat, pLng, 16f)
-                                searchQuery = poi.title
-                                closeSearchPanel()
-                            }
-                        )
-                    }
             }
-
-            if (uiState.searchMode == SearchMode.NETWORK) {
-                AnimatedVisibility(visible = showSearchResults && searchResults.isNotEmpty()) {
-                    GlassOverlaySurface(
-                        hazeState = searchHazeState,
-                        modifier = Modifier.fillMaxWidth().clickable { },
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
+            if (uiState.searchMode == SearchMode.LOCAL || (showSearchResults && visibleResults.isNotEmpty())) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 4.dp
+                ) {
                             LocalSearchResultList(
-                                searchResults = searchResults,
+                                searchResults = visibleResults,
                                 onSelect = { poi ->
                                     val pLat = poi.lat
                                     val pLng = poi.lng
@@ -483,7 +485,6 @@ fun SpoofingScreen(
                                     closeSearchPanel()
                                 }
                             )
-                    }
                 }
             }
         }
@@ -1359,7 +1360,7 @@ fun LocalSearchResultList(
         return
     }
 
-    LazyColumn(modifier = Modifier.heightIn(max = 350.dp)) {
+    LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
         items(searchResults.take(15)) { poi ->
             Row(
                 modifier = Modifier.fillMaxWidth()
@@ -1370,8 +1371,11 @@ fun LocalSearchResultList(
                 Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Column {
-                    Text(poi.title, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
-                    Text(poi.snippet, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    Text(poi.title, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                    Text(poi.snippet, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))

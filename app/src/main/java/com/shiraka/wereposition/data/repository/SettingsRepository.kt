@@ -19,6 +19,9 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
     var pureModeEnabled: Boolean
         get() = settingsManager.pureModeEnabled
         set(value) { settingsManager.pureModeEnabled = value }
+    var sampleEnvironmentSeeded: Boolean
+        get() = settingsManager.sampleEnvironmentSeeded
+        set(value) { settingsManager.sampleEnvironmentSeeded = value }
     var locationAllowedApps: Set<String>
         get() = settingsManager.locationAllowedApps
         set(value) { settingsManager.locationAllowedApps = value }

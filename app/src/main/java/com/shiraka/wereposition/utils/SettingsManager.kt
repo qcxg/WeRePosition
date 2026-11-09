@@ -12,6 +12,49 @@ import org.json.JSONObject
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
 
+    var joystickSpeedMs: Float
+        get() = prefs.getFloat("joystick_speed_ms", 3f).coerceIn(joystickMinSpeedMs, joystickMaxSpeedMs)
+        set(value) = prefs.edit().putFloat(
+            "joystick_speed_ms", value.coerceIn(joystickMinSpeedMs, joystickMaxSpeedMs)
+        ).apply()
+
+    val joystickMinSpeedMs: Float
+        get() = prefs.getFloat("joystick_min_speed_ms", 0.5f).coerceIn(0.5f, 19.5f)
+
+    val joystickMaxSpeedMs: Float
+        get() = prefs.getFloat("joystick_max_speed_ms", 10f).coerceIn(joystickMinSpeedMs + 0.5f, 20f)
+
+    fun setJoystickSpeedBounds(minSpeedMs: Float, maxSpeedMs: Float) {
+        val min = minSpeedMs.coerceIn(0.5f, 19.5f)
+        val max = maxSpeedMs.coerceIn(min + 0.5f, 20f)
+        prefs.edit()
+            .putFloat("joystick_min_speed_ms", min)
+            .putFloat("joystick_max_speed_ms", max)
+            .putFloat("joystick_speed_ms", joystickSpeedMs.coerceIn(min, max))
+            .apply()
+    }
+
+    var joystickDirectionMode: String
+        get() = prefs.getString("joystick_direction_mode", "NORTH")?.takeIf {
+            it == "NORTH" || it == "DEVICE"
+        } ?: "NORTH"
+        set(value) = prefs.edit().putString(
+            "joystick_direction_mode", if (value == "DEVICE") "DEVICE" else "NORTH"
+        ).apply()
+
+    val joystickOverlayEndDp: Int
+        get() = prefs.getInt("joystick_overlay_end_dp", 34)
+
+    val joystickOverlayBottomDp: Int
+        get() = prefs.getInt("joystick_overlay_bottom_dp", 176)
+
+    fun setJoystickOverlayPosition(endDp: Int, bottomDp: Int) {
+        prefs.edit()
+            .putInt("joystick_overlay_end_dp", endDp)
+            .putInt("joystick_overlay_bottom_dp", bottomDp)
+            .apply()
+    }
+
     var isDarkMode: Boolean
         get() = prefs.getBoolean("is_dark_mode", true)
         set(value) = prefs.edit().putBoolean("is_dark_mode", value).apply()
@@ -135,12 +178,19 @@ class SettingsManager(context: Context) {
     }
 
     fun getRecentLocations(): List<SavedLocation> {
-        return getLocationList("recent_locations")
+        val list = getLocationList("recent_locations")
+        val limited = list.take(recentLocationDisplayCount)
+        if (limited.size != list.size) saveLocationList("recent_locations", limited)
+        return limited
     }
 
     var recentLocationDisplayCount: Int
         get() = prefs.getInt("recent_location_display_count", 7).coerceIn(1, 20)
-        set(value) = prefs.edit().putInt("recent_location_display_count", value.coerceIn(1, 20)).apply()
+        set(value) {
+            val limit = value.coerceIn(1, 20)
+            prefs.edit().putInt("recent_location_display_count", limit).apply()
+            saveLocationList("recent_locations", getLocationList("recent_locations").take(limit))
+        }
 
     var perAppLocationEnabled: Boolean
         get() = prefs.getBoolean("per_app_location_enabled", false)
@@ -149,6 +199,10 @@ class SettingsManager(context: Context) {
     var pureModeEnabled: Boolean
         get() = prefs.getBoolean("pure_mode_enabled", false)
         set(value) = prefs.edit().putBoolean("pure_mode_enabled", value).apply()
+
+    var sampleEnvironmentSeeded: Boolean
+        get() = prefs.getBoolean("sample_environment_seeded", false)
+        set(value) = prefs.edit().putBoolean("sample_environment_seeded", value).apply()
 
     var locationAllowedApps: Set<String>
         get() = prefs.getStringSet("location_allowed_apps", emptySet())?.toSet().orEmpty()
@@ -180,7 +234,7 @@ class SettingsManager(context: Context) {
             .filterNot { it.lat == location.lat && it.lng == location.lng }
             .toMutableList()
         list.add(0, location)
-        saveLocationList("recent_locations", list.take(50))
+        saveLocationList("recent_locations", list.take(recentLocationDisplayCount))
     }
 
     fun removeSavedLocation(location: SavedLocation) {

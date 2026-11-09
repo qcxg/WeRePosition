@@ -8,7 +8,7 @@ This folder is the maintained AI-facing technical memory for the project.
 
 ## Active Planning Documents
 
-- `joystick_refactor_plan.md` is the handoff plan for replacing the route-coupled manual control with an independent, service-owned joystick. It is a plan, not current behavior.
+- `joystick_refactor_plan.md` records the joystick design, the completed separation from route mode, and remaining device checks.
 
 Superseded investigation snapshots are intentionally removed after their durable constraints are merged into `technical_readme.md`. Resolve every implementation question against that document and the current code.
 
@@ -17,10 +17,10 @@ Superseded investigation snapshots are intentionally removed after their durable
 - Keep `technical_readme.md` updated whenever spoofing data flow or lifecycle behavior changes.
 - Ordinary location has one authoritative system path: real provider abstraction -> framework pre-filter canonical fix -> native delivery. Do not add `Location` getter/Parcel/transport resampling or client callback timers.
 - Never swallow `LocationManager` requests. Unscoped apps must receive normal framework locations without a consumer-app scope list.
-- Do not reintroduce generated Wi-Fi APs or coordinate-derived cell towers as hidden fallbacks.
+- Synthetic Wi-Fi and cell data is allowed only through the explicit opt-in setting and must be marked as fictional. Missing data otherwise remains blocked.
 - If a fallback is needed for Android object construction, document it as object-shape normalization, not as collected/API data.
 - Remove transient status notes once their durable content is merged into the current technical document.
-- After every successful debug build, install the APK automatically with `adb install -r`, then record only the current status unless a data-flow behavior changed.
+- After a successful debug build, install the APK when a test device is connected and available. A build alone does not verify LSPosed hooks already loaded in other processes.
 
 ## Local Build And Deploy Environment
 

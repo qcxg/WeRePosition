@@ -11,6 +11,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.shiraka.wereposition.data.db.AppDatabase
@@ -24,6 +25,7 @@ import com.shiraka.wereposition.utils.RootManager
 import com.shiraka.wereposition.utils.RuntimeConfigWriteCoordinator
 import com.shiraka.wereposition.utils.SettingsManager
 import com.shiraka.wereposition.utils.SyntheticRfGenerator
+import com.shiraka.wereposition.utils.JoystickMotion
 import com.shiraka.wereposition.utils.TrajectorySimulator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -92,6 +94,9 @@ class SpoofingService : Service() {
         getSystemService(Context.LOCATION_SERVICE) as LocationManager
     }
     private val currentBootId by lazy { readBootId() }
+    private var joystickOverlay: FloatingJoystickOverlay? = null
+    @Volatile private var joystickMoving = false
+    private var joystickStartPosition: Pair<Double, Double>? = null
 
     private data class RuntimeWriteRequest(
         val location: SimulatedLocation,
@@ -130,12 +135,15 @@ class SpoofingService : Service() {
     companion object {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
+        const val ACTION_JOYSTICK = "ACTION_JOYSTICK"
+        const val EXTRA_JOYSTICK_VISIBLE = "EXTRA_JOYSTICK_VISIBLE"
         const val EXTRA_LAT = "EXTRA_LAT"
         const val EXTRA_LNG = "EXTRA_LNG"
         const val EXTRA_LIFECYCLE_TOKEN = "EXTRA_LIFECYCLE_TOKEN"
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "SpoofingServiceChannel"
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
+        private const val JOYSTICK_TICK_INTERVAL_MS = 250L
         private const val LOCATION_DISABLED_TICK_INTERVAL_MS = 60_000L
         private const val FIXED_CONFIG_WRITE_INTERVAL_MS = 60_000L
         private const val RUNTIME_FRAME_HEARTBEAT_INTERVAL_MS = 10_000L
@@ -149,6 +157,8 @@ class SpoofingService : Service() {
         @Volatile var isRunning = false
             private set
         @Volatile var lastReadyLifecycleToken = 0L
+            private set
+        @Volatile var isJoystickVisible = false
             private set
     }
 
@@ -196,12 +206,20 @@ class SpoofingService : Service() {
                     stopSelfResult(startId)
                 }
             }
+            ACTION_JOYSTICK -> {
+                if (intent.getBooleanExtra(EXTRA_JOYSTICK_VISIBLE, false) && isRunning &&
+                    SpooferProvider.isActive && Settings.canDrawOverlays(this)) {
+                    showFloatingJoystick()
+                } else hideFloatingJoystick()
+            }
             else -> if (!isRunning) stopSelfResult(startId)
         }
         return START_NOT_STICKY
     }
 
     private fun startSpoofing(lat: Double, lng: Double, lifecycleToken: Long, startId: Int) {
+        // A new fixed point or route run supersedes the floating joystick.
+        hideFloatingJoystick(restoreStart = false)
         ensureServiceScope()
         val generation = runGeneration.incrementAndGet()
         activeLifecycleToken = lifecycleToken
@@ -356,10 +374,18 @@ class SpoofingService : Service() {
                     locationWasEnabled = locationEnabled
 
                     if (locationEnabled) {
-                        nextTickUptimeMs += ACTIVE_TICK_INTERVAL_MS
+                        nextTickUptimeMs += if (isJoystickVisible) {
+                            JOYSTICK_TICK_INTERVAL_MS
+                        } else {
+                            ACTIVE_TICK_INTERVAL_MS
+                        }
                         val remainingMs = nextTickUptimeMs - SystemClock.uptimeMillis()
                         if (remainingMs > 0L) {
-                            delay(remainingMs)
+                            val wokeEarly = withTimeoutOrNull(remainingMs) {
+                                locationStateWake.receive()
+                                true
+                            } ?: false
+                            if (wokeEarly) nextTickUptimeMs = SystemClock.uptimeMillis()
                         } else {
                             nextTickUptimeMs = SystemClock.uptimeMillis()
                         }
@@ -535,6 +561,13 @@ class SpoofingService : Service() {
     }
 
     private fun computeCurrentLocation(): SimulatedLocation {
+        if (isJoystickVisible) {
+            val position = SpooferProvider.currentPosition()
+            return SimulatedLocation(
+                position.latitude, position.longitude, position.speed, position.bearing,
+                5f, SpooferProvider.altitude
+            )
+        }
         val routePoints = parseRoutePoints(SpooferProvider.routeJson)
         return if (SpooferProvider.isRouteMode && routePoints.size >= 2) {
             TrajectorySimulator.calculatePingPongRoutePosition(
@@ -570,7 +603,70 @@ class SpoofingService : Service() {
         }
     }
 
+    private fun showFloatingJoystick() {
+        if (isJoystickVisible) return
+        val current = SpooferProvider.currentPosition()
+        joystickStartPosition = current.latitude to current.longitude
+        joystickMoving = false
+        SpooferProvider.publishAnchorPosition(current.latitude, current.longitude)
+        SpooferProvider.simMode = "STILL"
+        SpooferProvider.isRouteMode = false
+        SpooferProvider.routeJson = "[]"
+        SpooferProvider.publishCurrentPosition(current.latitude, current.longitude, current.bearing, 0f)
+        val overlay = joystickOverlay ?: FloatingJoystickOverlay(
+            this,
+            onMove = ::moveFromFloatingJoystick,
+            onRelease = ::stopFloatingJoystickMotion
+        ).also { joystickOverlay = it }
+        isJoystickVisible = overlay.show()
+        if (isJoystickVisible) locationStateWake.trySend(Unit)
+    }
+
+    private fun hideFloatingJoystick(restoreStart: Boolean = true) {
+        joystickOverlay?.hide()
+        joystickOverlay = null
+        isJoystickVisible = false
+        joystickMoving = false
+        val start = joystickStartPosition
+        joystickStartPosition = null
+        if (restoreStart && start != null && SpooferProvider.isActive) {
+            SpooferProvider.publishAnchorPosition(start.first, start.second)
+            SpooferProvider.publishCurrentPosition(start.first, start.second, 0f, 0f)
+            SpooferProvider.requestRfRefresh()
+        }
+        locationStateWake.trySend(Unit)
+    }
+
+    private fun moveFromFloatingJoystick(
+        bearing: Double, intensity: Float, maxSpeedMs: Float, elapsedSeconds: Double
+    ) {
+        if (!isRunning || !SpooferProvider.isActive) return
+        val anchor = SpooferProvider.anchorPosition()
+        val speed = maxSpeedMs * intensity
+        val (lat, lng) = JoystickMotion.advance(
+            anchor.latitude, anchor.longitude, bearing,
+            speed * elapsedSeconds.coerceIn(0.0, 0.25)
+        )
+        val oldCell = EnvironmentCoveragePolicy.cellFor(anchor.latitude, anchor.longitude)
+        SpooferProvider.publishAnchorPosition(lat, lng)
+        SpooferProvider.publishCurrentPosition(lat, lng, bearing.toFloat(), speed)
+        if (!joystickMoving) {
+            joystickMoving = true
+            locationStateWake.trySend(Unit)
+        }
+        if (EnvironmentCoveragePolicy.cellFor(lat, lng) != oldCell) SpooferProvider.requestRfRefresh()
+    }
+
+    private fun stopFloatingJoystickMotion() {
+        joystickMoving = false
+        if (!SpooferProvider.isActive) return
+        val position = SpooferProvider.currentPosition()
+        SpooferProvider.publishCurrentPosition(position.latitude, position.longitude, position.bearing, 0f)
+        locationStateWake.trySend(Unit)
+    }
+
     private fun stopSpoofing(startId: Int) {
+        hideFloatingJoystick(restoreStart = false)
         runGeneration.incrementAndGet()
         settingsManager.isSpoofingActive = false
         if (lastReadyLifecycleToken == activeLifecycleToken) lastReadyLifecycleToken = 0L
@@ -901,6 +997,7 @@ class SpoofingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        hideFloatingJoystick()
         runGeneration.incrementAndGet()
         val destroyedToken = activeLifecycleToken
         var persistUnexpectedStop = false
