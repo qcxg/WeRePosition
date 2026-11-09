@@ -8,6 +8,12 @@ interface EnvironmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLocation(record: LocationRecord): Long
 
+    @Query("UPDATE location_records SET groupName = :groupName WHERE id IN (:ids)")
+    suspend fun setGroupForLocations(ids: List<Long>, groupName: String)
+
+    @Query("UPDATE location_records SET groupName = :newName WHERE groupName = :oldName")
+    suspend fun renameGroup(oldName: String, newName: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConnectedWifi(wifi: LocationConnectedWifi)
 

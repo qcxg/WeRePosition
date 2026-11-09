@@ -11,6 +11,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -29,6 +36,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
@@ -216,6 +224,7 @@ fun MainScreen(
     var isFullScreenMap by remember { mutableStateOf(false) }
     var isScannerMap by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(MainTab.FIXED) }
+    var settingsSubpage by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedTab) {
         if (selectedTab == MainTab.DATA) viewModel.loadManageData()
@@ -267,7 +276,17 @@ fun MainScreen(
             val navigationItems = MainTab.entries.map { GlassNavigationItem(stringResource(it.label), it.icon) }
             Box(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).hazeSource(hazeState)) {
-                    when (selectedTab) {
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                            (slideInHorizontally(tween(260)) { it * direction } + fadeIn(tween(180)))
+                                .togetherWith(slideOutHorizontally(tween(260)) { -it * direction } + fadeOut(tween(180)))
+                        },
+                        modifier = Modifier.fillMaxSize().clipToBounds(),
+                        label = "mainTabSlide"
+                    ) { tab ->
+                    when (tab) {
                         MainTab.FIXED -> SpoofingScreen(
                             viewModel = viewModel, uiState = uiState, isDark = isDark,
                             onExpandMap = { isFullScreenMap = true }
@@ -289,17 +308,21 @@ fun MainScreen(
                             }
                         )
                         MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
-                            viewModel = viewModel, uiState = uiState
+                            viewModel = viewModel, uiState = uiState,
+                            onSubpageChanged = { settingsSubpage = it }
                         )
                     }
+                    }
                 }
-                FloatingGlassNavigationBar(
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selectedTab != MainTab.SETTINGS || !settingsSubpage,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) { FloatingGlassNavigationBar(
                     items = navigationItems,
                     selectedIndex = selectedTab.ordinal,
                     onDestinationSelected = { selectedTab = MainTab.entries[it] },
-                    hazeState = hazeState,
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
+                    hazeState = hazeState
+                ) }
             }
         }
     }

@@ -262,4 +262,24 @@
     <string name="joystick_device_hint">Pushing up moves toward the top of your device. Movement pauses until a heading is available.</string>
     <string name="joystick_start_mode">Start joystick mode</string>
     <string name="joystick_stop_mode">Stop joystick mode</string>
+    <string name="data_group_all">All</string>
+    <string name="data_group_ungrouped">Ungrouped</string>
+    <string name="data_group_name">Group name</string>
+    <string name="data_group_new_hint">Enter a new name to create a group</string>
+    <string name="data_move_to_group">Move to group</string>
+    <string name="data_rename_group">Rename group</string>
+    <string name="data_ungroup_all">Ungroup all</string>
+    <string name="settings_appearance">Appearance and language</string>
+    <string name="settings_location">Location and app access</string>
+    <string name="settings_environment">Environment data and APIs</string>
+    <string name="settings_about">About WeRePosition</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_check_update">Check GitHub for updates</string>
+    <string name="settings_update_available">New version available</string>
+    <string name="settings_up_to_date">You are up to date</string>
+    <string name="settings_update_failed">Could not reach GitHub releases</string>
+    <string name="settings_open_release">View release</string>
+    <string name="settings_category_preferences">Personalization</string>
+    <string name="settings_category_simulation">Simulation</string>
+    <string name="settings_category_more">More</string>
 </resources>

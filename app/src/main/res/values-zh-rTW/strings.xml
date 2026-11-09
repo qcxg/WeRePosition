@@ -258,4 +258,24 @@
     <string name="joystick_device_hint">往上推時朝手機頂端所指方向移動；取得朝向前暫停移動。</string>
     <string name="joystick_start_mode">啟動搖桿模式</string>
     <string name="joystick_stop_mode">關閉搖桿模式</string>
+    <string name="data_group_all">全部</string>
+    <string name="data_group_ungrouped">未分組</string>
+    <string name="data_group_name">分組名稱</string>
+    <string name="data_group_new_hint">輸入新名稱即可建立分組</string>
+    <string name="data_move_to_group">移到分組</string>
+    <string name="data_rename_group">重新命名分組</string>
+    <string name="data_ungroup_all">取消此分組</string>
+    <string name="settings_appearance">外觀與語言</string>
+    <string name="settings_location">位置與應用權限</string>
+    <string name="settings_environment">環境資料與 API</string>
+    <string name="settings_about">關於 WeRePosition</string>
+    <string name="settings_version">版本 %1$s</string>
+    <string name="settings_check_update">檢查 GitHub 更新</string>
+    <string name="settings_update_available">有新版本</string>
+    <string name="settings_up_to_date">目前已是最新版</string>
+    <string name="settings_update_failed">無法取得 GitHub 發布資訊</string>
+    <string name="settings_open_release">查看版本</string>
+    <string name="settings_category_preferences">個人化</string>
+    <string name="settings_category_simulation">模擬設定</string>
+    <string name="settings_category_more">更多</string>
 </resources>

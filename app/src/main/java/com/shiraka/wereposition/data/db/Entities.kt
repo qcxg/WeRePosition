@@ -24,7 +24,8 @@ data class LocationRecord(
     val lng: Double,
     val timestamp: Long = System.currentTimeMillis(),
     val placeName: String = "",
-    val remark: String = ""
+    val remark: String = "",
+    val groupName: String = ""
 )
 
 /**

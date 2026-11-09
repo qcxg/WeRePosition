@@ -1,6 +1,9 @@
 package com.shiraka.wereposition.ui.screen
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,17 +11,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -27,16 +40,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiraka.wereposition.R
+import com.shiraka.wereposition.BuildConfig
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.utils.ExternalApiTester
 import com.shiraka.wereposition.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
-    uiState: AppState
+    uiState: AppState,
+    onSubpageChanged: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val themePrefs = remember(context) { context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE) }
@@ -56,17 +76,23 @@ fun SettingsScreen(
     val clipboardManager = LocalClipboardManager.current
     var showCleanupDialog by remember { mutableStateOf(false) }
     var isCleaningRuntime by remember { mutableStateOf(false) }
-    var expandedSection by remember { mutableStateOf<String?>(null) }
+    var currentPage by remember { mutableStateOf("home") }
     var googleApiTest by remember { mutableStateOf(ApiTestUiState()) }
     var wigleApiTest by remember { mutableStateOf(ApiTestUiState()) }
     var openCellIdApiTest by remember { mutableStateOf(ApiTestUiState()) }
     var showAppAccessPage by remember { mutableStateOf(false) }
     val apiTestScope = rememberCoroutineScope()
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf("") }
+    var updateUrl by remember { mutableStateOf<String?>(null) }
+    val updateAvailableText = stringResource(R.string.settings_update_available)
+    val upToDateText = stringResource(R.string.settings_up_to_date)
+    val updateFailedText = stringResource(R.string.settings_update_failed)
     val savedLanguage = uiState.currentLanguage.ifBlank { viewModel.getSavedLanguage() }
     val selectedLanguageName = LANGUAGES.firstOrNull { it.code == savedLanguage }?.nativeName ?: savedLanguage.ifBlank { "System" }
 
-    fun toggleSection(key: String) {
-        expandedSection = if (expandedSection == key) null else key
+    LaunchedEffect(currentPage, showAppAccessPage) {
+        onSubpageChanged(currentPage != "home" || showAppAccessPage)
     }
 
     if (showAppAccessPage) {
@@ -75,29 +101,78 @@ fun SettingsScreen(
         return
     }
 
+    BackHandler(currentPage != "home") { currentPage = "home" }
+
+    val pageTitle = when (currentPage) {
+        "appearance" -> stringResource(R.string.settings_appearance)
+        "location" -> stringResource(R.string.settings_location)
+        "environment" -> stringResource(R.string.settings_environment)
+        "about" -> stringResource(R.string.settings_about)
+        else -> stringResource(R.string.settings)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         TopAppBar(
-            title = { Text(stringResource(R.string.settings)) },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            title = { Text(pageTitle, style = MaterialTheme.typography.headlineMedium) },
+            navigationIcon = {
+                if (currentPage != "home") IconButton(onClick = { currentPage = "home" }) {
+                    Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
 
-        Column(
+        AnimatedContent(
+            targetState = currentPage,
+            transitionSpec = {
+                val forward = targetState != "home"
+                (slideInHorizontally(tween(260)) { width -> if (forward) width / 3 else -width / 3 } +
+                    fadeIn(tween(180))) togetherWith
+                    (slideOutHorizontally(tween(260)) { width -> if (forward) -width / 3 else width / 3 } +
+                        fadeOut(tween(180)))
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .clipToBounds()
+        ) { page ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            ExpandableSettingsRow(
+            if (page == "home") {
+                SettingsMenuGroup(title = stringResource(R.string.settings_category_preferences)) {
+                    SettingsMenuItem(stringResource(R.string.settings_appearance),
+                        "$selectedLanguageName · ${if (useDynamicColor) stringResource(R.string.theme_dynamic) else stringResource(R.string.theme_custom)}") {
+                        currentPage = "appearance"
+                    }
+                }
+                SettingsMenuGroup(title = stringResource(R.string.settings_category_simulation)) {
+                    SettingsMenuItem(stringResource(R.string.settings_location),
+                        stringResource(R.string.app_access_summary)) { currentPage = "location" }
+                    HorizontalDivider(Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant)
+                    SettingsMenuItem(stringResource(R.string.settings_environment),
+                        stringResource(R.string.api_config)) { currentPage = "environment" }
+                }
+                SettingsMenuGroup(title = stringResource(R.string.settings_category_more)) {
+                    SettingsMenuItem(stringResource(R.string.settings_about),
+                        stringResource(R.string.settings_version, BuildConfig.VERSION_NAME)) {
+                        currentPage = "about"
+                    }
+                }
+            }
+            if (page == "appearance") {
+            SettingsDetailSection(
                 title = stringResource(R.string.theme_colors),
                 summary = if (useDynamicColor) stringResource(R.string.theme_dynamic)
                     else stringResource(R.string.theme_custom),
-                expanded = expandedSection == "theme",
-                onClick = { toggleSection("theme") }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.theme_dynamic), modifier = Modifier.weight(1f))
@@ -143,11 +218,9 @@ fun SettingsScreen(
                 )
             }
 
-            ExpandableSettingsRow(
+            SettingsDetailSection(
                 title = stringResource(R.string.select_language),
                 summary = selectedLanguageName,
-                expanded = expandedSection == "language",
-                onClick = { toggleSection("language") }
             ) {
                 LANGUAGES.forEach { lang ->
                     LanguageItem(
@@ -164,11 +237,12 @@ fun SettingsScreen(
                 }
             }
 
-            ExpandableSettingsRow(
+            }
+            if (page == "location") {
+
+            SettingsDetailSection(
                 title = stringResource(R.string.recent_locations),
                 summary = stringResource(R.string.recent_display_count, uiState.recentLocationDisplayCount),
-                expanded = expandedSection == "recent_count",
-                onClick = { toggleSection("recent_count") }
             ) {
                 Text(stringResource(R.string.recent_display_count, recentDisplayCount.toInt()))
                 Slider(
@@ -213,16 +287,17 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text(stringResource(R.string.app_access_title)) },
                     supportingContent = { Text(stringResource(R.string.app_access_summary)) },
-                    trailingContent = { Icon(Icons.Rounded.ExpandMore, contentDescription = null) },
+                    trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 )
             }
 
-            ExpandableSettingsRow(
+            }
+            if (page == "about") {
+
+            SettingsDetailSection(
                 title = stringResource(R.string.app_identity),
                 summary = context.packageName,
-                expanded = expandedSection == "identity",
-                onClick = { toggleSection("identity") }
             ) {
                 CopyableReadOnlyField(
                     value = context.packageName,
@@ -243,11 +318,12 @@ fun SettingsScreen(
                 )
             }
 
-            ExpandableSettingsRow(
+            }
+            if (page == "environment") {
+
+            SettingsDetailSection(
                 title = stringResource(R.string.synthetic_rf_title),
                 summary = stringResource(if (uiState.syntheticRfEnabled) R.string.synthetic_rf_on else R.string.synthetic_rf_off),
-                expanded = expandedSection == "synthetic_rf",
-                onClick = { toggleSection("synthetic_rf") }
             ) {
                 Surface(
                     color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -283,11 +359,9 @@ fun SettingsScreen(
             }
 
             val configuredApiCount = listOf(localGoogleApiKey, localWigleToken, localOpencellidToken).count { it.isNotBlank() }
-            ExpandableSettingsRow(
+            SettingsDetailSection(
                 title = stringResource(R.string.api_config),
                 summary = stringResource(R.string.api_config_summary, configuredApiCount, 3),
-                expanded = expandedSection == "apis",
-                onClick = { toggleSection("apis") }
             ) {
                 ApiCredentialField(
                     value = localGoogleApiKey,
@@ -364,11 +438,51 @@ fun SettingsScreen(
                 }
             }
 
-            ExpandableSettingsRow(
+            }
+            if (page == "about") {
+            SettingsDetailSection(title = stringResource(R.string.settings_check_update)) {
+                Text(stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                FilledTonalButton(
+                    onClick = {
+                        updateChecking = true
+                        updateMessage = ""
+                        apiTestScope.launch {
+                            val release = withContext(Dispatchers.IO) { runCatching { fetchLatestRelease() }.getOrNull() }
+                            updateChecking = false
+                            if (release == null) {
+                                updateMessage = updateFailedText
+                                updateUrl = null
+                            } else {
+                                updateMessage = if (isVersionNewer(release.first, BuildConfig.VERSION_NAME))
+                                    "$updateAvailableText ${release.first}" else upToDateText
+                                updateUrl = if (isVersionNewer(release.first, BuildConfig.VERSION_NAME)) release.second else null
+                            }
+                        }
+                    },
+                    enabled = !updateChecking,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (updateChecking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text(stringResource(R.string.settings_check_update))
+                }
+                if (updateMessage.isNotBlank()) Text(updateMessage,
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (updateUrl != null) TextButton(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
+                }) {
+                    Icon(Icons.Rounded.OpenInNew, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.settings_open_release))
+                }
+            }
+
+            SettingsDetailSection(
                 title = stringResource(R.string.runtime_recovery),
                 summary = stringResource(R.string.cleanup_runtime_env),
-                expanded = expandedSection == "runtime",
-                onClick = { toggleSection("runtime") }
             ) {
                 Text(
                     stringResource(R.string.runtime_recovery_desc),
@@ -390,8 +504,10 @@ fun SettingsScreen(
                     )
                 }
             }
+            }
 
             Spacer(Modifier.height(120.dp))
+        }
         }
     }
 
@@ -432,43 +548,80 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun ExpandableSettingsRow(
+private fun SettingsMenuGroup(
     title: String,
-    summary: String,
-    expanded: Boolean,
-    onClick: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    Text(title, style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 8.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) { Column(content = content) }
+}
+
+@Composable
+private fun SettingsMenuItem(title: String, summary: String, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        supportingContent = { Text(summary, maxLines = 2) },
+        trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    )
+}
+
+@Composable
+private fun SettingsDetailSection(
+    title: String,
+    summary: String? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Column {
-            ListItem(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onClick),
-                headlineContent = { Text(title) },
-                supportingContent = { Text(summary) },
-                trailingContent = { Icon(
-                    if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = null
-                ) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            )
-            AnimatedVisibility(visible = expanded) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
-                    content = content
-                )
-            }
+        Column(Modifier.padding(18.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (!summary.isNullOrBlank()) Text(summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+            else Spacer(Modifier.height(12.dp))
+            content()
         }
     }
+}
+
+private fun fetchLatestRelease(): Pair<String, String> {
+    val connection = URL("https://api.github.com/repos/qcxg/WeRePosition/releases/latest")
+        .openConnection() as HttpURLConnection
+    connection.connectTimeout = 6_000
+    connection.readTimeout = 6_000
+    connection.setRequestProperty("Accept", "application/vnd.github+json")
+    connection.setRequestProperty("User-Agent", "WeRePosition-Android")
+    return try {
+        if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+            throw IllegalStateException("GitHub HTTP ${connection.responseCode}")
+        }
+        val body = connection.inputStream.bufferedReader().use { it.readText() }
+        val json = JSONObject(body)
+        json.getString("tag_name") to json.getString("html_url")
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private fun isVersionNewer(remote: String, local: String): Boolean {
+    val remoteParts = Regex("\\d+").findAll(remote).take(3).map { it.value.toInt() }.toList()
+    val localParts = Regex("\\d+").findAll(local).take(3).map { it.value.toInt() }.toList()
+    return (0..2).firstNotNullOfOrNull { index ->
+        val comparison = (remoteParts.getOrNull(index) ?: 0).compareTo(localParts.getOrNull(index) ?: 0)
+        comparison.takeIf { it != 0 }
+    }?.let { it > 0 } ?: false
 }
 
 @Composable

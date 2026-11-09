@@ -2008,6 +2008,23 @@ class MainViewModel(
         }
     }
 
+    fun setManageDataGroup(ids: List<Long>, groupName: String) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            environmentDao.setGroupForLocations(ids, groupName.trim().take(40))
+            loadManageData()
+        }
+    }
+
+    fun renameManageDataGroup(oldName: String, newName: String) {
+        val normalized = newName.trim().take(40)
+        if (oldName.isBlank() || normalized.isBlank() || oldName == normalized) return
+        viewModelScope.launch(Dispatchers.IO) {
+            environmentDao.renameGroup(oldName, normalized)
+            loadManageData()
+        }
+    }
+
     fun clearAllManageData() {
         viewModelScope.launch(Dispatchers.IO) {
             environmentDao.clearAll()

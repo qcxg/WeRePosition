@@ -11,7 +11,10 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +44,7 @@ import kotlin.math.roundToInt
 private data class ManagedLocationGroup(
     val ids: List<Long>,
     val first: CompleteLocation,
+    val groupName: String,
     val lat: Double,
     val lng: Double,
     val timestamp: Long,
@@ -65,6 +69,10 @@ fun ManageDataScreen(
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
     var showClearAllConfirm by remember { mutableStateOf(false) }
+    var showMoveDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var selectedGroup by remember { mutableStateOf<String?>(null) }
+    var groupNameInput by remember { mutableStateOf("") }
     
     var editingItem by remember { mutableStateOf<CompleteLocation?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -85,52 +93,62 @@ fun ManageDataScreen(
     val groupedData = remember(dataList, uiState.nearbyPlaceNames) {
         groupManagedLocations(dataList, uiState.nearbyPlaceNames)
     }
+    val namedGroups = remember(groupedData) {
+        groupedData.map { it.groupName }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+    val visibleData = remember(groupedData, selectedGroup) {
+        when (selectedGroup) {
+            null -> groupedData
+            "" -> groupedData.filter { it.groupName.isBlank() }
+            else -> groupedData.filter { it.groupName == selectedGroup }
+        }
+    }
+    LaunchedEffect(namedGroups, selectedGroup) {
+        if (selectedGroup != null && selectedGroup != "" && selectedGroup !in namedGroups) {
+            selectedGroup = null
+        }
+    }
     LaunchedEffect(dataList) {
         viewModel.refreshNearbyPlaceNames(dataList)
     }
     
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (isSelectionMode) {
-                        Text(stringResource(R.string.selected_items, selectedIds.size))
-                    } else {
-                        Text(stringResource(R.string.title_manage_data))
-                    }
-                },
-                navigationIcon = {
-                    if (isSelectionMode) {
-                        IconButton(onClick = {
-                            isSelectionMode = false
-                            selectedIds.clear()
-                        }) {
-                            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.back))
-                        }
-                    }
-                },
-                actions = {
+    LazyColumn(
+            modifier = Modifier.fillMaxSize().statusBarsPadding(),
+            contentPadding = PaddingValues(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 124.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            item(key = "page-heading") {
+                Row(Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (isSelectionMode) IconButton(onClick = {
+                        isSelectionMode = false
+                        selectedIds.clear()
+                    }) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.back)) }
+                    Text(
+                        if (isSelectionMode) stringResource(R.string.selected_items, selectedIds.size)
+                        else stringResource(R.string.title_manage_data),
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.weight(1f)
+                    )
                     if (isSelectionMode) {
                         IconButton(onClick = {
-                            val allIds = groupedData.flatMap { it.ids }
-                            if (selectedIds.size == allIds.size) {
-                                selectedIds.clear()
-                            } else {
-                                selectedIds.clear()
-                                selectedIds.addAll(allIds)
-                            }
-                        }) {
-                            Icon(Icons.Rounded.SelectAll, contentDescription = stringResource(R.string.select_all))
-                        }
+                            val visibleIds = visibleData.flatMap { it.ids }
+                            if (visibleIds.all { it in selectedIds }) selectedIds.removeAll(visibleIds.toSet())
+                            else selectedIds.addAll(visibleIds.filterNot { it in selectedIds })
+                        }) { Icon(Icons.Rounded.SelectAll, contentDescription = stringResource(R.string.select_all)) }
                         if (selectedIds.isNotEmpty()) {
+                            IconButton(onClick = {
+                                groupNameInput = selectedGroup.orEmpty()
+                                showMoveDialog = true
+                            }) {
+                                Icon(Icons.Rounded.DriveFileMove, contentDescription = stringResource(R.string.data_move_to_group))
+                            }
                             IconButton(onClick = {
                                 viewModel.deleteManageData(selectedIds.toList())
                                 isSelectionMode = false
                                 selectedIds.clear()
-                            }) {
-                                Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error)
-                            }
+                            }) { Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error) }
                         }
                     } else {
                         IconButton(onClick = { isSelectionMode = true }) {
@@ -140,19 +158,8 @@ fun ManageDataScreen(
                             Icon(Icons.Rounded.DeleteSweep, contentDescription = stringResource(R.string.clear_all), tint = MaterialTheme.colorScheme.error)
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
-                )
-            )
-        }
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(paddingValues),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
-        ) {
+                }
+            }
             item(key = "collection-actions") {
                     Column(Modifier.fillMaxWidth().padding(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(stringResource(R.string.spatial_env_collection), style = MaterialTheme.typography.titleLarge)
@@ -184,12 +191,32 @@ fun ManageDataScreen(
             item(key = "records-heading") {
                 Text(stringResource(R.string.title_manage_data), style = MaterialTheme.typography.titleMedium)
             }
+            item(key = "group-filters") {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(selected = selectedGroup == null, onClick = { selectedGroup = null },
+                        label = { Text(stringResource(R.string.data_group_all)) })
+                    FilterChip(selected = selectedGroup == "", onClick = { selectedGroup = "" },
+                        label = { Text(stringResource(R.string.data_group_ungrouped)) })
+                    namedGroups.forEach { name ->
+                        FilterChip(selected = selectedGroup == name, onClick = { selectedGroup = name },
+                            label = { Text(name) })
+                    }
+                    if (!selectedGroup.isNullOrEmpty()) IconButton(onClick = {
+                        groupNameInput = selectedGroup.orEmpty()
+                        showRenameDialog = true
+                    }) { Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.data_rename_group)) }
+                }
+            }
             if (uiState.manageDataIsLoading) {
                 item { Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-            } else if (groupedData.isEmpty()) {
+            } else if (visibleData.isEmpty()) {
                 item { Text(stringResource(R.string.no_data_collected), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
-                items(groupedData, key = { "record-${it.ids.joinToString("-")}" }) { item ->
+                items(visibleData, key = { "record-${it.ids.joinToString("-")}" }) { item ->
                         val isSelected = item.ids.all { selectedIds.contains(it) }
                         DataListItem(
                             group = item,
@@ -220,6 +247,81 @@ fun ManageDataScreen(
             }
 
         }
+
+    if (showMoveDialog) {
+        AlertDialog(
+            onDismissRequest = { showMoveDialog = false },
+            title = { Text(stringResource(R.string.data_move_to_group)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = { groupNameInput = "" }) {
+                        Text(stringResource(R.string.data_group_ungrouped))
+                    }
+                    namedGroups.forEach { name ->
+                        TextButton(onClick = { groupNameInput = name }) { Text(name) }
+                    }
+                    OutlinedTextField(
+                        value = groupNameInput,
+                        onValueChange = { groupNameInput = it.take(40) },
+                        label = { Text(stringResource(R.string.data_group_name)) },
+                        supportingText = { Text(stringResource(R.string.data_group_new_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setManageDataGroup(selectedIds.toList(), groupNameInput)
+                    selectedIds.clear()
+                    isSelectionMode = false
+                    showMoveDialog = false
+                }) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = { TextButton(onClick = { showMoveDialog = false }) {
+                Text(stringResource(R.string.cancel))
+            } }
+        )
+    }
+
+    if (showRenameDialog && !selectedGroup.isNullOrEmpty()) {
+        val oldName = selectedGroup.orEmpty()
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text(stringResource(R.string.data_rename_group)) },
+            text = {
+                OutlinedTextField(
+                    value = groupNameInput,
+                    onValueChange = { groupNameInput = it.take(40) },
+                    label = { Text(stringResource(R.string.data_group_name)) },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = groupNameInput.isNotBlank(),
+                    onClick = {
+                        viewModel.renameManageDataGroup(oldName, groupNameInput)
+                        selectedGroup = groupNameInput.trim()
+                        showRenameDialog = false
+                    }
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        viewModel.setManageDataGroup(
+                            groupedData.filter { it.groupName == oldName }.flatMap { it.ids }, ""
+                        )
+                        selectedGroup = ""
+                        showRenameDialog = false
+                    }) { Text(stringResource(R.string.data_ungroup_all)) }
+                    TextButton(onClick = { showRenameDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            }
+        )
     }
 
     if (editingItem != null) {
@@ -355,6 +457,9 @@ private fun DataListItem(
                     Column(Modifier.weight(1f)) {
                         Text(group.nearbyName.ifBlank { timeStr }, style = MaterialTheme.typography.titleSmall,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (group.groupName.isNotBlank()) Text(group.groupName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary)
                         Text(String.format(Locale.US, "%.5f, %.5f · %s", group.lat, group.lng, timeStr),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -399,7 +504,7 @@ private fun groupManagedLocations(
     nearbyNames: Map<String, String>
 ): List<ManagedLocationGroup> {
     return records
-        .groupBy { placeKey(it.location.lat, it.location.lng) }
+        .groupBy { it.location.groupName to placeKey(it.location.lat, it.location.lng) }
         .values
         .map { group ->
             val first = group.minByOrNull { it.location.timestamp } ?: group.first()
@@ -411,6 +516,7 @@ private fun groupManagedLocations(
             ManagedLocationGroup(
                 ids = group.map { it.location.id },
                 first = first,
+                groupName = first.location.groupName,
                 lat = first.location.lat,
                 lng = first.location.lng,
                 timestamp = group.maxOf { it.location.timestamp },

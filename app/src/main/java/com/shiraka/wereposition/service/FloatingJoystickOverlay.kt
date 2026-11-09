@@ -79,9 +79,9 @@ internal class FloatingJoystickOverlay(
             }
             if (moving && intensity > 0.01f) {
                 val resolvedBearing = if (settings.joystickDirectionMode == "DEVICE") {
-                    deviceHeading?.let { (bearing + it) % 360.0 }
+                    (bearing + (deviceHeading ?: 0.0)) % 360.0
                 } else bearing
-                if (resolvedBearing != null) onMove(resolvedBearing, intensity, speed, elapsedSeconds)
+                onMove(resolvedBearing, intensity, speed, elapsedSeconds)
             }
             handler.postDelayed(this, 100L)
         }

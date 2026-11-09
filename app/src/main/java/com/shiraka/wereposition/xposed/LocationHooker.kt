@@ -2993,6 +2993,12 @@ class LocationHooker : XposedModule() {
         configPollIntervalMs = when {
             !selectedCandidate.config.optBoolean("active", false) ->
                 if (registeredGnssStatusCallbacks.isNotEmpty()) 2_000L else inactiveConfigPollIntervalMs
+            // Property callbacks are not guaranteed to fire across processes. The
+            // joystick publishes a new frame every 250 ms, so system_server must
+            // observe it independently of a lifecycle/content notification.
+            currentPackageName == "android" &&
+                selectedCandidate.config.optBoolean("joystick_mode", false) -> 250L
+            currentPackageName == "android" -> 1_000L
             registeredGnssStatusCallbacks.isNotEmpty() -> 2_000L
             !isSystemLocationSwitchEnabled() -> if (
                 configChangeCallbackInstalled || configContentObserverInstalled
