@@ -429,7 +429,7 @@ object TrajectorySimulator {
      * 模型: baseAccuracy + gaussianDrift
      * - baseAccuracy: 由移动模式决定的基准精度(如步行模式约7m,驾驶模式约4m)
      * - gaussianDrift: 累加式高斯漂移,模拟GDOP随卫星运动的缓慢变化
-     * - clamp到[2.0, 50.0]范围: 真实GPS的精度不可能为负或异常大
+     * - clamp到[4.0, 18.0]范围，與模擬位置的實際漂移尺度相符
      *
      * @param jitterRadius 漂移半径基准(米),用于计算baseAccuracy
      * @return 带高斯波动的精度值(米)
@@ -437,8 +437,8 @@ object TrajectorySimulator {
     private fun computeGaussianAccuracy(jitterRadius: Double): Float {
         // 精度漂移: 每次叠加一个小幅高斯增量,模拟GDOP缓慢变化
         accuracyDrift += 0.3 * rng.nextGaussian() - 0.02 * accuracyDrift
-        val baseAccuracy = jitterRadius + 2.0
-        return (baseAccuracy + accuracyDrift).coerceIn(2.0, 50.0).toFloat()
+        val baseAccuracy = (jitterRadius * 0.25).coerceIn(5.0, 15.0)
+        return (baseAccuracy + accuracyDrift).coerceIn(4.0, 18.0).toFloat()
     }
 
     /**

@@ -453,8 +453,10 @@ class LocationHooker : XposedModule() {
     private fun getJitteredAccuracy(): Float {
         val jitterRadius = jitterRadiusMeters()
         hookAccuracyDrift += 0.5 * rng.nextGaussian() - 0.03 * hookAccuracyDrift
-        val baseAccuracy = (jitterRadius * 0.65).coerceIn(8.0, 50.0)
-        return (baseAccuracy + hookAccuracyDrift).coerceIn(3.0, 55.0).toFloat()
+        // The configured radius is a hard limit on the slow drift, not the typical
+        // error of each fix. Keep horizontal uncertainty close to the OU drift scale.
+        val baseAccuracy = (jitterRadius * 0.25).coerceIn(5.0, 15.0)
+        return (baseAccuracy + hookAccuracyDrift).coerceIn(4.0, 18.0).toFloat()
     }
 
     private fun jitterRadiusMeters(): Double {
@@ -3199,11 +3201,13 @@ class LocationHooker : XposedModule() {
             val configBootId = config.optString("boot_id", "")
             val currentBootId = readBootId()
             if (configBootId.isNotEmpty() && currentBootId.isNotEmpty() && configBootId != currentBootId) {
-                config.put("active", false)
-                config.put("fail_closed", false)
+                // Android can restore its location master switch before our BOOT_COMPLETED
+                // receiver runs. Keep the previous active snapshot as a blocking fence
+                // until that receiver disables the switch and writes an explicit stop.
+                markActiveConfigUnavailable(config)
                 XposedBridge.logOpenCellIdEvery(
                     "config:boot-expired",
-                    "readConfig disabled previous-boot active config",
+                    "readConfig blocked real location from previous-boot active config",
                     30_000L
                 )
             }
@@ -4435,7 +4439,7 @@ class LocationHooker : XposedModule() {
         return android.location.Location(provider).also { location ->
             location.latitude = base.first
             location.longitude = base.second
-            location.accuracy = 20f
+            location.accuracy = 8f
             location.time = timestamps.wallTimeMs
             location.elapsedRealtimeNanos = timestamps.elapsedRealtimeNanos
         }

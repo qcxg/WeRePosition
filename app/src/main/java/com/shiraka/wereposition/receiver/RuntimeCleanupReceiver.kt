@@ -23,23 +23,6 @@ class RuntimeCleanupReceiver : BroadcastReceiver() {
             return
         }
 
-        SpooferProvider.isActive = false
-        SpooferProvider.publishRuntimeConfigGeneration(0L)
-        SpooferProvider.publishAnchorPosition(0.0, 0.0)
-        SpooferProvider.publishCurrentPosition(0.0, 0.0)
-        SpooferProvider.publishRuntimeHeartbeat(0L, "")
-        SpooferProvider.clearRfForCoverageTransition()
-        SpooferProvider.routeJson = "[]"
-        SpooferProvider.isRouteMode = false
-        SettingsManager(context.applicationContext).apply {
-            isSpoofingActive = false
-            // Release replacement still requires an LSPosed reload. Debug APKs are
-            // routinely replaced for host/service-only testing and must remain usable;
-            // the tester explicitly reboots whenever hook bytecode itself changed.
-            moduleRestartRequired = action == Intent.ACTION_MY_PACKAGE_REPLACED &&
-                !BuildConfig.DEBUG
-        }
-
         val pendingResult = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
@@ -49,9 +32,30 @@ class RuntimeCleanupReceiver : BroadcastReceiver() {
                     rootManager.setPureArmed(true)
                     rootManager.setLocationMasterEnabled(false)
                 } else true
+                if (!locationDisabled) {
+                    // Keep the previous active snapshot as a real-location fence if
+                    // Android's master switch cannot be turned off yet.
+                    Log.e("RuntimeCleanupReceiver", "location switch stayed on; preserving active runtime fence")
+                    return@launch
+                }
                 val saved = ConfigManager(rootManager).saveConfig(0.0, 0.0, false)
                 if (pureMode && locationDisabled && saved) rootManager.setPureArmed(false)
                 if (saved) {
+                    SpooferProvider.isActive = false
+                    SpooferProvider.publishRuntimeConfigGeneration(0L)
+                    SpooferProvider.publishAnchorPosition(0.0, 0.0)
+                    SpooferProvider.publishCurrentPosition(0.0, 0.0)
+                    SpooferProvider.publishRuntimeHeartbeat(0L, "")
+                    SpooferProvider.clearRfForCoverageTransition()
+                    SpooferProvider.routeJson = "[]"
+                    SpooferProvider.isRouteMode = false
+                    SettingsManager(context.applicationContext).apply {
+                        isSpoofingActive = false
+                        // Release replacements require an LSPosed reload. Debug APKs
+                        // are also installed for service-only testing.
+                        moduleRestartRequired = action == Intent.ACTION_MY_PACKAGE_REPLACED &&
+                            !BuildConfig.DEBUG
+                    }
                     Log.d("RuntimeCleanupReceiver", "runtime config marked inactive after $action")
                 } else {
                     Log.e(
