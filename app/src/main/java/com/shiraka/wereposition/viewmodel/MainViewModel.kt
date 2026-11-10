@@ -2,6 +2,7 @@ package com.shiraka.wereposition.viewmodel
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.location.Geocoder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -1366,7 +1367,8 @@ class MainViewModel(
 
     fun setPerAppLocationEnabled(enabled: Boolean) {
         settingsRepository.perAppLocationEnabled = enabled
-        _uiState.update { it.copy(perAppLocationEnabled = enabled) }
+        _uiState.update { it.copy(perAppLocationEnabled = settingsRepository.perAppLocationEnabled) }
+        requestActiveConfigRefresh()
     }
 
     fun setPureModeEnabled(enabled: Boolean) {
@@ -1380,6 +1382,14 @@ class MainViewModel(
         if (allowed) next.add(packageName) else next.remove(packageName)
         settingsRepository.locationAllowedApps = next
         _uiState.update { it.copy(locationAllowedApps = next) }
+        requestActiveConfigRefresh()
+    }
+
+    private fun requestActiveConfigRefresh() {
+        if (!SpooferProvider.isActive || !SpoofingService.isRunning) return
+        context.startService(
+            Intent(context, SpoofingService::class.java).setAction(SpoofingService.ACTION_REFRESH_CONFIG)
+        )
     }
 
     fun setAppRfScope(packageName: String, enabled: Boolean, onResult: (Boolean) -> Unit): Boolean {
@@ -1626,6 +1636,7 @@ class MainViewModel(
             )
         }
         SpooferProvider.requestRfRefresh()
+        requestActiveConfigRefresh()
         val state = _uiState.value
         val lat = state.latitudeInput.toDoubleOrNull()
         val lng = state.longitudeInput.toDoubleOrNull()
@@ -1648,6 +1659,7 @@ class MainViewModel(
             SpooferProvider.altitude = state.altitudeInput.toDoubleOrNull() ?: 0.0
             SpooferProvider.satelliteCount = state.satelliteCountInput.toIntOrNull()?.coerceIn(0, 64) ?: 20
             SpooferProvider.requestRfRefresh()
+            requestActiveConfigRefresh()
             evaluateMockCapabilities()
         }
     }

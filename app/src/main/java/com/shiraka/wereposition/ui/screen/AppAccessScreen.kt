@@ -87,7 +87,7 @@ fun AppAccessScreen(viewModel: MainViewModel, uiState: AppState, onBack: () -> U
                                 style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                             Switch(
                                 checked = uiState.perAppLocationEnabled,
-                                onCheckedChange = viewModel::setPerAppLocationEnabled
+                                onCheckedChange = null
                             )
                         }
                         Text(stringResource(R.string.app_access_location_desc),

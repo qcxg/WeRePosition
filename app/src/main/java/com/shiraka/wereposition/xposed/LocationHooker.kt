@@ -3095,23 +3095,6 @@ class LocationHooker : XposedModule() {
             hasValidTargetCoordinates(config) && isSystemLocationSwitchEnabled()
     }
 
-    private fun locationAllowedForCaller(config: JSONObject?, callerPackage: String?): Boolean {
-        if (config?.optBoolean("location_allowlist_enabled", false) != true) return true
-        if (callerPackage == null) return false
-        if (isInfrastructurePackage(callerPackage)) return true
-        val allowed = config.optJSONArray("location_allowlist") ?: return false
-        return (0 until allowed.length()).any { allowed.optString(it) == callerPackage }
-    }
-
-    private fun callerPackageFromIdentity(identity: Any?): String? = identity?.let {
-        runCatching { XposedHelpers.callMethod(it, "getPackageName") as? String }.getOrNull()
-    }
-
-    private fun callerPackageFromRegistration(registration: Any?): String? = registration?.let {
-        val identity = runCatching { XposedHelpers.callMethod(it, "getIdentity") }.getOrNull()
-        callerPackageFromIdentity(identity)
-    }
-
     private fun shouldBlockRealLocation(config: JSONObject?): Boolean {
         // Pure mode arms this guard before the Android location switch is enabled.
         // Keep it active through stop until the switch is off and the tombstone is saved.
@@ -4283,13 +4266,6 @@ class LocationHooker : XposedModule() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val config = readConfig()
                     if (!shouldBlockRealLocation(config)) return
-                    val identity = param.args.firstOrNull {
-                        it?.javaClass?.name == "android.location.util.identity.CallerIdentity"
-                    }
-                    if (!locationAllowedForCaller(config, callerPackageFromIdentity(identity))) {
-                        param.result = null
-                        return
-                    }
                     val provider = param.thisObject?.let(::systemProviderName)
                     if (provider == null || !isSyntheticSystemProvider(provider) ||
                         !shouldDeliverLocation(config)
@@ -4311,36 +4287,6 @@ class LocationHooker : XposedModule() {
                     )) location else null
                 }
             })
-
-            // Filtering at each registration keeps already-running listeners in sync when
-            // the allowlist changes. The provider cache still contains only fake fixes.
-            XposedHelpers.findClassIfExists(
-                "$managerClassName\$LocationRegistration", classLoader
-            )?.let { registrationClass ->
-                XposedBridge.hookAllMethods(registrationClass, "acceptLocationChange", object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val config = readConfig()
-                        if (!shouldBlockRealLocation(config)) return
-                        if (!locationAllowedForCaller(config, callerPackageFromRegistration(param.thisObject))) {
-                            param.result = null
-                        }
-                    }
-                })
-            }
-            XposedHelpers.findClassIfExists(
-                "$managerClassName\$GetCurrentLocationListenerRegistration", classLoader
-            )?.let { registrationClass ->
-                XposedBridge.hookAllMethods(registrationClass, "acceptLocationChange", object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val config = readConfig()
-                        if (!shouldBlockRealLocation(config)) return
-                        if (!locationAllowedForCaller(config, callerPackageFromRegistration(param.thisObject))) {
-                            // The framework's null path completes the one-shot callback.
-                            param.args[0] = null
-                        }
-                    }
-                })
-            }
 
             XposedBridge.log(
                 "[WeRePosition] system framework fix hook installed at " +

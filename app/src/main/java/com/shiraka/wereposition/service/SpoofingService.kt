@@ -139,6 +139,7 @@ class SpoofingService : Service() {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
         const val ACTION_JOYSTICK = "ACTION_JOYSTICK"
+        const val ACTION_REFRESH_CONFIG = "ACTION_REFRESH_CONFIG"
         const val EXTRA_JOYSTICK_VISIBLE = "EXTRA_JOYSTICK_VISIBLE"
         const val EXTRA_LAT = "EXTRA_LAT"
         const val EXTRA_LNG = "EXTRA_LNG"
@@ -215,6 +216,7 @@ class SpoofingService : Service() {
                     showFloatingJoystick()
                 } else hideFloatingJoystick()
             }
+            ACTION_REFRESH_CONFIG -> if (isRunning) locationStateWake.trySend(Unit)
             else -> if (!isRunning) stopSelfResult(startId)
         }
         return START_NOT_STICKY
@@ -273,12 +275,13 @@ class SpoofingService : Service() {
                 locationWasEnabled = isLocationEnabled()
                 if (!locationWasEnabled) {
                     // Starting while Android's location master switch is off is valid.
-                    // Keep the requested lifecycle alive but publish no active runtime
-                    // frame until the switch is enabled; the broadcast wakes this loop.
+                    // Keep the requested lifecycle alive and publish the synthetic
+                    // target. The framework location switch gates delivery, so the
+                    // target is already ready when Android enables location again.
                     if (!settingsManager.pureModeEnabled) lastReadyLifecycleToken = lifecycleToken
                     Log.i(
                         "SpoofingService",
-                        "simulation armed with location master switch off; runtime writer paused"
+                        "simulation armed with location master switch off; location delivery paused"
                     )
                 }
 
@@ -289,8 +292,7 @@ class SpoofingService : Service() {
                 ) {
                     val locationEnabled = isLocationEnabled()
 
-                    if (locationEnabled) {
-                        try {
+                    try {
                             val currentLoc = computeCurrentLocation()
                             val rfSnapshot = resolveRuntimeRfSnapshot(currentLoc)
                             val wallNow = System.currentTimeMillis()
@@ -317,11 +319,12 @@ class SpoofingService : Service() {
                             val nowUptime = SystemClock.uptimeMillis()
                             val periodicWriteDue = nowUptime - lastConfigWriteUptimeMs >=
                                 FIXED_CONFIG_WRITE_INTERVAL_MS
-                            val resumedFromDisabled = !locationWasEnabled
-                            val fullWriteDue = contentChanged || periodicWriteDue || resumedFromDisabled
+                            val resumedFromDisabled = locationEnabled && !locationWasEnabled
+                            val switchChanged = locationEnabled != locationWasEnabled
+                            val fullWriteDue = contentChanged || periodicWriteDue || switchChanged
                             val frameHeartbeatDue = nowUptime - lastRuntimeFrameWriteUptimeMs >=
                                 RUNTIME_FRAME_HEARTBEAT_INTERVAL_MS
-                            val overlayWriteDue = !fullWriteDue &&
+                            val overlayWriteDue = locationEnabled && !fullWriteDue &&
                                 (moving || positionChanged || frameHeartbeatDue)
                             val retryDelay = WRITE_RETRY_BACKOFF_MS[
                                 (consecutiveWriteFailures - 1).coerceIn(
@@ -337,7 +340,7 @@ class SpoofingService : Service() {
                                     writeRuntimeConfig(
                                         currentLoc,
                                         rfSnapshot,
-                                        contentChanged || resumedFromDisabled
+                                        contentChanged || switchChanged
                                     )
                                 } else {
                                     writeRuntimePositionOverlay(currentLoc)
@@ -365,14 +368,10 @@ class SpoofingService : Service() {
                                     consecutiveWriteFailures++
                                 }
                             }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Throwable) {
-                            logRuntimeErrorThrottled(e)
-                        }
-                    } else if (locationWasEnabled) {
-                        rootManager.closePersistentSession()
-                        Log.i("SpoofingService", "location master switch off; runtime writer paused")
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        logRuntimeErrorThrottled(e)
                     }
                     locationWasEnabled = locationEnabled
 

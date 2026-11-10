@@ -218,7 +218,7 @@
     <string name="app_access_title">應用存取控制</string>
     <string name="app_access_summary">逐應用控制位置可見性與 Wi-Fi／基站 Hook 範圍</string>
     <string name="app_access_location_mode">僅向選定應用提供位置</string>
-    <string name="app_access_location_desc">模擬期間，選定應用讀取模擬位置，其他應用從系統定位介面讀取空值。關閉後所有應用均可讀取。</string>
+    <string name="app_access_location_desc">此模式暫停使用。回傳空值可能讓應用顯示先前快取的真實位置。模擬期間所有應用均接收模擬位置；下方位置選擇暫不生效。</string>
     <string name="app_access_rf_desc">Wi-Fi 與基站注入另用 LSPosed 作用域。更改作用域後請重新啟動目標應用。</string>
     <string name="app_access_search">搜尋應用</string>
     <string name="app_access_system_apps">顯示系統應用</string>
