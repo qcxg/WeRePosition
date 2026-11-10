@@ -40,8 +40,8 @@ android {
         minSdk = 34
         //noinspection OldTargetApi
         targetSdk = 36
-        versionCode = 20000
-        versionName = "2.0.0"
+        versionCode = 20001
+        versionName = "2.0.1"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -66,7 +66,6 @@ android {
 
     buildTypes {
         debug {
-            // signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$googleMapsApiKey\"")
         }
         release {
@@ -129,6 +128,7 @@ dependencies {
     ksp(libs.room.compiler)
 
     debugImplementation(libs.androidx.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

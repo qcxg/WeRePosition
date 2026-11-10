@@ -7,7 +7,7 @@
 [![Root](https://img.shields.io/badge/Root-KernelSU%20%7C%20Magisk%20%7C%20APatch-orange.svg)](https://kernelsu.org)
 [![Xposed](https://img.shields.io/badge/Framework-LSPosed-purple.svg)](https://github.com/LSPosed/LSPosed)
 
-[更新記錄](CHANGELOG.md) | [English](README_EN.md)
+[更新記錄](CHANGELOG.md) | [程式碼盤點](docs/CODE_AUDIT.md) | [English](README_EN.md)
 
 > 本專案僅以 [HuangZhuoRui/LocationSpoofer](https://github.com/HuangZhuoRui/LocationSpoofer) 早期公開倉庫的程式碼為起點；維護者已審查當時取得的原始碼。WeRePosition 現由 qcxg 獨立維護，與原專案、其現任維護者及服務沒有合作或隸屬關係。保留原始來源與授權資訊，是為了如實說明程式碼沿革。Android 包名為 `com.shiraka.wereposition`。
 
@@ -90,7 +90,7 @@ WeRePosition App
   |-- EnvironmentRfResolver / DAO: 只解析目標所在的完全相同格
   |-- SpoofingService: active 期間唯一持續運行期 writer
   |-- RuntimeConfigWriteCoordinator: 序列化寫入並淘汰過時 revision
-  |-- ConfigManager: 啟停邊界配置
+  |-- ConfigManager: 停用與重啟清理配置
   |-- SpooferProvider
         |
         | 固定點、自動路線與獨立懸浮搖桿共用的運行管線

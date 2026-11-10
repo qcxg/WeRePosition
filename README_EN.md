@@ -7,7 +7,7 @@ System-level Android location and radio-environment simulation for testing apps 
 [![Root](https://img.shields.io/badge/Root-KernelSU%20%7C%20Magisk%20%7C%20APatch-orange.svg)](https://kernelsu.org)
 [![Xposed](https://img.shields.io/badge/Framework-LSPosed-purple.svg)](https://github.com/LSPosed/LSPosed)
 
-[繁體中文](README.md) | [Changelog](CHANGELOG.md)
+[繁體中文](README.md) | [Changelog](CHANGELOG.md) | [Code audit](docs/CODE_AUDIT.md)
 
 > This project uses only code obtained from an early public version of [HuangZhuoRui/LocationSpoofer](https://github.com/HuangZhuoRui/LocationSpoofer) as its starting point. The maintainer reviewed that source. WeRePosition is now independently maintained by qcxg and has no affiliation, collaboration, or service relationship with the original project or its current maintainers. The source and license attribution remain to accurately describe the code's history. The Android package is `com.shiraka.wereposition`.
 

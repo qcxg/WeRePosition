@@ -873,6 +873,8 @@ class SpoofingService : Service() {
             setprop gsm.wrp.location_allowlist_enabled ${settingsManager.perAppLocationEnabled}
             setprop gsm.wrp.joystick_mode $isJoystickVisible
             setprop gsm.wrp.enable_jitter ${SpooferProvider.enableJitter && !isJoystickVisible}
+            setprop gsm.wrp.jitter_radius ${SpooferProvider.jitterRadiusMeters.coerceIn(1, 80)}
+            setprop gsm.wrp.jitter_speed ${SpooferProvider.jitterSpeed}
             setprop gsm.wrp.lat ${loc.lat}
             setprop gsm.wrp.lng ${loc.lng}
             setprop gsm.wrp.bearing ${loc.bearing}

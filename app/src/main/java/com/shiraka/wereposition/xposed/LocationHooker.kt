@@ -8,10 +8,6 @@ import java.io.File
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 import com.shiraka.wereposition.utils.EnvironmentCoveragePolicy
 
 class LocationHooker : XposedModule() {
@@ -90,16 +86,12 @@ class LocationHooker : XposedModule() {
         installProcessHooks(param.classLoader, "android")
     }
     
-    // --- Original Logic ---
-
-
     companion object {
 
         private const val VERBOSE_CELL_BUILD_LOGS = false
-        private const val EARTH_RADIUS_METERS = 6378137.0
-        private const val DEFAULT_JITTER_RADIUS_METERS = 30.0
-        private const val MIN_JITTER_RADIUS_METERS = 1.0
-        private const val MAX_JITTER_RADIUS_METERS = 80.0
+        private const val DEFAULT_JITTER_RADIUS_METERS = LocationJitterEngine.DEFAULT_RADIUS_METERS
+        private const val MIN_JITTER_RADIUS_METERS = LocationJitterEngine.MIN_RADIUS_METERS
+        private const val MAX_JITTER_RADIUS_METERS = LocationJitterEngine.MAX_RADIUS_METERS
     }
 
     fun handleLoadPackage(pkg: String, classLoader: ClassLoader) {
@@ -168,22 +160,11 @@ class LocationHooker : XposedModule() {
         // the calculated geomagnetic model, so keep compass data untouched by default.
     }
 
-    private var startTimestamp = System.currentTimeMillis()
-
-    /** Per-process Ornstein-Uhlenbeck state for bounded stationary drift. */
     private val rng = Random()
-    private var hookDriftNorthMeters = 0.0
-    private var hookDriftEastMeters = 0.0
-    private var hookAccuracyDrift = 0.0
-    private var hookLastCallTime = 0L
-    private var cachedJitterAtElapsedMs = 0L
-    private var cachedJitterBaseLat = Double.NaN
-    private var cachedJitterBaseLng = Double.NaN
-    private var cachedJitterRadius = DEFAULT_JITTER_RADIUS_METERS
-    private var cachedJitterSpeed = "MEDIUM"
-    private var cachedJitterRfCellEnforced = true
-    private var cachedJitteredLocation = Pair(0.0, 0.0)
-    private var lastLoggedJitterSpeed = ""
+    private val jitterEngine = LocationJitterEngine(
+        elapsedRealtimeMs = android.os.SystemClock::elapsedRealtime,
+        logProfile = { XposedBridge.log(it) }
+    )
     private val systemLocationHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
     private val systemProviderManagers = ConcurrentHashMap<String, Any>()
     private val lastRealSystemProviderReportAtMs = ConcurrentHashMap<String, Long>()
@@ -304,8 +285,17 @@ class LocationHooker : XposedModule() {
             config.optDouble("lat", 0.0),
             config.optDouble("lng", 0.0)
         )
-        val jitteredApp = getJitteredLocation(appBase.first, appBase.second)
-        val jittered = jitteredApp
+        val jittered = jitterEngine.sample(
+            LocationJitterEngine.Config(
+                enabled = enableJitter,
+                radiusMeters = config.optDouble("jitter_radius_meters", DEFAULT_JITTER_RADIUS_METERS),
+                speed = config.optString("jitter_speed", "MEDIUM"),
+                constrainToRfCell = config.optBoolean("mock_wifi", false) ||
+                    config.optBoolean("mock_cell", false)
+            ),
+            appBase.first,
+            appBase.second
+        )
         val baseAltitude = config.optDouble("altitude", 0.0)
         val altitude = if (enableJitter && baseAltitude > 0.0) {
             baseAltitude + (rng.nextDouble() - 0.5)
@@ -314,9 +304,9 @@ class LocationHooker : XposedModule() {
         }
         val hasMotion = hasSpoofedMotion(config)
         return SpoofedLocationSample(
-            latitude = jittered.first,
-            longitude = jittered.second,
-            accuracy = if (enableJitter) getJitteredAccuracy() else 8f,
+            latitude = jittered.latitude,
+            longitude = jittered.longitude,
+            accuracy = jittered.accuracy,
             altitude = altitude,
             timestamps = timestamps,
             provider = provider,
@@ -325,166 +315,6 @@ class LocationHooker : XposedModule() {
             bearing = if (hasMotion) spoofedBearing(config) else 0f
         )
     }
-
-    private fun getJitteredLocation(baseLat: Double, baseLng: Double): Pair<Double, Double> {
-        val enableJitter = lastConfig?.optBoolean("enable_jitter", true) ?: true
-        if (!enableJitter) {
-            // Park every OU component while jitter is disabled. Keeping the old drift would
-            // make the first fix after re-enabling jump back toward a previous random point.
-            hookDriftNorthMeters = 0.0
-            hookDriftEastMeters = 0.0
-            hookAccuracyDrift = 0.0
-            hookLastCallTime = 0L
-            cachedJitterAtElapsedMs = 0L
-            cachedJitterBaseLat = baseLat
-            cachedJitterBaseLng = baseLng
-            cachedJitterRfCellEnforced = shouldConstrainJitterToRfCell()
-            cachedJitteredLocation = Pair(baseLat, baseLng)
-            return cachedJitteredLocation
-        }
-        val jitterRadius = jitterRadiusMeters()
-        val profile = jitterProfile()
-        val enforceRfCell = shouldConstrainJitterToRfCell()
-        if (lastLoggedJitterSpeed != profile.speedName) {
-            lastLoggedJitterSpeed = profile.speedName
-            XposedBridge.log(
-                "[WeRePosition] jitter profile=${profile.speedName} " +
-                    "hold=${profile.sampleIntervalMs}ms timeScale=${profile.timeScale}"
-            )
-        }
-
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (
-            now - cachedJitterAtElapsedMs < profile.sampleIntervalMs &&
-            cachedJitterBaseLat == baseLat &&
-            cachedJitterBaseLng == baseLng &&
-            cachedJitterRadius == jitterRadius &&
-            cachedJitterSpeed == profile.speedName &&
-            cachedJitterRfCellEnforced == enforceRfCell
-        ) {
-            return cachedJitteredLocation
-        }
-
-        val realDt = if (hookLastCallTime > 0) {
-            ((now - hookLastCallTime) / 1000.0).coerceIn(0.01, 5.0)
-        } else 1.0
-        hookLastCallTime = now
-        // Scaling both diffusion and mean reversion changes travel speed while preserving the
-        // same long-run spatial envelope for every speed profile.
-        val dt = (realDt * profile.timeScale).coerceIn(0.01, 5.0)
-
-        val sigma = jitterRadius / profile.sigmaDivisor
-        val alpha = profile.pullback
-        
-        hookDriftNorthMeters += sigma * sqrt(dt) * rng.nextGaussian() - alpha * hookDriftNorthMeters * dt
-        hookDriftEastMeters += sigma * sqrt(dt) * rng.nextGaussian() - alpha * hookDriftEastMeters * dt
-
-        val driftDistance = sqrt(hookDriftNorthMeters * hookDriftNorthMeters + hookDriftEastMeters * hookDriftEastMeters)
-        if (driftDistance > jitterRadius && driftDistance > 0.0) {
-            val scale = jitterRadius / driftDistance
-            hookDriftNorthMeters *= scale
-            hookDriftEastMeters *= scale
-        }
-
-        val latRad = Math.toRadians(baseLat)
-        val lngCos = cos(latRad).let { if (abs(it) < 1e-6) 1e-6 else it }
-        val jittered = constrainJitterToCoverageCell(baseLat, baseLng, lngCos, enforceRfCell)
-        cachedJitterAtElapsedMs = now
-        cachedJitterBaseLat = baseLat
-        cachedJitterBaseLng = baseLng
-        cachedJitterRadius = jitterRadius
-        cachedJitterSpeed = profile.speedName
-        cachedJitterRfCellEnforced = enforceRfCell
-        cachedJitteredLocation = jittered
-        return jittered
-    }
-
-    /**
-     * RF payloads are tagged to the base coordinate's fixed hex. When any RF
-     * switch is enabled, keep the final OU sample inside that exact cell so a
-     * delivered coordinate can never be paired with a neighbouring-cell payload.
-     */
-    private fun constrainJitterToCoverageCell(
-        baseLat: Double,
-        baseLng: Double,
-        longitudeCosine: Double,
-        enforceCell: Boolean
-    ): Pair<Double, Double> {
-        fun pointAt(scale: Double): Pair<Double, Double> = Pair(
-            baseLat + Math.toDegrees(hookDriftNorthMeters * scale / EARTH_RADIUS_METERS),
-            EnvironmentCoveragePolicy.normalizeLongitude(
-                baseLng + Math.toDegrees(
-                    hookDriftEastMeters * scale / (EARTH_RADIUS_METERS * longitudeCosine)
-                )
-            )
-        )
-
-        val candidate = pointAt(1.0)
-        if (!enforceCell) return candidate
-        val baseCell = EnvironmentCoveragePolicy.cellFor(baseLat, baseLng) ?: return candidate
-        if (EnvironmentCoveragePolicy.cellFor(candidate.first, candidate.second) == baseCell) {
-            return candidate
-        }
-
-        var inside = 0.0
-        var outside = 1.0
-        repeat(28) {
-            val middle = (inside + outside) / 2.0
-            val point = pointAt(middle)
-            if (EnvironmentCoveragePolicy.cellFor(point.first, point.second) == baseCell) {
-                inside = middle
-            } else {
-                outside = middle
-            }
-        }
-        // Stay a tiny distance inside the edge to avoid alternating cells from
-        // floating-point rounding, then feed the bounded state back into the OU process.
-        val safeScale = (inside * 0.999_999).coerceIn(0.0, 1.0)
-        hookDriftNorthMeters *= safeScale
-        hookDriftEastMeters *= safeScale
-        return pointAt(1.0)
-    }
-
-    private fun shouldConstrainJitterToRfCell(): Boolean {
-        val config = lastConfig
-        return config?.optBoolean("mock_wifi", false) == true ||
-            config?.optBoolean("mock_cell", false) == true
-    }
-
-    private fun getJitteredAccuracy(): Float {
-        val jitterRadius = jitterRadiusMeters()
-        hookAccuracyDrift += 0.5 * rng.nextGaussian() - 0.03 * hookAccuracyDrift
-        // The configured radius is a hard limit on the slow drift, not the typical
-        // error of each fix. Keep horizontal uncertainty close to the OU drift scale.
-        val baseAccuracy = (jitterRadius * 0.25).coerceIn(5.0, 15.0)
-        return (baseAccuracy + hookAccuracyDrift).coerceIn(4.0, 18.0).toFloat()
-    }
-
-    private fun jitterRadiusMeters(): Double {
-        return (lastConfig?.optDouble("jitter_radius_meters", DEFAULT_JITTER_RADIUS_METERS)
-            ?: DEFAULT_JITTER_RADIUS_METERS).coerceIn(MIN_JITTER_RADIUS_METERS, MAX_JITTER_RADIUS_METERS)
-    }
-
-    private data class JitterProfile(
-        val speedName: String,
-        val sampleIntervalMs: Long,
-        val sigmaDivisor: Double,
-        val pullback: Double,
-        val timeScale: Double
-    )
-
-    private fun jitterProfile(): JitterProfile {
-        val speed = lastConfig?.optString("jitter_speed", "MEDIUM")?.uppercase() ?: "MEDIUM"
-        return when (speed) {
-            // Framework reports stay fresh at 1 Hz. The profile controls how often the
-            // coordinate sample advances and how far its OU clock advances, so the three
-            // choices remain visibly distinct without changing timestamps/provider cadence.
-            "SLOW" -> JitterProfile("SLOW", 2_800L, 6.7, 0.10, 0.12)
-            "FAST" -> JitterProfile("FAST", 800L, 6.7, 0.10, 2.50)
-            else -> JitterProfile("MEDIUM", 1_500L, 6.7, 0.10, 0.65)
-        }
-    }
-
 
     private fun hookLocationAPIs(classLoader: ClassLoader, currentPkg: String) {
         try {
@@ -646,14 +476,14 @@ class LocationHooker : XposedModule() {
                             if (isOnNmea) {
                                 XposedBridge.logEvery(
                                     "nmea-listener-proxy:on-message",
-                                    "[GPS_Spoofer] active OnNmeaMessageListener proxy installed",
+                                    "[WeRePosition] active OnNmeaMessageListener proxy installed",
                                     60_000L
                                 )
                                 args[i] = createOnNmeaMessageListenerProxy(arg, classLoader)
                             } else if (isGpsNmea) {
                                 XposedBridge.logEvery(
                                     "nmea-listener-proxy:legacy",
-                                    "[GPS_Spoofer] active legacy NMEA listener proxy installed",
+                                    "[WeRePosition] active legacy NMEA listener proxy installed",
                                     60_000L
                                 )
                                 args[i] = createGpsStatusNmeaListenerProxy(arg, classLoader)
@@ -679,7 +509,7 @@ class LocationHooker : XposedModule() {
                                 if (timer != null || proxy != null) {
                                     XposedBridge.logEvery(
                                         "nmea-listener-proxy:removed",
-                                        "[GPS_Spoofer] NMEA listener proxy removed",
+                                        "[WeRePosition] NMEA listener proxy removed",
                                         60_000L
                                     )
                                 }
@@ -748,11 +578,12 @@ class LocationHooker : XposedModule() {
         return (wifiObj?.optJSONArray("nearbyWifi")?.length() ?: 0) > 0
     }
 
-    private fun wifiSsid(wifi: JSONObject, fallback: String = "HOME_WIFI"): String {
+    private fun wifiSsid(wifi: JSONObject): String {
         val ssidVal = wifi.optString("ssid", "")
         if (ssidVal.isNotBlank() && ssidVal != "<unknown ssid>") return ssidVal
-        val bssid = wifi.optString("bssid", "")
-        return if (bssid.isNotBlank()) "WIFI_${bssid.takeLast(5).replace(":", "")}" else fallback
+        // A hidden or missing SSID is unknown; inventing a patterned name here makes
+        // imported scan data look synthetic and can disagree with the saved record.
+        return "<unknown ssid>"
     }
 
     private fun wifiBssid(wifi: JSONObject): String {
@@ -937,13 +768,8 @@ class LocationHooker : XposedModule() {
                         
                         fun addFakeScanResult(wifi: org.json.JSONObject) {
                             val fakeScanResult = XposedHelpers.newInstance(scanResultClass)
-                            val ssidVal = wifi.optString("ssid", "")
                             val bssidVal = wifi.optString("bssid", "")
-                            val finalSsid = if (ssidVal.isEmpty() || ssidVal == "<unknown ssid>") {
-                                "WIFI_${bssidVal.takeLast(5).replace(":", "")}"
-                            } else {
-                                ssidVal
-                            }
+                            val finalSsid = wifiSsid(wifi).takeUnless { it == "<unknown ssid>" } ?: ""
                             XposedHelpers.setObjectField(fakeScanResult, "SSID", finalSsid)
                             XposedHelpers.setObjectField(fakeScanResult, "BSSID", bssidVal)
                             val level = wifi.optInt("level", -65)
@@ -2647,7 +2473,7 @@ class LocationHooker : XposedModule() {
         }
         XposedBridge.logEvery(
             "gnssInjectorStart:$currentPackageName:${callbackObj.javaClass.simpleName}",
-            "[GPS_Spoofer] GnssStatus active injector started pkg=$currentPackageName cb=${callbackObj.javaClass.simpleName}"
+            "[WeRePosition] GnssStatus active injector started pkg=$currentPackageName cb=${callbackObj.javaClass.simpleName}"
         )
         timer.scheduleAtFixedRate(object : java.util.TimerTask() {
             override fun run() {
@@ -2697,7 +2523,7 @@ class LocationHooker : XposedModule() {
                             param.result = count
                             XposedBridge.logEvery(
                                 "gnssStatusCount:$currentPackageName:$count",
-                                "[GPS_Spoofer] GnssStatus.getSatelliteCount spoofed count=$count package=$currentPackageName"
+                                "[WeRePosition] GnssStatus.getSatelliteCount spoofed count=$count package=$currentPackageName"
                             )
                         }
                     }
@@ -3649,7 +3475,6 @@ class LocationHooker : XposedModule() {
         selectFreshestConfig(candidates)?.let { diskCandidate ->
             val shadowedByNewerActiveFrame = hasNewerActiveFrame &&
                 diskCandidate.inactive &&
-                runtimeFrame != null &&
                 diskCandidate.generation < runtimeFrame.snapshotGeneration
             if (!shadowedByNewerActiveFrame) {
                 return publishConfigCandidate(
@@ -4792,7 +4617,7 @@ class LocationHooker : XposedModule() {
         nmeaTimers[original] = timer
         XposedBridge.logEvery(
             "nmeaInjectorStarted:$currentPackageName:${original.javaClass.name}",
-            "[GPS_Spoofer] active NMEA injector started for $currentPackageName listener=${original.javaClass.name}"
+            "[WeRePosition] active NMEA injector started for $currentPackageName listener=${original.javaClass.name}"
         )
         timer.scheduleAtFixedRate(object : java.util.TimerTask() {
             override fun run() {

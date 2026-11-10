@@ -27,7 +27,8 @@ Primary components:
 - `EnvironmentCoveragePolicy.kt`: owns the world-fixed Web Mercator hex grid and its 30 m circumradius cell IDs.
 - `EnvironmentRfResolver.kt`: is the single Room-to-runtime RF resolver; its DAO pre-filter is followed by an exact target-cell comparison.
 - `SpoofingService.kt`: owns movement output, refreshes RF for cell/database/request/material within-cell changes, keeps active state fresh, and is the sole continuous active-runtime writer.
-- `ConfigManager.kt`: writes lifecycle bootstrap/stop snapshots; it is not a second heartbeat writer.
+- `LocationJitterEngine.kt`: owns process-local bounded coordinate drift, same-cell RF constraint, and reported accuracy for one runtime configuration snapshot per fix.
+- `ConfigManager.kt`: currently writes stop and cleanup snapshots; its old active-write branch has no callers and should be removed in a separately verified stop-path refactor. It is not a second heartbeat writer.
 - `RuntimeConfigWriteCoordinator.kt`: serializes lifecycle and heartbeat commits, rejects stale generations, and advances the committed generation only after a write actually succeeds.
 - `RootManager.kt`: owns the service-only persistent root shell used during active simulation; one acknowledged serialized shell replaces a new `su` process per movement tick and is closed on stop, location-off, or service destruction.
 - `LocationHooker.kt`: libxposed module injected into scoped processes.
