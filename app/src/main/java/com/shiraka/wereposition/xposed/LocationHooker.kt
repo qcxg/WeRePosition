@@ -1133,20 +1133,20 @@ class LocationHooker : XposedModule() {
                 val config = readConfig() ?: return
                 if (!shouldMockCell(config)) return
                 val cellArray = config.optJSONArray("cell_json")
-                val cell = firstServiceCell(cellArray)
+                val cell = cellPayload.firstServiceCell(cellArray)
                 XposedBridge.logOpenCellIdEvery(
                     "$methodName:called:${cellArray?.length() ?: 0}",
                     "$methodName called with cell simulation active; cellJsonCount=${cellArray?.length() ?: 0}"
                 )
                 when (methodName) {
-                    "getNetworkOperator", "getSimOperator" -> param.result = cellOperatorNumeric(cell) ?: ""
-                    "getNetworkOperatorName", "getSimOperatorName" -> param.result = cellOperatorName(cell)
+                    "getNetworkOperator", "getSimOperator" -> param.result = cellPayload.cellOperatorNumeric(cell) ?: ""
+                    "getNetworkOperatorName", "getSimOperatorName" -> param.result = cellPayload.cellOperatorName(cell)
                     "getNetworkCountryIso", "getSimCountryIso" -> param.result = ""
                     "getNetworkType", "getDataNetworkType", "getVoiceNetworkType" ->
-                        param.result = cellNetworkType(cell)
+                        param.result = cellPayload.cellNetworkType(cell)
                     "getDataState" -> param.result = if (cell != null) 2 else 0
                     "isDataEnabled", "isDataConnectionAllowed" -> param.result = cell != null
-                    "getPhoneType" -> param.result = cellPhoneType(cell)
+                    "getPhoneType" -> param.result = cellPayload.cellPhoneType(cell)
                     "getServiceState", "getServiceStateForSlot" ->
                         param.result = buildFakeServiceState(classLoader, cellArray)
                     "getSignalStrength" -> param.result = buildFakeSignalStrength(classLoader, config)
@@ -1302,20 +1302,20 @@ class LocationHooker : XposedModule() {
             for (i in 0 until cellArray.length()) {
                 try {
                     val obj = cellArray.getJSONObject(i)
-                    val type = explicitCellType(obj)
+                    val type = cellPayload.explicitCellType(obj)
                     if (type == null) {
                         XposedBridge.logOpenCellId("Skipping cell_json[$i] because radio type is missing or unsupported")
                         continue
                     }
                     val isRegistered = obj.optBoolean("isRegistered", false)
-                    val tacOrLac = cellAreaCode(obj, 0)
-                    val ciOrCid = cellIdentityCode(obj, 0)
+                    val tacOrLac = cellPayload.cellAreaCode(obj, 0)
+                    val ciOrCid = cellPayload.cellIdentityCode(obj, 0)
                     if (tacOrLac <= 0 || ciOrCid <= 0) {
                         XposedBridge.logOpenCellId("Skipping cell_json[$i] because area or identity is missing: $obj")
                         continue
                     }
-                    val mcc = jsonIntValue(obj, "mcc")?.takeIf { it in 100..999 }
-                    val mnc = jsonIntValue(obj, "mnc", "net")?.takeIf { it in 0..999 }
+                    val mcc = cellPayload.jsonIntValue(obj, "mcc")?.takeIf { it in 100..999 }
+                    val mnc = cellPayload.jsonIntValue(obj, "mnc", "net")?.takeIf { it in 0..999 }
                     if (mcc == null || mnc == null) {
                         XposedBridge.logOpenCellId("Skipping cell_json[$i] because MCC/MNC is missing")
                         continue
@@ -1326,8 +1326,8 @@ class LocationHooker : XposedModule() {
                         "NR" -> nrCount++
                         else -> lteCount++
                     }
-                    val pci = jsonIntValue(obj, "pci", "psc")?.takeIf { it >= 0 } ?: 0
-                    val dbm = signalDbm(obj, i)
+                    val pci = cellPayload.jsonIntValue(obj, "pci", "psc")?.takeIf { it >= 0 } ?: 0
+                    val dbm = cellPayload.signalDbm(obj, i)
                     if (dbm == null) {
                         XposedBridge.logOpenCellIdEvery(
                             "cell-build-missing-signal:$i:$type",
@@ -1336,9 +1336,9 @@ class LocationHooker : XposedModule() {
                         )
                         continue
                     }
-                    val rssi = signalRssi(obj, i, type, dbm)
-                    val rsrq = resolvedSignalRsrq(obj, i, type, dbm)
-                    val sinr = resolvedSignalSinr(obj, i, type, dbm)
+                    val rssi = cellPayload.signalRssi(obj, i, type, dbm)
+                    val rsrq = cellPayload.resolvedSignalRsrq(obj, i, type, dbm)
+                    val sinr = cellPayload.resolvedSignalSinr(obj, i, type, dbm)
                     if (firstSummary == null) {
                         firstSummary = "$type/$mcc-$mnc area=$tacOrLac identity=$ciOrCid dbm=$dbm registered=$isRegistered"
                     }
@@ -1488,225 +1488,15 @@ class LocationHooker : XposedModule() {
         return result
     }
 
-    private fun normalizeCellTypeOrNull(rawType: String): String? =
-        when (rawType.trim().uppercase(java.util.Locale.US)) {
-            "GSM", "GPRS", "EDGE" -> "GSM"
-            "UMTS", "WCDMA", "HSPA", "HSPAP", "HSPA+" -> "WCDMA"
-            "LTE", "LTE_CA", "4G" -> "LTE"
-            "NR", "NR5G", "5G" -> "NR"
-            else -> null
-        }
-
-    private fun explicitCellType(cell: org.json.JSONObject?): String? {
-        cell ?: return null
-        val raw = cell.optString("type", cell.optString("radio", ""))
-        return normalizeCellTypeOrNull(raw)
-    }
-
-    private fun normalizeCellType(rawType: String): String =
-        normalizeCellTypeOrNull(rawType) ?: "UNKNOWN"
-
-    private fun cellAreaCode(cell: org.json.JSONObject, default: Int): Int =
-        positiveJsonInt(cell, "tac", "lac", "area", default = default)
-
-    private fun cellIdentityCode(cell: org.json.JSONObject, default: Int): Int =
-        positiveJsonInt(cell, "ci", "cid", "cellid", "cell", default = default)
-
-    private fun positiveJsonInt(cell: org.json.JSONObject, vararg keys: String, default: Int): Int {
-        for (key in keys) {
-            if (!cell.has(key) || cell.isNull(key)) continue
-            val value = cell.optInt(key, Int.MIN_VALUE)
-            if (value > 0) return value
-            val parsed = cell.optString(key).toIntOrNull()
-            if (parsed != null && parsed > 0) return parsed
-        }
-        return default
-    }
-
-    private fun rawSignalDbm(cell: org.json.JSONObject): Int? = when {
-            cell.optInt("dbm", Int.MIN_VALUE) in -140..-40 -> cell.optInt("dbm")
-            cell.optInt("averageSignalStrength", Int.MIN_VALUE) in -140..-40 -> cell.optInt("averageSignalStrength")
-            cell.optInt("signal", Int.MIN_VALUE) in -140..-40 -> cell.optInt("signal")
-            else -> null
-        }
-
-    private fun signalDbm(cell: org.json.JSONObject, index: Int): Int? {
-        val base = rawSignalDbm(cell) ?: return null
-        return (base + signalJitterDelta(index, 0, 5)).coerceIn(-140, -40)
-    }
-
-    private fun signalRsrq(cell: org.json.JSONObject, index: Int): Int? {
-        val direct = cell.optInt("rsrq", Int.MIN_VALUE)
-        if (direct !in -30..-3) return null
-        return (direct + signalJitterDelta(index, 1, 3)).coerceIn(-30, -3)
-    }
-
-    private fun signalSinr(cell: org.json.JSONObject, index: Int): Int? {
-        val direct = cell.optInt("sinr", Int.MIN_VALUE)
-        val normalized = when {
-            direct in -20..40 -> direct
-            direct in -200..300 -> direct / 10
-            else -> return null
-        }
-        return (normalized + signalJitterDelta(index, 2, 3)).coerceIn(-20, 30)
-    }
-
-    /**
-     * OpenCellID commonly supplies only RSRP (`dbm`). Android's LTE model keeps
-     * RSSI, RSRP, RSRQ and RSSNR as independent fields; leaving the other fields
-     * at their constructor defaults makes callers treat them as unavailable (or
-     * occasionally render a bogus -1 dB SINR). Keep an explicit source value
-     * when one exists, otherwise derive a conservative, correlated RF tuple from
-     * the measured RSRP. This does not invent a tower identity and remains bound
-     * to the source cell's real signal measurement.
-     */
-    private fun signalRssi(
-        cell: org.json.JSONObject,
-        index: Int,
-        type: String,
-        referenceDbm: Int
-    ): Int? {
-        val direct = jsonIntValue(cell, "rssi")?.takeIf { it in -113..-51 }
-        if (direct != null) {
-            return (direct + signalJitterDelta(index, 3, 3)).coerceIn(-113, -51)
-        }
-        if (type != "LTE") return null
-        // A 25-27 dB LTE RSSI/RSRP separation is representative of a loaded
-        // 10-20 MHz carrier and matches Android's valid RSSI range.
-        val offset = 26 + signalJitterDelta(index, 3, 2)
-        return (referenceDbm + offset).coerceIn(-113, -51)
-    }
-
-    private fun resolvedSignalRsrq(
-        cell: org.json.JSONObject,
-        index: Int,
-        type: String,
-        referenceDbm: Int
-    ): Int? {
-        signalRsrq(cell, index)?.let { return it }
-        if (type != "LTE" && type != "NR") return null
-        val degradation = ((-referenceDbm - 75).coerceAtLeast(0) / 6)
-        val estimate = -5 - degradation + signalJitterDelta(index, 4, 2)
-        return estimate.coerceIn(-18, -3)
-    }
-
-    /** Returns the integer dB value exposed by CellSignalStrengthLte.getRssnr(). */
-    private fun resolvedSignalSinr(
-        cell: org.json.JSONObject,
-        index: Int,
-        type: String,
-        referenceDbm: Int
-    ): Int? {
-        signalSinr(cell, index)?.let { return it }
-        if (type != "LTE" && type != "NR") return null
-        val degradation = ((-referenceDbm - 70).coerceAtLeast(0) * 3) / 5
-        val estimateDb = (18 - degradation).coerceIn(-10, 30)
-        return (estimateDb + signalJitterDelta(index, 5, 2)).coerceIn(-20, 30)
-    }
-
-    private fun signalJitterDelta(index: Int, salt: Int, maxAmplitude: Int): Int {
-        val config = lastConfig
-        if (config?.optBoolean("signal_jitter_enabled", true) == false) return 0
-        val level = config?.optInt("signal_jitter_level", 40)?.coerceIn(0, 100) ?: 40
-        if (level <= 0 || maxAmplitude <= 0) return 0
-        val amplitude = maxOf(1, (maxAmplitude * level / 100.0).toInt())
-        val tick = System.currentTimeMillis() / 2500L
-        val seed = tick + index * 97L + salt * 997L + (config?.optLong("start_timestamp", 0L) ?: 0L)
-        val rng = java.util.Random(seed)
-        return rng.nextInt(amplitude * 2 + 1) - amplitude
-    }
-
-    private fun firstUsableCell(cells: org.json.JSONArray?): org.json.JSONObject? {
-        if (cells == null) return null
-        for (index in 0 until cells.length()) {
-            val cell = cells.optJSONObject(index) ?: continue
-            if (cell.optBoolean("isRegistered", false) &&
-                cellAreaCode(cell, 0) > 0 && cellIdentityCode(cell, 0) > 0
-            ) return cell
-        }
-        return null
-    }
-
-    private fun firstServiceCell(cells: org.json.JSONArray?): org.json.JSONObject? {
-        if (cells == null) return null
-        for (index in 0 until cells.length()) {
-            val cell = cells.optJSONObject(index) ?: continue
-            if (cellAreaCode(cell, 0) <= 0 || cellIdentityCode(cell, 0) <= 0) continue
-            if (!cell.optBoolean("isRegistered", false)) continue
-            if (cellOperatorNumeric(cell) == null || explicitCellType(cell) == null) continue
-            return cell
-        }
-        return null
-    }
-
-    private fun firstSignalCell(cells: org.json.JSONArray?): org.json.JSONObject? {
-        if (cells == null) return null
-        for (index in 0 until cells.length()) {
-            val cell = cells.optJSONObject(index) ?: continue
-            if (cellAreaCode(cell, 0) <= 0 || cellIdentityCode(cell, 0) <= 0) continue
-            if (!cell.optBoolean("isRegistered", false)) continue
-            if (cellOperatorNumeric(cell) == null || explicitCellType(cell) == null) continue
-            if (rawSignalDbm(cell) == null) continue
-            return cell
-        }
-        return null
-    }
-
-    private fun firstCell(config: org.json.JSONObject?): org.json.JSONObject? =
-        firstUsableCell(config?.optJSONArray("cell_json"))
-
-    private fun jsonIntValue(cell: org.json.JSONObject, vararg keys: String): Int? {
-        for (key in keys) {
-            if (!cell.has(key) || cell.isNull(key)) continue
-            val value = runCatching {
-                val raw = cell.get(key)
-                when (raw) {
-                    is Number -> raw.toInt()
-                    else -> raw.toString().trim().toInt()
-                }
-            }.getOrNull()
-            if (value != null) return value
-        }
-        return null
-    }
-
-    private fun cellOperatorNumeric(cell: org.json.JSONObject?): String? {
-        cell ?: return null
-        val mcc = jsonIntValue(cell, "mcc")?.takeIf { it in 100..999 } ?: return null
-        val mnc = jsonIntValue(cell, "mnc", "net")?.takeIf { it in 0..999 } ?: return null
-        val mncWidth = if (mnc >= 100) 3 else 2
-        return String.format(java.util.Locale.US, "%03d%0${mncWidth}d", mcc, mnc)
-    }
-
-    private fun cellOperatorName(cell: org.json.JSONObject?): String {
-        cell ?: return ""
-        for (key in arrayOf("operatorName", "operator_name", "carrier")) {
-            val value = cell.optString(key, "").trim()
-            if (value.isNotEmpty()) return value
-        }
-        return cellOperatorNumeric(cell) ?: ""
-    }
-
-    private fun cellNetworkType(cell: org.json.JSONObject?): Int {
-        return when (explicitCellType(cell)) {
-            "GSM" -> 16
-            "WCDMA" -> 3
-            "LTE" -> 13
-            "NR" -> 20
-            else -> 0
-        }
-    }
-
-    private fun cellPhoneType(cell: org.json.JSONObject?): Int =
-        if (explicitCellType(cell) != null) 1 else 0
+    private val cellPayload = CellPayloadReader { lastConfig }
 
     private fun buildFakeCellLocation(
         classLoader: ClassLoader,
         config: org.json.JSONObject?
     ): Any? {
-        val cell = firstCell(config) ?: return null
-        val area = cellAreaCode(cell, 0)
-        val identity = cellIdentityCode(cell, 0)
+        val cell = cellPayload.firstCell(config) ?: return null
+        val area = cellPayload.cellAreaCode(cell, 0)
+        val identity = cellPayload.cellIdentityCode(cell, 0)
         if (area <= 0 || identity <= 0) return null
         return runCatching {
             val clazz = XposedHelpers.findClass(
@@ -1788,8 +1578,8 @@ class LocationHooker : XposedModule() {
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val config = freshConfig() ?: return
-                    val cell = firstSignalCell(config.optJSONArray("cell_json"))
-                    val dbm = cell?.let { signalDbm(it, 0) }
+                    val cell = cellPayload.firstSignalCell(config.optJSONArray("cell_json"))
+                    val dbm = cell?.let { cellPayload.signalDbm(it, 0) }
                     if (dbm != null && param.args.isNotEmpty()) {
                         param.args[0] = ((dbm + 113) / 2).coerceIn(0, 31)
                     } else {
@@ -1840,10 +1630,10 @@ class LocationHooker : XposedModule() {
     }
 
     private fun buildFakeServiceState(classLoader: ClassLoader, cellArray: org.json.JSONArray?): Any? {
-        val cell = firstServiceCell(cellArray) ?: return null
-        val operator = cellOperatorNumeric(cell) ?: return null
-        val operatorName = cellOperatorName(cell).ifBlank { operator }
-        val networkType = cellNetworkType(cell).takeIf { it != 0 } ?: return null
+        val cell = cellPayload.firstServiceCell(cellArray) ?: return null
+        val operator = cellPayload.cellOperatorNumeric(cell) ?: return null
+        val operatorName = cellPayload.cellOperatorName(cell).ifBlank { operator }
+        val networkType = cellPayload.cellNetworkType(cell).takeIf { it != 0 } ?: return null
         XposedBridge.logOpenCellIdEvery(
             "buildFakeServiceState:called:${cellArray?.length() ?: 0}",
             "buildFakeServiceState called cellJsonCount=${cellArray?.length() ?: 0}"
@@ -1905,12 +1695,12 @@ class LocationHooker : XposedModule() {
 
     private fun buildFakeSignalStrength(classLoader: ClassLoader, config: org.json.JSONObject?): Any? {
         val cellArray = config?.optJSONArray("cell_json")
-        val first = firstSignalCell(cellArray) ?: return null
-        val type = explicitCellType(first) ?: return null
-        val dbm = signalDbm(first, 0) ?: return null
-        val rssi = signalRssi(first, 0, type, dbm)
-        val rsrq = resolvedSignalRsrq(first, 0, type, dbm)
-        val sinr = resolvedSignalSinr(first, 0, type, dbm)
+        val first = cellPayload.firstSignalCell(cellArray) ?: return null
+        val type = cellPayload.explicitCellType(first) ?: return null
+        val dbm = cellPayload.signalDbm(first, 0) ?: return null
+        val rssi = cellPayload.signalRssi(first, 0, type, dbm)
+        val rsrq = cellPayload.resolvedSignalRsrq(first, 0, type, dbm)
+        val sinr = cellPayload.resolvedSignalSinr(first, 0, type, dbm)
         val cellCount = cellArray?.length() ?: 0
         XposedBridge.logOpenCellIdEvery(
             "buildFakeSignalStrength:called:$type:$cellCount",
@@ -2169,20 +1959,10 @@ class LocationHooker : XposedModule() {
         return fallbackObj
     }
 
-    data class SatelliteData(
-        val svid: Int,
-        val type: Int, // 1=GPS, 3=GLONASS, 5=BDS
-        val elevation: Float,
-        val azimuth: Float,
-        val cn0: Float,
-        val usedInFix: Boolean
-    )
-
     private var cachedSatellites: Array<SatelliteData>? = null
     private var lastSatelliteUpdate: Long = 0L
     private var isSpoofingActiveCache: Boolean = false
     private var spoofingCountCache: Int = 0
-    private var nmeaGsvPageCounter: Int = 0
 
     private fun updateSatelliteCacheIfNeeded() {
         val now = System.currentTimeMillis()
@@ -2880,10 +2660,10 @@ class LocationHooker : XposedModule() {
         lastOpenCellConfigLogKey = logKey
         val firstCell = if (cellArray != null && cellArray.length() > 0) cellArray.optJSONObject(0) else null
         val firstSummary = if (firstCell != null) {
-            val type = normalizeCellType(firstCell.optString("type", firstCell.optString("radio", "LTE")))
-            val area = cellAreaCode(firstCell, 0)
-            val identity = cellIdentityCode(firstCell, 0)
-            "$type/${cellOperatorNumeric(firstCell) ?: "unknown"} area=$area identity=$identity"
+            val type = cellPayload.normalizeCellType(firstCell.optString("type", firstCell.optString("radio", "LTE")))
+            val area = cellPayload.cellAreaCode(firstCell, 0)
+            val identity = cellPayload.cellIdentityCode(firstCell, 0)
+            "$type/${cellPayload.cellOperatorNumeric(firstCell) ?: "unknown"} area=$area identity=$identity"
         } else {
             "none"
         }
@@ -4643,220 +4423,22 @@ class LocationHooker : XposedModule() {
         }, 150L, 1000L)
     }
 
+    private val nmeaSentenceFactory = NmeaSentenceFactory(
+        ::updateSatelliteCacheIfNeeded,
+        { cachedSatellites },
+        { isSpoofingActiveCache },
+        ::spoofedBearing,
+        ::spoofedSpeed,
+        ::hasSpoofedMotion
+    )
+
     private fun spoofNmeaMessage(sentence: String, config: JSONObject): String? {
-        try {
-            if (!shouldDeliverLocation(config) ||
-                !locationAllowedForCaller(config, currentPackageName)) return null
-            
-            val targetLat = config.optDouble("lat", 0.0)
-            val targetLng = config.optDouble("lng", 0.0)
-            if (!targetLat.isFinite() || !targetLng.isFinite() ||
-                targetLat !in -90.0..90.0 || targetLng !in -180.0..180.0
-            ) return null
-            
-            val parts = sentence.split("*")
-            val mainPart = parts[0]
-            val fields = mainPart.split(",").toMutableList()
-            if (fields.isEmpty()) return null
-            
-            val type = fields[0]
-            var modified = false
-            
-            if (type.endsWith("GSV")) {
-                return buildSpoofedGsvSentence()
-            }
-            if (type.endsWith("GSA")) {
-                return buildSpoofedGsaSentence()
-            }
-            
-            if (type.endsWith("RMC") && fields.size >= 7) {
-                val (latStr, latDir) = convertToNmeaLatitude(targetLat)
-                val (lngStr, lngDir) = convertToNmeaLongitude(targetLng)
-                if (fields.size > 2) fields[2] = "A"
-                fields[3] = latStr
-                fields[4] = latDir
-                fields[5] = lngStr
-                fields[6] = lngDir
-                if (fields.size > 8) fields[8] = String.format(java.util.Locale.US, "%.1f", spoofedBearing(config))
-                modified = true
-            } else if (type.endsWith("GGA") && fields.size >= 6) {
-                val (latStr, latDir) = convertToNmeaLatitude(targetLat)
-                val (lngStr, lngDir) = convertToNmeaLongitude(targetLng)
-                fields[2] = latStr
-                fields[3] = latDir
-                fields[4] = lngStr
-                fields[5] = lngDir
-                if (fields.size > 6) fields[6] = "1"
-                if (fields.size > 7) fields[7] = String.format(java.util.Locale.US, "%02d", config.optInt("satellite_count", 20).coerceIn(0, 64))
-                if (fields.size > 8) fields[8] = estimateNmeaHdop()
-                modified = true
-            } else if (type.endsWith("GLL") && fields.size >= 5) {
-                val (latStr, latDir) = convertToNmeaLatitude(targetLat)
-                val (lngStr, lngDir) = convertToNmeaLongitude(targetLng)
-                fields[1] = latStr
-                fields[2] = latDir
-                fields[3] = lngStr
-                fields[4] = lngDir
-                if (fields.size > 6) fields[6] = "A"
-                modified = true
-            } else if (type.endsWith("VTG") && fields.size >= 2) {
-                fields[1] = String.format(java.util.Locale.US, "%.1f", spoofedBearing(config))
-                if (fields.size > 2) fields[2] = "T"
-                modified = true
-            }
-            
-            if (!modified) return null
-            
-            val newMainPart = fields.joinToString(",")
-            val newChecksum = calculateNmeaChecksum(newMainPart)
-            
-            val tail = if (parts.size > 1) {
-                val rawTail = parts[1]
-                val lineEnding = rawTail.substring(Math.min(2, rawTail.length))
-                "*$newChecksum$lineEnding"
-            } else {
-                "*$newChecksum"
-            }
-            return newMainPart + tail
-        } catch (e: Exception) {
-            XposedBridge.log(e)
-            return null
-        }
+        if (!shouldDeliverLocation(config) ||
+            !locationAllowedForCaller(config, currentPackageName)) return null
+        return nmeaSentenceFactory.spoofNmeaMessage(sentence, config)
     }
 
-    private fun buildSpoofedGsaSentence(): String? {
-        updateSatelliteCacheIfNeeded()
-        val sats = cachedSatellites ?: return null
-        if (!isSpoofingActiveCache || sats.isEmpty()) return null
-        val used = sats.filter { it.usedInFix }.take(12).map { nmeaPrn(it) }.toMutableList()
-        while (used.size < 12) used.add("")
-        val hdop = estimateNmeaHdop()
-        val hdopValue = hdop.toDoubleOrNull() ?: 0.9
-        val pdop = String.format(java.util.Locale.US, "%.1f", (hdopValue * 1.7).coerceIn(0.8, 3.5))
-        val vdop = String.format(java.util.Locale.US, "%.1f", (hdopValue * 1.3).coerceIn(0.7, 2.8))
-        val fields = mutableListOf("\$GNGSA", "A", "3")
-        fields.addAll(used)
-        fields.add(pdop)
-        fields.add(hdop)
-        fields.add(vdop)
-        return appendNmeaChecksum(fields.joinToString(","))
-    }
-
-    private fun buildSpoofedNmeaBurst(config: JSONObject): List<String> {
-        val targetLat = config.optDouble("lat", 0.0)
-        val targetLng = config.optDouble("lng", 0.0)
-        if (targetLat == 0.0 && targetLng == 0.0) return emptyList()
-        updateSatelliteCacheIfNeeded()
-        val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
-        val time = String.format(
-            java.util.Locale.US,
-            "%02d%02d%02d.00",
-            calendar.get(java.util.Calendar.HOUR_OF_DAY),
-            calendar.get(java.util.Calendar.MINUTE),
-            calendar.get(java.util.Calendar.SECOND)
-        )
-        val date = String.format(
-            java.util.Locale.US,
-            "%02d%02d%02d",
-            calendar.get(java.util.Calendar.DAY_OF_MONTH),
-            calendar.get(java.util.Calendar.MONTH) + 1,
-            calendar.get(java.util.Calendar.YEAR) % 100
-        )
-        val (latStr, latDir) = convertToNmeaLatitude(targetLat)
-        val (lngStr, lngDir) = convertToNmeaLongitude(targetLng)
-        val sats = cachedSatellites
-        val satCount = (sats?.size ?: config.optInt("satellite_count", 20)).coerceIn(0, 64)
-        val hdop = estimateNmeaHdop()
-        val altitude = config.optDouble("altitude", 0.0)
-        val speedKnots = spoofedSpeed(config) * 1.943844f
-        val bearing = if (hasSpoofedMotion(config)) spoofedBearing(config) else 0f
-        val sentences = ArrayList<String>()
-        sentences.add(appendNmeaChecksum("\$GNRMC,$time,A,$latStr,$latDir,$lngStr,$lngDir,${String.format(java.util.Locale.US, "%.1f", speedKnots)},${String.format(java.util.Locale.US, "%.1f", bearing)},$date,,,A"))
-        sentences.add(appendNmeaChecksum("\$GNGGA,$time,$latStr,$latDir,$lngStr,$lngDir,1,${String.format(java.util.Locale.US, "%02d", satCount)},$hdop,${String.format(java.util.Locale.US, "%.1f", altitude)},M,0.0,M,,"))
-        sentences.add(appendNmeaChecksum("\$GNGLL,$latStr,$latDir,$lngStr,$lngDir,$time,A,A"))
-        sentences.add(appendNmeaChecksum("\$GNVTG,${String.format(java.util.Locale.US, "%.1f", bearing)},T,,M,${String.format(java.util.Locale.US, "%.1f", speedKnots)},N,${String.format(java.util.Locale.US, "%.1f", spoofedSpeed(config) * 3.6f)},K,A"))
-        buildSpoofedGsaSentence()?.let { sentences.add(it) }
-        val gsvPages = ((satCount + 3) / 4).coerceAtLeast(1)
-        repeat(gsvPages) {
-            buildSpoofedGsvSentence()?.let { sentence -> sentences.add(sentence) }
-        }
-        return sentences
-    }
-
-    private fun buildSpoofedGsvSentence(): String? {
-        updateSatelliteCacheIfNeeded()
-        val sats = cachedSatellites ?: return null
-        if (!isSpoofingActiveCache || sats.isEmpty()) return null
-        val totalMessages = ((sats.size + 3) / 4).coerceAtLeast(1)
-        val page = (nmeaGsvPageCounter % totalMessages) + 1
-        nmeaGsvPageCounter = (nmeaGsvPageCounter + 1) % totalMessages
-        val start = (page - 1) * 4
-        val end = minOf(start + 4, sats.size)
-        val fields = mutableListOf(
-            "\$GNGSV",
-            totalMessages.toString(),
-            page.toString(),
-            sats.size.toString()
-        )
-        for (i in start until end) {
-            val sat = sats[i]
-            fields.add(nmeaPrn(sat))
-            fields.add(sat.elevation.toInt().coerceIn(0, 90).toString())
-            fields.add(sat.azimuth.toInt().coerceIn(0, 359).toString())
-            fields.add(sat.cn0.toInt().coerceIn(0, 99).toString())
-        }
-        return appendNmeaChecksum(fields.joinToString(","))
-    }
-
-    private fun nmeaPrn(sat: SatelliteData): String {
-        val prn = when (sat.type) {
-            3 -> sat.svid + 64
-            5 -> sat.svid + 200
-            else -> sat.svid
-        }
-        return String.format(java.util.Locale.US, "%02d", prn)
-    }
-
-    private fun estimateNmeaHdop(): String {
-        updateSatelliteCacheIfNeeded()
-        val sats = cachedSatellites ?: return "0.9"
-        val used = sats.count { it.usedInFix }.coerceAtLeast(1)
-        val avgElevation = sats.filter { it.usedInFix }.map { it.elevation }.ifEmpty { sats.map { it.elevation } }.average()
-        val hdop = (2.4 - used * 0.11 - avgElevation / 120.0).coerceIn(0.6, 2.2)
-        return String.format(java.util.Locale.US, "%.1f", hdop)
-    }
-
-    private fun appendNmeaChecksum(mainPart: String): String {
-        return mainPart + "*" + calculateNmeaChecksum(mainPart)
-    }
-
-    private fun convertToNmeaLatitude(lat: Double): Pair<String, String> {
-        val absLat = Math.abs(lat)
-        val degrees = absLat.toInt()
-        val minutes = (absLat - degrees) * 60.0
-        val latStr = String.format(java.util.Locale.US, "%02d%08.5f", degrees, minutes)
-        val dir = if (lat >= 0) "N" else "S"
-        return Pair(latStr, dir)
-    }
-
-    private fun convertToNmeaLongitude(lng: Double): Pair<String, String> {
-        val absLng = Math.abs(lng)
-        val degrees = absLng.toInt()
-        val minutes = (absLng - degrees) * 60.0
-        val lngStr = String.format(java.util.Locale.US, "%03d%08.5f", degrees, minutes)
-        val dir = if (lng >= 0) "E" else "W"
-        return Pair(lngStr, dir)
-    }
-
-    private fun calculateNmeaChecksum(sentence: String): String {
-        var checksum = 0
-        val startIndex = if (sentence.startsWith("$")) 1 else 0
-        val endIndex = sentence.indexOf('*')
-        val limit = if (endIndex != -1) endIndex else sentence.length
-        for (i in startIndex until limit) {
-            checksum = checksum xor sentence[i].code
-        }
-        return String.format(java.util.Locale.US, "%02X", checksum)
-    }
+    private fun buildSpoofedNmeaBurst(config: JSONObject): List<String> =
+        nmeaSentenceFactory.buildSpoofedNmeaBurst(config)
 
 }

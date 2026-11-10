@@ -13,7 +13,7 @@ internal class SystemGnssStatusHook(
     private val isSimulationActive: (JSONObject?) -> Boolean,
     private val shouldDeliver: (JSONObject?) -> Boolean,
     private val locationAllowed: (JSONObject?, String?) -> Boolean,
-    private val currentSatellites: () -> Array<LocationHooker.SatelliteData>
+    private val currentSatellites: () -> Array<SatelliteData>
 ) {
     // Construct only when a listener appears; system_server may install hooks before
     // its main looper is ready.

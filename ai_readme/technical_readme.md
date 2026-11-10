@@ -28,6 +28,7 @@ Primary components:
 - `EnvironmentRfResolver.kt`: is the single Room-to-runtime RF resolver; its DAO pre-filter is followed by an exact target-cell comparison.
 - `SpoofingService.kt`: owns movement output, refreshes RF for cell/database/request/material within-cell changes, keeps active state fresh, and is the sole continuous active-runtime writer.
 - `LocationJitterEngine.kt`: owns process-local bounded coordinate drift, same-cell RF constraint, and reported accuracy for one runtime configuration snapshot per fix.
+- `CellPayloadReader.kt`: parses client cell JSON and derives signal values; `NmeaSentenceFactory.kt` formats GNSS NMEA sentences. `SatelliteData.kt` is their shared satellite model.
 - `ConfigManager.kt`: currently writes stop and cleanup snapshots; its old active-write branch has no callers and should be removed in a separately verified stop-path refactor. It is not a second heartbeat writer.
 - `RuntimeConfigWriteCoordinator.kt`: serializes lifecycle and heartbeat commits, rejects stale generations, and advances the committed generation only after a write actually succeeds.
 - `RootManager.kt`: owns the service-only persistent root shell used during active simulation; one acknowledged serialized shell replaces a new `su` process per movement tick and is closed on stop, location-off, or service destruction.
@@ -323,7 +324,7 @@ As with Wi-Fi, this is a local readiness check; hook delivery is verified throug
 
 - The app requests no Bluetooth permissions, starts no BLE scan, exposes no start-time Bluetooth switch, and installs no Bluetooth Xposed hook.
 - Runtime payloads keep only compatibility tombstones: `bluetooth_json=[]` and `mock_bluetooth=false`. No runtime consumer reads or simulates them.
-- Existing Room Bluetooth entities/relations and data-management import/export views remain so upgrading does not require a destructive schema migration and users can still inspect historical records.
+- Existing Bluetooth Room entities and import/export fields are still present, but no runtime Bluetooth data is collected or spoofed. Older database versions are intentionally rebuilt rather than migrated.
 - Runtime coverage SQL and `EnvironmentRfResolver` projections exclude Bluetooth-only rows and do not materialize Bluetooth relations.
 
 ## Connectivity Layer

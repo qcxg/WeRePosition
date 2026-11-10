@@ -4,7 +4,7 @@ package com.shiraka.wereposition.xposed
 internal object GnssStatusFactory {
     fun build(
         classLoader: ClassLoader,
-        satellites: Array<LocationHooker.SatelliteData>,
+        satellites: Array<SatelliteData>,
         count: Int,
         packageName: String
     ): Any? {

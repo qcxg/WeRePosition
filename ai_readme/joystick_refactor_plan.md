@@ -30,7 +30,7 @@
 - 沒有第二個 runtime writer、Android test/mock provider、每 App 定位 callback 計時器或 Play 服務作用域。
 - RF 開關開啟但當前格沒有 payload 時保持阻斷；虛構 RF 僅在使用者明確啟用後才可生成。
 - 地圖六角格按 cell ID 增量更新，鏡頭停下時不重建未變化的 polygon。
-- 自動往返路線仍保留。其舊 `saved_routes` Room schema 也保留，避免不必要的資料庫遷移。
+- 自動往返路線仍保留。Room 只維護現行 schema；舊版資料庫開啟時直接重建。
 
 ## 仍需實機驗證
 

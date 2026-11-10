@@ -1,7 +1,6 @@
 package com.shiraka.wereposition.xposed
 
 import org.json.JSONObject
-import com.shiraka.wereposition.xposed.LocationHooker.SatelliteData
 
 /** Pure satellite geometry shared by system and client GNSS delivery. */
 internal object SatelliteSkyGenerator {
