@@ -13,6 +13,8 @@
 
 The per-app location allowlist is suspended. Returning null to an unselected app let Google Maps reuse a cached real coordinate, so every framework location client now receives the synthetic coordinate while simulation is active. The saved location selections are retained for a future safe design; they do not filter location today. Wi-Fi/cell selection through LSPosed remains separate and active. When Android's location master switch is off, the service still publishes the synthetic target and setting changes; framework delivery stays gated by the switch, and the target is ready before the switch is enabled again.
 
+Pure mode writes and acknowledges the first active synthetic snapshot while the Android location master switch is still off. It enables the switch only after that snapshot is ready. This closes the startup window where apps could otherwise reuse a previously cached real coordinate before a synthetic fix exists. App-owned historical caches still require a fresh fix in that app to replace their content.
+
 ## Data boundaries
 
 - Room is the source for user-collected and imported RF data. Its coverage map never includes generated signals.

@@ -118,13 +118,10 @@ class LocationRepository(
             throw error
         }
 
-        if (pureMode && !rootManager.setLocationMasterEnabled(true)) {
-            rollbackFailedStart(context, generation)
-            throw IllegalStateException("Pure 模式無法開啟系統定位")
-        }
-
         // SpoofingService is the sole active writer. Waiting for its first committed
         // full snapshot avoids two active writers racing through the generation gate.
+        // Pure mode must keep Android location off until this synthetic snapshot is
+        // ready; otherwise an empty activation window can expose an older app cache.
         val ready = withTimeoutOrNull(18_000L) {
             while (lifecycleGeneration.get() == generation && SpooferProvider.isActive) {
                 if (SpoofingService.lastReadyLifecycleToken == generation) {
@@ -137,6 +134,10 @@ class LocationRepository(
         if (!ready && lifecycleGeneration.get() == generation) {
             rollbackFailedStart(context, generation)
             throw IllegalStateException("Unable to commit active runtime configuration")
+        }
+        if (pureMode && !rootManager.setLocationMasterEnabled(true)) {
+            rollbackFailedStart(context, generation)
+            throw IllegalStateException("Pure 模式無法開啟系統定位")
         }
         if (lifecycleGeneration.get() == generation) settingsManager.isSpoofingActive = true
     }
