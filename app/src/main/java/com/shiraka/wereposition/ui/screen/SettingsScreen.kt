@@ -155,7 +155,11 @@ fun SettingsScreen(
                 }
                 SettingsMenuGroup(title = stringResource(R.string.settings_category_simulation)) {
                     SettingsMenuItem(stringResource(R.string.settings_location),
-                        stringResource(R.string.app_access_summary)) { currentPage = "location" }
+                        stringResource(R.string.settings_location_summary)) { currentPage = "location" }
+                    HorizontalDivider(Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant)
+                    SettingsMenuItem(stringResource(R.string.app_access_title),
+                        stringResource(R.string.app_access_summary)) { showAppAccessPage = true }
                     HorizontalDivider(Modifier.padding(horizontal = 18.dp),
                         color = MaterialTheme.colorScheme.outlineVariant)
                     SettingsMenuItem(stringResource(R.string.settings_environment),
@@ -278,18 +282,6 @@ fun SettingsScreen(
                         onCheckedChange = viewModel::setPureModeEnabled
                     )
                 }
-            }
-
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable { showAppAccessPage = true },
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.app_access_title)) },
-                    supportingContent = { Text(stringResource(R.string.app_access_summary)) },
-                    trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
-                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-                )
             }
 
             }

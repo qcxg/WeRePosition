@@ -145,6 +145,7 @@ class LocationHooker : XposedModule() {
                 currentConfig = ::readConfig,
                 isSimulationActive = ::shouldBlockRealLocation,
                 shouldDeliver = ::shouldDeliverLocation,
+                locationAllowed = { config, packageName -> locationAllowedForCaller(config, packageName) },
                 currentSatellites = {
                     updateSatelliteCacheIfNeeded()
                     cachedSatellites ?: emptyArray()
@@ -2361,7 +2362,8 @@ class LocationHooker : XposedModule() {
         val now = System.currentTimeMillis()
         if (cachedSatellites == null || now - lastSatelliteUpdate > 1000) {
             val config = readConfig()
-            isSpoofingActiveCache = shouldDeliverLocation(config)
+            isSpoofingActiveCache = shouldDeliverLocation(config) &&
+                locationAllowedForCaller(config, currentPackageName)
             if (isSpoofingActiveCache) {
                 val count = (config?.optInt("satellite_count", 20) ?: 20).coerceIn(0, 64)
                 spoofingCountCache = count
@@ -2554,7 +2556,8 @@ class LocationHooker : XposedModule() {
                                             val config = readConfig()
                                             if (!shouldBlockRealLocation(config)) return
                                             updateSatelliteCacheIfNeeded()
-                                            val satellites = if (shouldDeliverLocation(config)) {
+                                            val satellites = if (shouldDeliverLocation(config) &&
+                                                locationAllowedForCaller(config, currentPackageName)) {
                                                 cachedSatellites ?: emptyArray()
                                             } else emptyArray()
                                             val replacement = GnssStatusFactory.build(
@@ -2579,7 +2582,8 @@ class LocationHooker : XposedModule() {
                                 // callback is listening, then return to the long idle interval.
                                 requestConfigRefresh()
                                 val config = readConfig()
-                                if (shouldDeliverLocation(config)) {
+                                if (shouldDeliverLocation(config) &&
+                                    locationAllowedForCaller(config, currentPackageName)) {
                                     startGnssStatusInjector(callbackObj, classLoader)
                                 }
                             }
@@ -2653,7 +2657,8 @@ class LocationHooker : XposedModule() {
                         gnssStatusInjectors.remove(key)?.cancel()
                         return
                     }
-                    if (!isSystemLocationSwitchEnabled()) return
+                    if (!isSystemLocationSwitchEnabled() ||
+                        !locationAllowedForCaller(config, currentPackageName)) return
                     updateSatelliteCacheIfNeeded()
                     if (!isSpoofingActiveCache) return
                     val satCount = cachedSatellites?.size ?: 0
@@ -3097,6 +3102,51 @@ class LocationHooker : XposedModule() {
             hasValidTargetCoordinates(config) && isSystemLocationSwitchEnabled()
     }
 
+    private fun locationAllowedForCaller(config: JSONObject?, callerPackage: String?): Boolean {
+        if (config?.optBoolean("location_allowlist_enabled", false) != true) return true
+        if (callerPackage == null) return false
+        if (isInfrastructurePackage(callerPackage)) return true
+        val allowed = config.optJSONArray("location_allowlist") ?: return false
+        return (0 until allowed.length()).any { allowed.optString(it) == callerPackage }
+    }
+
+    private fun callerPackageFromIdentity(identity: Any?): String? = identity?.let {
+        runCatching { XposedHelpers.callMethod(it, "getPackageName") as? String }.getOrNull()
+    }
+
+    private fun locationAllowedForRequest(
+        config: JSONObject?, callerPackage: String?, request: Any?
+    ): Boolean {
+        if (!locationAllowedForCaller(config, callerPackage)) return false
+        if (config?.optBoolean("location_allowlist_enabled", false) != true) return true
+        // GMS can make a framework request on behalf of an app. Its CallerIdentity
+        // remains com.google.android.gms, while LocationRequest.WorkSource names the
+        // actual consumer. Never let that delegation bypass the app selection.
+        val workSource = runCatching {
+            request?.let { XposedHelpers.callMethod(it, "getWorkSource") }
+        }.getOrNull() ?: return true
+        val size = runCatching { XposedHelpers.callMethod(workSource, "size") as Int }.getOrDefault(0)
+        for (index in 0 until size) {
+            val packageName = runCatching {
+                XposedHelpers.callMethod(workSource, "getName", index) as? String
+            }.getOrNull() ?: return false
+            if (!locationAllowedForCaller(config, packageName)) return false
+        }
+        return true
+    }
+
+    private fun callerPackageFromRegistration(registration: Any?): String? = registration?.let {
+        val identity = runCatching { XposedHelpers.callMethod(it, "getIdentity") }.getOrNull()
+        callerPackageFromIdentity(identity)
+    }
+
+    private fun locationAllowedForRegistration(config: JSONObject?, registration: Any?): Boolean {
+        val request = registration?.let {
+            runCatching { XposedHelpers.callMethod(it, "getRequest") }.getOrNull()
+        }
+        return locationAllowedForRequest(config, callerPackageFromRegistration(registration), request)
+    }
+
     private fun shouldBlockRealLocation(config: JSONObject?): Boolean {
         // Pure mode arms this guard before the Android location switch is enabled.
         // Keep it active through stop until the switch is off and the tombstone is saved.
@@ -3266,6 +3316,8 @@ class LocationHooker : XposedModule() {
         config.put("mock_cell", config.optBoolean("mock_cell", false))
         config.put("mock_bluetooth", false)
         config.put("signal_jitter_enabled", config.optBoolean("signal_jitter_enabled", true))
+        // Joystick frames define movement; stale fallback settings must not add drift.
+        if (config.optBoolean("joystick_mode", false)) config.put("enable_jitter", false)
         config.put("signal_jitter_level", config.optInt("signal_jitter_level", 40).coerceIn(0, 100))
         val wifiMode = config.optString("wifi_connection_mode", "FIXED").uppercase()
         config.put("wifi_connection_mode", if (wifiMode == "RANDOM") "RANDOM" else "FIXED")
@@ -3968,6 +4020,7 @@ class LocationHooker : XposedModule() {
             val locationAllowlistEnabled =
                 getSystemProperty("gsm.wrp.location_allowlist_enabled", "false") == "true"
             val enableJitterStr = getSystemProperty("gsm.wrp.enable_jitter", "true")
+            val joystickMode = getSystemProperty("gsm.wrp.joystick_mode", "false") == "true"
             val jitterRadiusStr = getSystemProperty("gsm.wrp.jitter_radius", DEFAULT_JITTER_RADIUS_METERS.toInt().toString())
             val jitterSpeed = getSystemProperty("gsm.wrp.jitter_speed", "MEDIUM")
             val signalJitterStr = getSystemProperty("gsm.wrp.signal_jitter", "true")
@@ -3993,6 +4046,7 @@ class LocationHooker : XposedModule() {
                 put("location_allowlist_enabled", locationAllowlistEnabled)
                 put("location_allowlist", org.json.JSONArray())
                 put("enable_jitter", enableJitterStr == "true")
+                put("joystick_mode", joystickMode)
                 put("jitter_radius_meters", (jitterRadiusStr.toIntOrNull() ?: DEFAULT_JITTER_RADIUS_METERS.toInt()).coerceIn(1, 80))
                 put("jitter_speed", jitterSpeed)
                 put("signal_jitter_enabled", signalJitterStr == "true")
@@ -4270,6 +4324,16 @@ class LocationHooker : XposedModule() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val config = readConfig()
                     if (!shouldBlockRealLocation(config)) return
+                    val identity = param.args.firstOrNull {
+                        it?.javaClass?.name == "android.location.util.identity.CallerIdentity"
+                    }
+                    val request = param.args.firstOrNull {
+                        it?.javaClass?.name == "android.location.LocationRequest"
+                    }
+                    if (!locationAllowedForRequest(config, callerPackageFromIdentity(identity), request)) {
+                        param.result = null
+                        return
+                    }
                     val provider = param.thisObject?.let(::systemProviderName)
                     if (provider == null || !isSyntheticSystemProvider(provider) ||
                         !shouldDeliverLocation(config)
@@ -4291,6 +4355,34 @@ class LocationHooker : XposedModule() {
                     )) location else null
                 }
             })
+
+            // Filter at delivery, not only registration, so a running listener reacts
+            // immediately when the selected-app list changes. The provider cache stays
+            // synthetic for every client, including Play services.
+            XposedHelpers.findClassIfExists(
+                "$managerClassName\$LocationRegistration", classLoader
+            )?.let { registrationClass ->
+                XposedBridge.hookAllMethods(registrationClass, "acceptLocationChange", object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val config = readConfig()
+                        if (shouldBlockRealLocation(config) &&
+                            !locationAllowedForRegistration(config, param.thisObject)
+                        ) param.result = null
+                    }
+                })
+            }
+            XposedHelpers.findClassIfExists(
+                "$managerClassName\$GetCurrentLocationListenerRegistration", classLoader
+            )?.let { registrationClass ->
+                XposedBridge.hookAllMethods(registrationClass, "acceptLocationChange", object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val config = readConfig()
+                        if (shouldBlockRealLocation(config) &&
+                            !locationAllowedForRegistration(config, param.thisObject)
+                        ) param.args[0] = null
+                    }
+                })
+            }
 
             XposedBridge.log(
                 "[WeRePosition] system framework fix hook installed at " +
@@ -4710,6 +4802,7 @@ class LocationHooker : XposedModule() {
                         nmeaTimers.remove(original)?.cancel()
                         return
                     }
+                    if (!locationAllowedForCaller(config, currentPackageName)) return
                     val activeConfig = config ?: return
                     val now = System.currentTimeMillis()
                     for (sentence in buildSpoofedNmeaBurst(activeConfig)) {
@@ -4727,7 +4820,8 @@ class LocationHooker : XposedModule() {
 
     private fun spoofNmeaMessage(sentence: String, config: JSONObject): String? {
         try {
-            if (!shouldDeliverLocation(config)) return null
+            if (!shouldDeliverLocation(config) ||
+                !locationAllowedForCaller(config, currentPackageName)) return null
             
             val targetLat = config.optDouble("lat", 0.0)
             val targetLng = config.optDouble("lng", 0.0)

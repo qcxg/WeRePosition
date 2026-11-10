@@ -1,6 +1,6 @@
 # WeRePosition Current Simulation Pipeline
 
-Last maintained: 2026-11-09 (floating joystick separation, rendering and documentation audit)
+Last maintained: 2026-11-11 (per-app isolation, joystick jitter, and settings/theme release)
 
 This document is the current source of truth for how WeRePosition simulates GNSS, Wi-Fi, cellular, and related environment signals. It is written for future coding agents and developers so the implementation stays understandable and does not drift into hidden generated telemetry.
 
@@ -8,10 +8,10 @@ This document is the current source of truth for how WeRePosition simulates GNSS
 
 - The app must not use Android Developer Options mock-location app assignment as the primary spoofing mechanism.
 - The app must not leave Android test providers or mock providers registered after stopping, rebooting, or service death.
-- Global spoofing is intentional. Only the system framework requires LSPosed/libxposed scope for ordinary location delivery. Play services and Fused Location must remain outside module scope.
+- Only the system framework requires LSPosed/libxposed scope for ordinary location delivery. By default all clients receive the synthetic position; optional per-app isolation filters framework delivery and GNSS listeners by caller identity and delegated `WorkSource`. Play services and Fused Location must remain outside module scope.
 - While spoofing is active, direct reads of real GNSS, Wi-Fi, and cell data should be blocked or replaced only for explicitly enabled simulation channels.
 - When no trusted simulated Wi-Fi or cell data exists, return empty simulated data rather than inventing APs or towers.
-- A live active snapshot is trusted for at most 30 seconds without a new monotonic runtime frame. After writer death or a normal stop, hooks restore pass-through instead of indefinitely breaking real location/RF behavior.
+- A missing or stale heartbeat during an active run keeps the last safe synthetic position or blocks delivery; it must not reveal a real fix. Only an explicit stop fence or boot cleanup restores pass-through.
 - Generated environment records must not be stored in the local environment database or displayed as collected/API records.
 
 ## Runtime Layers
@@ -62,6 +62,8 @@ Important config fields:
 - `bluetooth_json`
 - `mock_wifi`, `mock_cell`, `mock_bluetooth`
 - `satellite_count`
+- `location_allowlist_enabled`, `location_allowlist`
+- `joystick_mode`, `enable_jitter`
 - `jitter_radius_meters`
 - `heartbeat_at`
 - `heartbeat_uptime_ms`
@@ -74,13 +76,13 @@ Routine success and failure logs in hot hook/scanner paths use fixed-cardinality
 
 Collected environment records remain in Room/SQLite. The active Room flow/projection loads only rows with replayable Wi-Fi or cell relations; historical Bluetooth tables and management/import compatibility remain in the schema but are not materialized by runtime simulation. Map rendering, UI capability checks, and runtime resolution all use `EnvironmentCoveragePolicy`: a world-fixed Web Mercator hex grid with a 30 m circumradius. `EnvironmentRfResolver` queries a conservative DAO bound and then requires the stored row and target to have the exact same cell ID. Sampling density cannot enlarge coverage, and no distance-based fallback may borrow RF data across an edge.
 
-Fixed-point, automatic route, and floating joystick movement share one output path. `MainViewModel` updates fixed-point and route options, but never writes runtime files. The joystick overlay passes direction and speed to `SpoofingService`; that service alone integrates joystick motion and publishes runtime output. RF replay is suspended while the floating joystick is visible, so service ticks skip cell resolution; it resumes from the user's saved switches after closing. Outside joystick mode, RF is re-resolved after an exact-cell change, a Room invalidation, an explicit refresh request, or material movement within a cell. Do not restore a second active-runtime writer in `MainViewModel`.
+Fixed-point, automatic route, and floating joystick movement share one output path. `MainViewModel` updates fixed-point and route options, but never writes runtime files. The joystick overlay passes direction and speed to `SpoofingService`; that service alone integrates joystick motion and publishes runtime output. RF replay and random position jitter are suspended while the floating joystick is visible; they resume from the user's saved switches after closing. The full runtime snapshot, property fallback, and local preference cache all publish `enable_jitter=false` while the joystick is active. Outside joystick mode, RF is re-resolved after an exact-cell change, a Room invalidation, an explicit refresh request, or material movement within a cell. Do not restore a second active-runtime writer in `MainViewModel`.
 
 The start-spoofing dialog uses content height up to a screen-bounded maximum, then scrolls. Collapsed sections are removed from layout instead of reserving blank space or animating platform-window remeasurement. It stays visible after confirmation as a compact progress surface. Local exact-cell RF cache hits enable immediately; API misses identify WiGLE/OpenCellID as separate sources and offer either retry or "use current state" startup. User-enabled RF channels remain enabled even when their exact-cell payload is empty, in which case diagnostics show `block only` and hooks hide real RF data.
 
 The legacy per-app coordinate selector was removed because it did not affect any active location hook. Runtime, storage, and external RF lookup coordinates now have one WGS-84 interpretation.
 
-The hook layer checks compact-frame monotonic heartbeat and boot ID. A missing/stale active heartbeat becomes inactive pass-through after 30 seconds; a stale or mismatched boot config must not revive spoofing after reboot.
+The hook layer checks compact-frame monotonic heartbeat and boot ID. A missing/stale active heartbeat retains a safe synthetic point or blocks reports until an explicit stop; a stale or mismatched boot config must not revive spoofing after reboot.
 
 `SpooferProvider` exposes only the last heartbeat actually published by the host writer; a ContentProvider query must never renew liveness. Explicit stop clears the provider heartbeat/RF snapshot and publishes the compact inactive frame plus legacy `active=false` before filesystem work, so normal platform behavior resumes even if a later chmod/file write fails.
 
@@ -108,7 +110,8 @@ SpoofingService fixed / automatic route / floating joystick output point
   -> interval / minDistance filtering
   -> permission, AppOps and coarse-location handling
   -> native listener / PendingIntent / Binder transport
-  -> scoped and completely unscoped ordinary LocationManager consumers
+  -> optional system_server per-app delivery filter
+  -> selected ordinary LocationManager consumers and delegated GMS requests
 ```
 
 The cadence calls the current real provider abstraction for `gps`, `network`, and `fused`. It does not create, register, remove, or disguise an Android test/mock provider. Passive location is updated by the framework itself.
@@ -127,6 +130,7 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 ### Behavior
 
 - `LocationManager.requestLocationUpdates()`, `requestSingleUpdate()`, `getCurrentLocation()`, and `removeUpdates()` always proceed to the real framework. No client hook fulfils or swallows them.
+- When the per-app mode is enabled, `LocationRegistration.acceptLocationChange` blocks continuous delivery to unselected packages; one-shot registration and `getLastLocation` are filtered separately. `LocationRequest.WorkSource` identifies an app behind Play services' delegated requests. Unknown attribution is denied. The provider cache remains synthetic for every caller, so the filter cannot turn a blocked request into a real fix.
 - Provider name stays equal to its manager (`gps`, `network`, or `fused`); RF payload availability does not rename a provider.
 - A complete fix includes paired latitude/longitude, horizontal accuracy, optional altitude plus vertical accuracy, wall time, elapsed realtime, and motion fields. MSL altitude from an old real fix is removed. Speed/bearing and their accuracies are either set together for moving simulation or removed together for stationary simulation.
 - Wall time is current; elapsed realtime is non-decreasing and never manufactured in the future. Drift cadence uses `SystemClock.elapsedRealtime()`, not wall clock, so network time corrections cannot freeze jitter.
@@ -148,7 +152,7 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 - If a listener Proxy was created during an active run and remains registered after stop, its normal NMEA callback path becomes a direct real-sentence pass-through: it does not poll config, rewrite the sentence, copy callback arguments, or use reflection.
 - In non-infrastructure scoped client processes, NMEA listeners also receive an active injected burst shortly after registration and then once per second, so satellite views do not need to wait for slow hardware NMEA sentences before showing the simulated constellation. The system framework does not receive extra active NMEA timer events.
 - `usedInFix` satellite selection is weighted by signal quality but not strictly the first sorted satellites; a rotating subset of lower-list satellites can participate in the fix.
-- Hardware satellite visibility is suppressed or replaced through GNSS status and NMEA hooks.
+- Hardware satellite visibility is suppressed or replaced through GNSS status and NMEA hooks. A system-server GNSS listener operation is blocked for unselected packages; client-side status and NMEA injectors also honor the location allowlist.
 - AMap, Baidu, and Tencent SDK-specific deep hooks are disabled by default. The stable path is Android framework output; GMS and Fused Location consume it without module injection. Re-enabling per-SDK branches requires an explicit compatibility decision because those branches can conflict with the global provider chain and reintroduce app-specific instability.
 
 ### Restart and Reboot Semantics
@@ -331,9 +335,8 @@ The previous experimental magnetic-field hook is removed from the stable hook ch
 
 ## Data Quality Rules
 
-- Do not generate AP BSSIDs.
-- Do not generate cell tower identities from coordinates.
-- Do not silently convert “no data” into plausible-looking data.
+- Do not silently generate AP BSSIDs or cell identities. Fictional records are allowed only when the user explicitly enables synthetic RF, and must remain marked as fictional and separate from collected/API records.
+- Do not silently convert “no data” into plausible-looking data when synthetic RF is disabled.
 - Do not store fallback object-construction defaults as collected/API data.
 - Prefer local collected data first because it is auditable by the user.
 - Remote API imports must be labeled as `由 WiGLE 導入` / `由 OpenCellID 導入`, not reused as place names.
@@ -371,7 +374,7 @@ Questions to answer from logs:
 - How many cells are present in `cell_json`?
 - Does `getAllCellInfo` log a non-zero fake cell count?
 - Does `getScanResults returning fake AP count=N` log a non-zero fake AP count?
-- Did an unexpected writer death exceed the 30-second compact-frame TTL and restore pass-through? A normal stop should publish the inactive frame immediately rather than waiting for TTL.
+- Did an unexpected writer death leave a safe synthetic point or an empty result? It must not restore a real fix until an explicit stop. A normal stop should publish the inactive frame immediately.
 
 ## File Map
 

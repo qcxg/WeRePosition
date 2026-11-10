@@ -219,10 +219,10 @@
 
     <string name="custom_opencellid_token">OpenCellID API Token</string>
     <string name="custom_opencellid_token_hint">Enter your OpenCellID token...</string>
-    <string name="app_access_title">App access</string>
+    <string name="app_access_title">App isolation and scope</string>
     <string name="app_access_summary">Control location visibility and Wi-Fi/cell hook scope per app</string>
     <string name="app_access_location_mode">Limit location to selected apps</string>
-    <string name="app_access_location_desc">This mode is paused. An empty result can make an app show a previously cached real location. During simulation all apps receive the simulated location; location selections below are inactive.</string>
+    <string name="app_access_location_desc">When enabled, selected apps receive the simulated location. Other apps receive no location updates or satellite data. Wi-Fi and cell hooks use the separate LSPosed scope.</string>
     <string name="app_access_rf_desc">Wi-Fi and cell injection uses the LSPosed scope separately. Restart an app after changing its RF scope.</string>
     <string name="app_access_search">Search apps</string>
     <string name="app_access_system_apps">Show system apps</string>
@@ -270,7 +270,8 @@
     <string name="data_rename_group">Rename group</string>
     <string name="data_ungroup_all">Ungroup all</string>
     <string name="settings_appearance">Appearance and language</string>
-    <string name="settings_location">Location and app access</string>
+    <string name="settings_location">Location simulation</string>
+    <string name="settings_location_summary">Recent places and Pure mode</string>
     <string name="settings_environment">Environment data and APIs</string>
     <string name="settings_about">About WeRePosition</string>
     <string name="settings_version">Version %1$s</string>

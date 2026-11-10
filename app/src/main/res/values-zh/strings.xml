@@ -216,10 +216,10 @@
 
     <string name="custom_opencellid_token">OpenCellID API 密钥</string>
     <string name="custom_opencellid_token_hint">输入您的 OpenCellID 密钥...</string>
-    <string name="app_access_title">应用访问控制</string>
+    <string name="app_access_title">应用隔离与作用域</string>
     <string name="app_access_summary">逐应用控制位置可见性及 Wi-Fi／基站 Hook 范围</string>
     <string name="app_access_location_mode">仅向选定应用提供位置</string>
-    <string name="app_access_location_desc">此模式暂停使用。返回空值可能让应用显示先前缓存的真实位置。模拟期间所有应用均接收模拟位置；下方位置选择暂不生效。</string>
+    <string name="app_access_location_desc">开启后，选定应用接收模拟位置；其他应用不接收位置更新或卫星数据。Wi-Fi 与基站 Hook 使用另一组 LSPosed 作用域。</string>
     <string name="app_access_rf_desc">Wi-Fi 与基站注入单独使用 LSPosed 作用域。更改作用域后请重启目标应用。</string>
     <string name="app_access_search">搜索应用</string>
     <string name="app_access_system_apps">显示系统应用</string>
@@ -267,7 +267,8 @@
     <string name="data_rename_group">重命名分组</string>
     <string name="data_ungroup_all">取消此分组</string>
     <string name="settings_appearance">外观与语言</string>
-    <string name="settings_location">位置与应用权限</string>
+    <string name="settings_location">位置模拟</string>
+    <string name="settings_location_summary">最近位置与 Pure 模式</string>
     <string name="settings_environment">环境数据与 API</string>
     <string name="settings_about">关于 WeRePosition</string>
     <string name="settings_version">版本 %1$s</string>

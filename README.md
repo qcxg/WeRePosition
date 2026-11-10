@@ -27,9 +27,10 @@
 - `system_server` 以單一 1 Hz 節拍經真實 provider 抽象層上報，並在 framework 驗證後、快取與派發前產生一個完整 WGS-84 fix。
 - 經緯度、精度、海拔、運動欄位、wall time 與 elapsed realtime 在同一個樣本一次寫完；一般 App 仍走 Android 原生權限、AppOps、間隔與距離過濾鏈。
 - 不攔截或吞掉 `LocationManager` 請求，不改寫 `Location` getter／Parcel，也不建立每個 App 的額外派發計時器。
-- GMS 與未加入 module scope 的一般 App 都從 framework 取得定位；GMS 和 Fused Location 不應加入 module scope。GNSS status 與 NMEA 是可選的客戶端補充層。
+- 預設由 framework 向一般 App 與 GMS 提供模擬位置；啟用「應用隔離與作用域」後，僅選定 App 接收位置更新，未選 App 的定位與衛星回報會被系統層阻斷。GMS 和 Fused Location 不應加入 module scope。Wi-Fi／基站另用獨立的 LSPosed 作用域。
 - 固定點、獨立懸浮搖桿與自動往返路線共用服務端運行管線。搖桿不依賴路點；地圖上保留開始時選定的位置，結束搖桿時恢復該起點。參見 [搖桿設計與驗證](ai_readme/joystick_refactor_plan.md)。
 - 搖桿只能在位置模擬已啟用時單獨開啟；若尚未啟用，首次點擊會提示，5 秒內再次點擊才連動啟動。搖桿期間 Wi-Fi／基站模擬與位置抖動暫停，收起搖桿後恢復原設定；浮窗可鎖定位置或直接退出整個模擬。
+- 設定採單層子頁面；「位置模擬」與「應用隔離與作用域」均可從主設定選單直接進入。自訂主題色會套用至設定卡片及浮動底欄的 Material 3 色階。
 
 ### 抖動與自然漂移
 
@@ -103,7 +104,7 @@ Config channels
         |
         v
 LSPosed injected processes
-  |-- system_server: authoritative 1 Hz location source
+  |-- system_server: authoritative 1 Hz location source and per-app delivery filter
   |-- GMS / Fused Location: ordinary framework consumers, outside module scope
   |-- optional target apps: GNSS / Wi-Fi / Cell supplements
   |-- fail-closed when active config is stale

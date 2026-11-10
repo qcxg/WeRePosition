@@ -110,6 +110,12 @@ fun tonedColorScheme(isDark: Boolean, tone: String): androidx.compose.material3.
     val secondary = color(if (isDark) 0.27f else 0.42f, if (isDark) 0.79f else 0.49f)
     val tertiary = color(if (isDark) 0.33f else 0.48f, if (isDark) 0.84f else 0.54f)
     val container = color(if (isDark) 0.30f else 0.17f, if (isDark) 0.32f else 0.95f)
+    val onContainer = if (isDark) color(0.24f, 0.94f) else color(0.65f, 0.28f)
+    val surfaceLowest = color(if (isDark) 0.10f else 0.025f, if (isDark) 0.09f else 1.0f)
+    val surfaceLow = color(if (isDark) 0.13f else 0.05f, if (isDark) 0.14f else 0.985f)
+    val surfaceMid = color(if (isDark) 0.15f else 0.07f, if (isDark) 0.16f else 0.97f)
+    val surfaceHigh = color(if (isDark) 0.17f else 0.09f, if (isDark) 0.22f else 0.94f)
+    val surfaceHighest = color(if (isDark) 0.19f else 0.11f, if (isDark) 0.28f else 0.91f)
     val base = if (isDark) AppColorSchemeDark else AppColorSchemeLight
     return base.copy(
         background = color(if (isDark) 0.12f else 0.025f, if (isDark) 0.075f else 0.985f),
@@ -120,7 +126,7 @@ fun tonedColorScheme(isDark: Boolean, tone: String): androidx.compose.material3.
         primary = primary,
         onPrimary = if (isDark) Color.Black else Color.White,
         primaryContainer = container,
-        onPrimaryContainer = if (isDark) color(0.24f, 0.94f) else color(0.65f, 0.28f),
+        onPrimaryContainer = onContainer,
         secondary = secondary,
         onSecondary = if (isDark) Color.Black else Color.White,
         secondaryContainer = container,
@@ -130,8 +136,29 @@ fun tonedColorScheme(isDark: Boolean, tone: String): androidx.compose.material3.
         tertiaryContainer = container,
         onTertiaryContainer = if (isDark) color(0.24f, 0.94f) else color(0.55f, 0.28f),
         surfaceVariant = if (isDark) color(0.17f, 0.22f) else color(0.09f, 0.94f),
-        surfaceContainer = if (isDark) color(0.15f, 0.16f) else color(0.07f, 0.97f),
-        surfaceContainerHigh = if (isDark) color(0.17f, 0.22f) else color(0.09f, 0.94f),
+        surfaceContainerLowest = surfaceLowest,
+        surfaceContainerLow = surfaceLow,
+        surfaceContainer = surfaceMid,
+        surfaceContainerHigh = surfaceHigh,
+        surfaceContainerHighest = surfaceHighest,
+        surfaceBright = if (isDark) surfaceHigh else surfaceLowest,
+        surfaceDim = if (isDark) surfaceLowest else surfaceHigh,
+        inverseSurface = if (isDark) surfaceHighest else color(0.10f, 0.18f),
+        inverseOnSurface = if (isDark) color(0.10f, 0.18f) else surfaceLowest,
+        inversePrimary = color(if (isDark) 0.65f else 0.36f, if (isDark) 0.58f else 0.75f),
+        surfaceTint = primary,
+        primaryFixed = color(0.25f, 0.92f),
+        primaryFixedDim = color(0.38f, 0.82f),
+        onPrimaryFixed = color(0.62f, 0.20f),
+        onPrimaryFixedVariant = color(0.55f, 0.34f),
+        secondaryFixed = color(0.18f, 0.90f),
+        secondaryFixedDim = color(0.27f, 0.80f),
+        onSecondaryFixed = color(0.45f, 0.20f),
+        onSecondaryFixedVariant = color(0.40f, 0.34f),
+        tertiaryFixed = color(0.24f, 0.90f),
+        tertiaryFixedDim = color(0.33f, 0.80f),
+        onTertiaryFixed = color(0.52f, 0.20f),
+        onTertiaryFixedVariant = color(0.46f, 0.34f),
         outline = if (isDark) color(0.1f, 0.44f) else color(0.1f, 0.67f),
         outlineVariant = if (isDark) color(0.11f, 0.3f) else color(0.08f, 0.83f)
     )

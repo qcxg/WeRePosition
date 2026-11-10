@@ -215,10 +215,10 @@
     <string name="custom_wigle_token_hint">貼上 WiGLE 帳戶中的「Encoded for use」</string>
     <string name="custom_opencellid_token">OpenCellID API 密鑰</string>
     <string name="custom_opencellid_token_hint">輸入您的 OpenCellID 密鑰...</string>
-    <string name="app_access_title">應用存取控制</string>
+    <string name="app_access_title">應用隔離與作用域</string>
     <string name="app_access_summary">逐應用控制位置可見性與 Wi-Fi／基站 Hook 範圍</string>
     <string name="app_access_location_mode">僅向選定應用提供位置</string>
-    <string name="app_access_location_desc">此模式暫停使用。回傳空值可能讓應用顯示先前快取的真實位置。模擬期間所有應用均接收模擬位置；下方位置選擇暫不生效。</string>
+    <string name="app_access_location_desc">開啟後，選定應用接收模擬位置；其他應用不接收位置更新或衛星資料。Wi-Fi 與基站 Hook 使用另一組 LSPosed 作用域。</string>
     <string name="app_access_rf_desc">Wi-Fi 與基站注入另用 LSPosed 作用域。更改作用域後請重新啟動目標應用。</string>
     <string name="app_access_search">搜尋應用</string>
     <string name="app_access_system_apps">顯示系統應用</string>
@@ -266,7 +266,8 @@
     <string name="data_rename_group">重新命名分組</string>
     <string name="data_ungroup_all">取消此分組</string>
     <string name="settings_appearance">外觀與語言</string>
-    <string name="settings_location">位置與應用權限</string>
+    <string name="settings_location">位置模擬</string>
+    <string name="settings_location_summary">最近位置與 Pure 模式</string>
     <string name="settings_environment">環境資料與 API</string>
     <string name="settings_about">關於 WeRePosition</string>
     <string name="settings_version">版本 %1$s</string>

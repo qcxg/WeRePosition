@@ -12,6 +12,7 @@ internal class SystemGnssStatusHook(
     private val currentConfig: () -> JSONObject?,
     private val isSimulationActive: (JSONObject?) -> Boolean,
     private val shouldDeliver: (JSONObject?) -> Boolean,
+    private val locationAllowed: (JSONObject?, String?) -> Boolean,
     private val currentSatellites: () -> Array<LocationHooker.SatelliteData>
 ) {
     // Construct only when a listener appears; system_server may install hooks before
@@ -52,6 +53,31 @@ internal class SystemGnssStatusHook(
     }
 
     fun install(classLoader: ClassLoader) {
+        // GNSS listener operations share this final method. Check each registration
+        // at delivery so changing the allowlist affects listeners already registered.
+        val gnssRegistrationClass = XposedHelpers.findClassIfExists(
+            "com.android.server.location.gnss.GnssListenerMultiplexer\$GnssListenerRegistration",
+            classLoader
+        )
+        XposedHelpers.findClassIfExists(
+            "com.android.server.location.listeners.ListenerRegistration", classLoader
+        )?.let { registrationClass ->
+            XposedBridge.hookAllMethods(registrationClass, "executeOperation", object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    val registration = param.thisObject ?: return
+                    if (gnssRegistrationClass?.isInstance(registration) != true) return
+                    val config = currentConfig()
+                    if (!isSimulationActive(config)) return
+                    val identity = runCatching {
+                        XposedHelpers.callMethod(registration, "getIdentity")
+                    }.getOrNull()
+                    val packageName = identity?.let { runCatching {
+                        XposedHelpers.callMethod(it, "getPackageName") as? String
+                    }.getOrNull() }
+                    if (!locationAllowed(config, packageName)) param.result = null
+                }
+            })
+        }
         val providerClass = XposedHelpers.findClassIfExists(
             "com.android.server.location.gnss.GnssStatusProvider", classLoader
         ) ?: run {

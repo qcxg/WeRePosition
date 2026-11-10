@@ -871,6 +871,8 @@ class SpoofingService : Service() {
 
             setprop gsm.wrp.active true
             setprop gsm.wrp.location_allowlist_enabled ${settingsManager.perAppLocationEnabled}
+            setprop gsm.wrp.joystick_mode $isJoystickVisible
+            setprop gsm.wrp.enable_jitter ${SpooferProvider.enableJitter && !isJoystickVisible}
             setprop gsm.wrp.lat ${loc.lat}
             setprop gsm.wrp.lng ${loc.lng}
             setprop gsm.wrp.bearing ${loc.bearing}
@@ -916,7 +918,7 @@ class SpoofingService : Service() {
                         .putBoolean("mock_wifi", rfSnapshot.mockWifi)
                         .putBoolean("mock_cell", rfSnapshot.mockCell)
                         .putBoolean("mock_bluetooth", false)
-                        .putBoolean("enable_jitter", SpooferProvider.enableJitter)
+                        .putBoolean("enable_jitter", SpooferProvider.enableJitter && !isJoystickVisible)
                         .putInt("jitter_radius_meters", SpooferProvider.jitterRadiusMeters.coerceIn(1, 80))
                         .putString("jitter_speed", SpooferProvider.jitterSpeed)
                         .putBoolean("signal_jitter_enabled", SpooferProvider.signalJitterEnabled)

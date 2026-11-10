@@ -27,9 +27,10 @@ The project follows two rules:
 - One `system_server` cadence reports through the current real provider abstraction.
 - A complete canonical WGS-84 fix is created after provider validation and before framework cache, filtering, privacy, and native delivery.
 - Ordinary `LocationManager` requests remain untouched. The module does not swallow requests, rewrite `Location` getters or parcels, or run per-client location timers.
-- GMS and completely unscoped ordinary apps receive the framework location through their normal registrations.
+- By default, GMS and ordinary apps receive the synthetic framework location through normal registrations. Optional per-app isolation lets selected apps receive new locations while unselected apps receive no new location or satellite reports. Play services stays outside module scope; Wi-Fi/cell uses a separate LSPosed scope.
 - Fixed point, the independent floating joystick, and automatic out-and-back routes share the service runtime path. The joystick needs no route points, leaves the home map at its selected starting point, and restores that point when closed. See [joystick design and verification](ai_readme/joystick_refactor_plan.md).
 - The joystick starts separately after location simulation is active. If location mode is off, the first tap explains the prerequisite and a second tap within five seconds starts both. Wi-Fi/cell simulation and location jitter pause while the joystick is visible and resume afterward. The overlay can lock its position or exit the entire simulation.
+- Settings has one level of detail pages. Location simulation and App isolation and scope both open directly from Settings home. Custom tones color the Material 3 surfaces used by settings cards and floating navigation.
 
 ### Bounded natural drift
 
@@ -86,7 +87,7 @@ WeRePosition app
   -> framework validation
   -> one canonical WGS-84 LocationResult
   -> Android cache / filters / permissions / native transport
-  -> GMS and ordinary scoped or unscoped apps
+  -> per-app delivery filter (optional) -> selected apps and delegated GMS requests
 
 Optional scoped app hooks
   -> Wi-Fi / Cell / GNSS status / NMEA supplements

@@ -16,7 +16,7 @@ Superseded investigation snapshots are intentionally removed after their durable
 
 - Keep `technical_readme.md` updated whenever spoofing data flow or lifecycle behavior changes.
 - Ordinary location has one authoritative system path: real provider abstraction -> framework pre-filter canonical fix -> native delivery. Do not add `Location` getter/Parcel/transport resampling or client callback timers.
-- Never swallow `LocationManager` requests. Unscoped apps must receive normal framework locations without a consumer-app scope list.
+- Never swallow `LocationManager` requests in client processes. The optional location allowlist is enforced on framework delivery and last-location reads in `system_server`; an unselected app must receive no new location or GNSS data, while the provider cache stays synthetic. The LSPosed Wi-Fi/cell scope is independent.
 - Synthetic Wi-Fi and cell data is allowed only through the explicit opt-in setting and must be marked as fictional. Missing data otherwise remains blocked.
 - If a fallback is needed for Android object construction, document it as object-shape normalization, not as collected/API data.
 - Remove transient status notes once their durable content is merged into the current technical document.

@@ -197,17 +197,8 @@ class SettingsManager(context: Context) {
         }
 
     var perAppLocationEnabled: Boolean
-        get() {
-            // A null framework result lets clients reuse a previously cached real fix.
-            // Retire the unsafe mode, including preferences persisted by older builds.
-            if (prefs.getBoolean("per_app_location_enabled", false)) {
-                prefs.edit().putBoolean("per_app_location_enabled", false).commit()
-            }
-            return false
-        }
-        set(@Suppress("UNUSED_PARAMETER") value) {
-            prefs.edit().putBoolean("per_app_location_enabled", false).apply()
-        }
+        get() = prefs.getBoolean("per_app_location_enabled", false)
+        set(value) = prefs.edit().putBoolean("per_app_location_enabled", value).apply()
 
     var pureModeEnabled: Boolean
         get() = prefs.getBoolean("pure_mode_enabled", false)
