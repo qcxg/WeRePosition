@@ -13,7 +13,7 @@ System-level Android location and radio-environment simulation for testing apps 
 
 ## Design
 
-Android developer-options mock locations can be identified through mock flags, AppOps, test providers, or inconsistent Wi-Fi/cell fingerprints. WeRePosition establishes an ordinary global location source inside the Android framework. Target-app hooks are optional supplements only when an app directly reads Wi-Fi, cellular, GNSS status, or NMEA APIs.
+Android developer-options mock locations can be identified through mock flags, AppOps, test providers, or inconsistent Wi-Fi/cell fingerprints. WeRePosition establishes an ordinary global location source inside the Android framework. Target-app hooks supplement direct reads of Wi-Fi, cellular, GNSS status, NMEA, or specified classic Bluetooth APIs.
 
 The project follows two rules:
 
@@ -56,6 +56,13 @@ An explicit setting can generate fictional Wi-Fi and cell data matched to the ta
 
 When enabled, the module can replace Wi-Fi connection/scan callbacks and cellular info/location/callbacks. An enabled channel with no valid payload returns an empty or null simulated result instead of leaking real nearby data.
 
+### Specified Wi-Fi and classic Bluetooth connections
+
+- Settings > Specified connections has independent switches for the connected Wi-Fi and classic Bluetooth. Disabled sections collapse. Enabling Bluetooth immediately opens editable name, MAC address, alias, device class, service UUID, and A2DP/Headset fields; multiple devices can be added.
+- Saved Wi-Fi SSID/security metadata and previously paired classic Bluetooth devices can be imported. Historical Wi-Fi BSSID and IP information are unavailable from the saved list, and passwords are never read. A valid BSSID is required before saving specified Wi-Fi. Bluetooth import requests Nearby devices permission.
+- These supplements apply only inside selected LSPosed app processes. Specified Wi-Fi changes the reported connected AP while scans continue to return the simulated AP list or empty results, never real nearby APs. Specified Bluetooth adds devices to paired and A2DP/Headset connected results without hiding other real Bluetooth devices. BLE/GATT is not covered.
+- Specified connections are independent of WiGLE/OpenCellID settings and the collected Room database. Saving during an active run refreshes the runtime snapshot; a module-code update still requires the affected processes or device to restart.
+
 ### GNSS and NMEA supplements
 
 - Public `GnssStatus` values can expose a coherent GPS/GLONASS/BeiDou constellation and used-in-fix subset.
@@ -66,7 +73,7 @@ When enabled, the module can replace Wi-Fi connection/scan callbacks and cellula
 ### Local data tools
 
 - Collect, inspect, edit, import, and export local environment records.
-- Only records with replayable Wi-Fi or cellular relations appear live in world-fixed Web Mercator hexagons with a 30 m circumradius. Historical Bluetooth relations remain only for database and import/export compatibility.
+- Only records with replayable Wi-Fi or cellular relations appear live in world-fixed Web Mercator hexagons with a 30 m circumradius. Historical Bluetooth tables do not participate in RF coverage; specified classic Bluetooth settings are stored separately.
 - Map rendering, pre-start capability checks, and runtime RF resolution use the exact same `EnvironmentCoveragePolicy` cell ID. `EnvironmentRfResolver` and the DAO read only the target cell, so dense samples do not inflate coverage and neighbouring cells are never borrowed.
 - Exact-cell RF hexagons are defined only within Web Mercator latitude `±85.05112878°`. Polar coordinates outside that range do not currently guarantee RF isolation or same-cell drift constraints and should not be used with RF simulation.
 - Reuse exact-cell local RF data first, then optionally supplement it through WiGLE/OpenCellID. If an enabled channel still has no trusted payload in that cell, it remains enabled in `block only` mode instead of falling back to real RF.
@@ -90,7 +97,7 @@ WeRePosition app
   -> per-app delivery filter (optional) -> selected apps and delegated GMS requests
 
 Optional scoped app hooks
-  -> Wi-Fi / Cell / GNSS status / NMEA supplements
+  -> Wi-Fi / Cell / GNSS status / NMEA / specified classic Bluetooth supplements
 ```
 
 The service owns runtime publication for fixed point, automatic route, and floating joystick movement. During joystick movement it publishes the compact position frame at up to about 250 ms intervals; ordinary fixed and route modes retain their existing cadence. `RuntimeConfigWriteCoordinator` serializes lifecycle and service writes so an older generation cannot overwrite newer state.
@@ -104,7 +111,7 @@ Runtime configuration is written atomically through generation-tagged temporary 
 - Android 14 (API 34) or later.
 - KernelSU, Magisk, or APatch root.
 - LSPosed/libxposed with the module enabled for the Android framework. Keep Google Play services and Fused Location outside the module scope.
-- Add an individual app to scope only when its direct RF, GNSS-status, or NMEA reads must also be simulated.
+- Add an individual app to scope only when its direct RF, GNSS-status, NMEA, or specified classic Bluetooth reads must also be simulated.
 - A Google Maps API key for map/search features; WiGLE and OpenCellID credentials are optional.
 
 ## Build

@@ -1,6 +1,6 @@
 # WeRePosition Current Simulation Pipeline
 
-Last maintained: 2026-11-11 (per-app isolation, joystick jitter, and settings/theme release)
+Last maintained: 2026-11-11 (v2.0.2 specified connections and hook extraction)
 
 This document is the current source of truth for how WeRePosition simulates GNSS, Wi-Fi, cellular, and related environment signals. It is written for future coding agents and developers so the implementation stays understandable and does not drift into hidden generated telemetry.
 
@@ -177,7 +177,7 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 
 ### Trusted Wi-Fi Sources
 
-The optional specified-connection setting is separate from RF collection and synthetic generation. The host can import saved SSID/security metadata with root `cmd wifi list-networks` and fill the currently connected network's details when they are readable. Historical BSSID and IP are absent from the saved-network list, so the UI requires a user-provided BSSID before the connection override can be enabled. `specified_wifi_json` changes only the selected connected AP; `ClientWifiHook` still blocks real scan results and returns the existing fake nearby AP list or an empty list. The two independent switches are `specified_wifi_enabled` and `specified_bluetooth_enabled`. They are published by the active service and included in its content fingerprint for immediate refresh.
+The optional specified-connection setting is separate from RF collection and synthetic generation. The host can import saved SSID/security metadata with root `cmd wifi list-networks` and fill the currently connected network's details when they are readable. Historical BSSID and IP are absent from the saved-network list, so the UI requires a user-provided BSSID before the connection override can be saved. `specified_wifi_json` changes only the selected connected AP; `ClientWifiHook` still blocks real scan results and returns the existing fake nearby AP list or an empty list. The two independent switches are `specified_wifi_enabled` and `specified_bluetooth_enabled`. They are published by the active service and included in its content fingerprint for immediate refresh. Both detailed forms collapse when their switch is off.
 
 Replayable real Wi-Fi data comes from:
 
@@ -219,7 +219,7 @@ Important distinction:
 
 ### Hook Path
 
-`LocationHooker.kt` hooks Wi-Fi APIs including:
+`LocationHooker.kt` supplies process-local configuration and scope policy to `ClientWifiHook.kt`, which hooks Wi-Fi APIs including:
 
 - `WifiManager.getConnectionInfo`
 - `WifiManager.getScanResults`
@@ -324,12 +324,13 @@ The app uses the same RF chain diagnostic state labels for cellular:
 
 As with Wi-Fi, this is a local readiness check; hook delivery is verified through logcat.
 
-## Bluetooth Removal And Historical Compatibility
+## Specified Classic Bluetooth And Historical Compatibility
 
-- The app requests no Bluetooth permissions, starts no BLE scan, exposes no start-time Bluetooth switch, and installs no Bluetooth Xposed hook.
-- Runtime payloads keep only compatibility tombstones: `bluetooth_json=[]` and `mock_bluetooth=false`. No runtime consumer reads or simulates them.
-- Existing Bluetooth Room entities and import/export fields are still present, but no runtime Bluetooth data is collected or spoofed. Older database versions are intentionally rebuilt rather than migrated.
-- Runtime coverage SQL and `EnvironmentRfResolver` projections exclude Bluetooth-only rows and do not materialize Bluetooth relations.
+- The dedicated Settings > Specified connections page has a Bluetooth switch independent of specified Wi-Fi and the environment API settings. Enabling it immediately creates an editable device row. Users can enter name, MAC address, alias, 24-bit decimal device class, optional comma-separated service UUIDs, and A2DP/Headset flags; additional devices can be added. The form preserves incomplete numeric and UUID input until validation at save time. Both connection forms collapse when disabled.
+- `SavedConnectionImporter` reads previously paired classic or dual-mode devices through `BluetoothAdapter.getBondedDevices` after requesting `BLUETOOTH_CONNECT`. It imports metadata, not an active connection. The app does not start BLE/GATT scanning.
+- `ClientBluetoothHook` is installed only inside selected LSPosed client processes. When the active snapshot enables `specified_bluetooth_enabled`, it adds configured devices to the bonded set and selected A2DP/Headset connected-device and state results. Configured device getters report their specified name, alias, class, UUIDs, bonded state and classic type. Other real Bluetooth devices remain visible. No Bluetooth hook runs in `system_server`, Play services, or Fused Location.
+- Legacy `bluetooth_json=[]` and `mock_bluetooth=false` are compatibility tombstones, separate from `specified_bluetooth_json`. Existing Bluetooth Room entities and import/export fields are not used for runtime specified devices or RF coverage. Older database versions are intentionally rebuilt rather than migrated.
+- The form, import list, and local debug build have been checked on a connected Android 17 device; a third-party scoped-app read of the new Bluetooth hook has not yet been verified.
 
 ## Connectivity Layer
 

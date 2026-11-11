@@ -13,7 +13,7 @@
 
 ## 核心定位
 
-傳統 Android 開發者選項中的 Mock Location 容易被目標 App 或 SDK 通過 `isFromMockProvider`、AppOps、測試 provider、周邊 Wi-Fi／基站指紋等方式識別。WeRePosition 用 Root + LSPosed 在 Android 系統框架建立全域定位來源；只有 App 直接讀取 Wi-Fi、基站、GNSS status 或 NMEA 時，才在該 App 進程補充對應環境資料。
+傳統 Android 開發者選項中的 Mock Location 容易被目標 App 或 SDK 通過 `isFromMockProvider`、AppOps、測試 provider、周邊 Wi-Fi／基站指紋等方式識別。WeRePosition 用 Root + LSPosed 在 Android 系統框架建立全域定位來源；只有 App 直接讀取 Wi-Fi、基站、GNSS status、NMEA 或指定傳統藍牙資料時，才在該 App 進程補充對應環境資料。
 
 本專案遵守兩個重要原則：
 
@@ -66,13 +66,20 @@
 - 支援本地資料查看、編輯、匯入與匯出。
 - 首頁最近位置的顯示與保留條數可在設定中調整；收藏列表保留為頂部書籤入口。
 - 管理頁會把相同經緯度的環境記錄合併成一條，並在 Wi-Fi / 基站數量後標出「由 WiGLE / OpenCellID 導入」或本地采集來源。
-- 採集資料使用 Room/SQLite 保存；只有含可重放 Wi-Fi 或基站關聯的記錄會即時映射到世界固定的 Web Mercator 六角格，六角格外接半徑為 30m。舊 Bluetooth 關聯只為資料庫升級與歷史資料管理保留，不參與掃描或運行期模擬。
+- 採集資料使用 Room/SQLite 保存；只有含可重放 Wi-Fi 或基站關聯的記錄會即時映射到世界固定的 Web Mercator 六角格，六角格外接半徑為 30m。舊 Bluetooth 資料表不參與採集或 RF 覆蓋判定；新的指定傳統藍牙設定獨立保存，不依賴這些資料表。
 - 地圖、開始前能力檢查與運行期 RF 解析共用 `EnvironmentCoveragePolicy` 的完全相同格 ID；`EnvironmentRfResolver`／DAO 只讀取目標所在格，密集采樣不會擴大範圍，跨格也不會借用資料。
 - Exact-cell RF 六角格的有效緯度為 `±85.05112878°`；更高緯度目前不保證 RF 隔離或漂移限格，請勿在極區座標啟用 RF 模擬。
 - 開始模擬時會先檢查目標六角格的本地 RF 快取；API 補採失敗時可重試，或直接以目前資料啟用。使用者已開啟但該格沒有可信 payload 的 RF 通道會保持啟用並進入 `block only`，不會退回真實 RF。
 - 本地搜尋與管理頁會優先用 Google Places Nearby Search 取附近 POI 名稱，再用 Geocoding / 系統 Geocoder 後備顯示「某地附近」。
 - Wi-Fi payload 對話框提供去重列表：短按展開詳情，長按切換要暴露為 `connectedWifi` 的 AP。
 - RF 診斷面板顯示 `ready`、`block only`、`off`、`loading` 等狀態，便於確認目前是模擬、阻斷還是關閉。
+
+### 指定連線 Wi-Fi／傳統藍牙
+
+- 「設定 → 指定連線」提供兩個獨立開關；關閉時收起詳細欄位。啟用藍牙後可直接填寫裝置名稱、MAC 位址、別名、裝置類別、服務 UUID 與 A2DP／Headset 狀態，並可新增多筆裝置。
+- 可從系統匯入已儲存 Wi-Fi 的 SSID／安全類型與已配對傳統藍牙裝置。Wi-Fi 歷史清單不含 BSSID、IP 或密碼；指定 Wi-Fi 必須填入有效 BSSID 才能儲存。藍牙匯入需要授予「附近裝置」權限。
+- 只對 LSPosed 作用域內的指定 App 生效。指定 Wi-Fi 僅覆蓋顯示的連線 AP，掃描清單繼續使用模擬資料或回空，不會放出真實 AP。指定藍牙增補已配對與 A2DP／Headset 連線結果，不隱藏其他真實藍牙裝置；不涵蓋 BLE／GATT。
+- 這些設定不會寫入採集資料庫，也不是 WiGLE／OpenCellID API 設定。變更並儲存後，運行中的模擬會更新配置；更新模組 Hook 程式碼後仍須重新載入相應進程或重啟裝置。
 
 ### Mock 標記與系統相容
 
@@ -106,7 +113,7 @@ Config channels
 LSPosed injected processes
   |-- system_server: authoritative 1 Hz location source and per-app delivery filter
   |-- GMS / Fused Location: ordinary framework consumers, outside module scope
-  |-- optional target apps: GNSS / Wi-Fi / Cell supplements
+  |-- optional target apps: GNSS / Wi-Fi / Cell / specified classic Bluetooth supplements
   |-- fail-closed when active config is stale
 ```
 
@@ -120,7 +127,7 @@ LSPosed injected processes
 
 - Android 14（API 34）或更新版本。
 - KernelSU、Magisk 或 APatch Root。
-- LSPosed / libxposed 可用；全域普通定位只需要系統框架作用域。不要勾選 Google Play 服務或 Fused Location。只有要模擬 App 內直接讀取的 Wi-Fi、基站、GNSS status 或 NMEA 時，才把該 App 加入作用域。
+- LSPosed / libxposed 可用；全域普通定位只需要系統框架作用域。不要勾選 Google Play 服務或 Fused Location。只有要模擬 App 內直接讀取的 Wi-Fi、基站、GNSS status、NMEA 或指定傳統藍牙時，才把該 App 加入作用域。
 - Google Maps API key 用於地圖與搜尋。Android 金鑰限制需允許套件 `com.shiraka.wereposition` 與實際安裝包的簽署 SHA-1；可在 App「設定 → App 身份」複製兩者。Debug、正式簽署各有自己的 SHA-1。
 - 地圖 SDK 的金鑰在編譯時由 `GOOGLE_MAPS_API_KEY` 環境變數或未追蹤的 `local.yml` 讀取；設定頁輸入的 Google 金鑰只用於 Places/搜尋，不能更換已編譯的地圖金鑰。變更後須重新編譯安裝。
 - WiGLE / OpenCellID token 可選，用於補充真實 RF payload。WiGLE 欄位需要帳戶頁的 `Encoded for use` 值；OpenCellID 使用 API Access Tokens 頁面的完整金鑰。
