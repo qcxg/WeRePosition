@@ -107,6 +107,7 @@ fun SettingsScreen(
         "appearance" -> stringResource(R.string.settings_appearance)
         "location" -> stringResource(R.string.settings_location)
         "environment" -> stringResource(R.string.settings_environment)
+        "connections" -> stringResource(R.string.specified_connections_title)
         "about" -> stringResource(R.string.settings_about)
         else -> stringResource(R.string.settings)
     }
@@ -162,6 +163,10 @@ fun SettingsScreen(
                         stringResource(R.string.app_access_summary)) { showAppAccessPage = true }
                     HorizontalDivider(Modifier.padding(horizontal = 18.dp),
                         color = MaterialTheme.colorScheme.outlineVariant)
+                    SettingsMenuItem(stringResource(R.string.specified_connections_title),
+                        stringResource(R.string.specified_connections_menu_summary)) { currentPage = "connections" }
+                }
+                SettingsMenuGroup(title = stringResource(R.string.settings_category_environment_data)) {
                     SettingsMenuItem(stringResource(R.string.settings_environment),
                         stringResource(R.string.api_config)) { currentPage = "environment" }
                 }
@@ -310,6 +315,18 @@ fun SettingsScreen(
                 )
             }
 
+            }
+            if (page == "connections") {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Column(Modifier.padding(18.dp)) {
+                    SpecifiedConnectionsSettings(viewModel, uiState)
+                }
+            }
             }
             if (page == "environment") {
 

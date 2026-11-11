@@ -257,7 +257,9 @@ class SpooferProvider : ContentProvider() {
                 "mock_wifi", "mock_cell", "mock_bluetooth",
                 "heartbeat_at", "heartbeat_uptime_ms", "config_updated_at",
                 "config_generation", "runtime_lifecycle_token", "boot_id",
-                "location_allowlist_enabled", "location_allowlist"
+                "location_allowlist_enabled", "location_allowlist",
+                "specified_wifi_enabled", "specified_wifi_json",
+                "specified_bluetooth_enabled", "specified_bluetooth_json"
             )
         )
         cursor.addRow(
@@ -292,7 +294,13 @@ class SpooferProvider : ContentProvider() {
                 runtimeLifecycleToken,
                 runtimeBootId,
                 if (accessSettings.perAppLocationEnabled) 1 else 0,
-                JSONArray(accessSettings.locationAllowedApps.sorted()).toString()
+                JSONArray(accessSettings.locationAllowedApps.sorted()).toString(),
+                if (accessSettings.specifiedWifiEnabled && accessSettings.specifiedWifi.isValid) 1 else 0,
+                accessSettings.specifiedWifi.toJson().toString(),
+                if (accessSettings.specifiedBluetoothEnabled) 1 else 0,
+                com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice.listToJson(
+                    accessSettings.specifiedBluetoothDevices.filter { it.isValid }
+                ).toString()
             )
         )
         return cursor

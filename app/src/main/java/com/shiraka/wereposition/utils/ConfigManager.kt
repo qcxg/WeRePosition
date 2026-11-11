@@ -103,6 +103,12 @@ class ConfigManager(private val rootManager: RootManager) {
             put("mock_wifi", active && mockWifi)
             put("mock_cell", active && mockCell)
             put("mock_bluetooth", false)
+            put("specified_wifi_enabled", active && accessSettings.specifiedWifiEnabled && accessSettings.specifiedWifi.isValid)
+            put("specified_wifi_json", accessSettings.specifiedWifi.toJson())
+            put("specified_bluetooth_enabled", active && accessSettings.specifiedBluetoothEnabled)
+            put("specified_bluetooth_json", com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice.listToJson(
+                accessSettings.specifiedBluetoothDevices.filter { it.isValid }
+            ))
             put("enable_jitter", enableJitter)
             put("jitter_radius_meters", jitterRadiusMeters.coerceIn(1, 80))
             put("jitter_speed", jitterSpeed)
@@ -199,7 +205,8 @@ class ConfigManager(private val rootManager: RootManager) {
             setprop gsm.wrp.bearing $simBearing
             setprop gsm.wrp.speed 0.0
             setprop gsm.wrp.sat_count $satelliteCount
-            setprop gsm.wrp.mock_wifi $mockWifi
+            setprop gsm.wrp.mock_wifi ${mockWifi ||
+                (accessSettings.specifiedWifiEnabled && accessSettings.specifiedWifi.isValid)}
             setprop gsm.wrp.mock_cell $mockCell
             setprop gsm.wrp.mock_bluetooth false
             setprop gsm.wrp.enable_jitter $enableJitter

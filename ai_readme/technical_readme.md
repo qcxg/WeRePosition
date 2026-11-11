@@ -29,6 +29,8 @@ Primary components:
 - `SpoofingService.kt`: owns movement output, refreshes RF for cell/database/request/material within-cell changes, keeps active state fresh, and is the sole continuous active-runtime writer.
 - `LocationJitterEngine.kt`: owns process-local bounded coordinate drift, same-cell RF constraint, and reported accuracy for one runtime configuration snapshot per fix.
 - `CellPayloadReader.kt`: parses client cell JSON and derives signal values; `NmeaSentenceFactory.kt` formats GNSS NMEA sentences. `SatelliteData.kt` is their shared satellite model.
+- `ClientWifiHook.kt`: installs scoped client Wi-Fi API hooks and constructs connection and scan results from the active snapshot.
+- `ClientBluetoothHook.kt`: when specified classic Bluetooth is enabled, adds configured devices to paired and connected profile results in selected app processes. It does not hide real Bluetooth devices or enable the legacy global Bluetooth block.
 - `ConfigManager.kt`: currently writes stop and cleanup snapshots; its old active-write branch has no callers and should be removed in a separately verified stop-path refactor. It is not a second heartbeat writer.
 - `RuntimeConfigWriteCoordinator.kt`: serializes lifecycle and heartbeat commits, rejects stale generations, and advances the committed generation only after a write actually succeeds.
 - `RootManager.kt`: owns the service-only persistent root shell used during active simulation; one acknowledged serialized shell replaces a new `su` process per movement tick and is closed on stop, location-off, or service destruction.
@@ -174,6 +176,8 @@ Do not reintroduce a `Map<Location, ...>` sample cache. Android 16 `Location.equ
 ## Wi-Fi Simulation
 
 ### Trusted Wi-Fi Sources
+
+The optional specified-connection setting is separate from RF collection and synthetic generation. The host can import saved SSID/security metadata with root `cmd wifi list-networks` and fill the currently connected network's details when they are readable. Historical BSSID and IP are absent from the saved-network list, so the UI requires a user-provided BSSID before the connection override can be enabled. `specified_wifi_json` changes only the selected connected AP; `ClientWifiHook` still blocks real scan results and returns the existing fake nearby AP list or an empty list. The two independent switches are `specified_wifi_enabled` and `specified_bluetooth_enabled`. They are published by the active service and included in its content fingerprint for immediate refresh.
 
 Replayable real Wi-Fi data comes from:
 

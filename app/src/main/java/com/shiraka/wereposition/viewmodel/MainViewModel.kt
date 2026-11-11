@@ -17,6 +17,8 @@ import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.data.model.RoutePoint
 import com.shiraka.wereposition.data.model.RoutePlanStage
 import com.shiraka.wereposition.data.model.SavedLocation
+import com.shiraka.wereposition.data.model.SpecifiedWifiConnection
+import com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice
 import com.shiraka.wereposition.data.model.SimMode
 import com.shiraka.wereposition.data.model.AppMapType
 import com.shiraka.wereposition.data.model.JitterSpeed
@@ -86,6 +88,10 @@ class MainViewModel(
             mockWifi = settingsRepository.mockWifi,
             mockCell = settingsRepository.mockCell,
             mockBluetooth = false,
+            specifiedWifiEnabled = settingsRepository.specifiedWifiEnabled,
+            specifiedWifi = settingsRepository.specifiedWifi,
+            specifiedBluetoothEnabled = settingsRepository.specifiedBluetoothEnabled,
+            specifiedBluetoothDevices = settingsRepository.specifiedBluetoothDevices,
             syntheticRfEnabled = settingsRepository.syntheticRfEnabled,
             syntheticWifiCount = settingsRepository.syntheticWifiCount,
             syntheticCellCount = settingsRepository.syntheticCellCount,
@@ -1645,6 +1651,28 @@ class MainViewModel(
                 publishResolvedRfCoverage(resolveRfCoverageForTargetCell(lat, lng))
             }
         }
+    }
+
+    fun setSpecifiedWifi(enabled: Boolean, connection: SpecifiedWifiConnection) {
+        settingsRepository.specifiedWifi = connection
+        settingsRepository.specifiedWifiEnabled = enabled && connection.isValid
+        _uiState.update {
+            it.copy(specifiedWifiEnabled = enabled && connection.isValid, specifiedWifi = connection)
+        }
+        requestActiveConfigRefresh()
+    }
+
+    fun setSpecifiedBluetooth(enabled: Boolean, devices: List<SpecifiedBluetoothDevice>) {
+        val validDevices = devices.filter { it.isValid }.distinctBy { it.address.uppercase() }
+        settingsRepository.specifiedBluetoothDevices = validDevices
+        settingsRepository.specifiedBluetoothEnabled = enabled && validDevices.isNotEmpty()
+        _uiState.update {
+            it.copy(
+                specifiedBluetoothEnabled = enabled && validDevices.isNotEmpty(),
+                specifiedBluetoothDevices = validDevices
+            )
+        }
+        requestActiveConfigRefresh()
     }
     
     private fun syncMockSettings() {

@@ -4,28 +4,30 @@ This is a maintenance snapshot of the tracked Android production source. Counts 
 
 | Area | Files | Lines |
 | --- | ---: | ---: |
-| UI | 14 | 6,323 |
-| Xposed hooks | 10 | 5,801 |
-| Utilities | 19 | 3,338 |
-| ViewModel | 1 | 2,266 |
-| Service | 2 | 1,589 |
-| Data | 13 | 1,170 |
-| Other | 5 | 827 |
-| **Total** | **64** | **21,314** |
+| UI | 15 | 6,614 |
+| Xposed hooks | 12 | 6,055 |
+| Utilities | 20 | 3,445 |
+| ViewModel | 1 | 2,294 |
+| Service | 2 | 1,608 |
+| Data | 14 | 1,307 |
+| Other | 5 | 835 |
+| **Total** | **69** | **22,158** |
 
-The four largest files are `LocationHooker.kt` (4,444 physical lines at this snapshot), `SpoofingScreen.kt`, `MainViewModel.kt`, and `SpoofingService.kt`; together they contain about half the production source. The codebase is moderate in size for an Android app, but its platform-hook and runtime-lifecycle complexity is high. File size alone is not a defect; the main maintenance risk is that unrelated responsibilities share mutable state and release-critical paths.
+The four largest files are `LocationHooker.kt` (3,927 physical lines at this snapshot), `SpoofingScreen.kt`, `MainViewModel.kt`, and `SpoofingService.kt`; together they contain about half the production source. The codebase is moderate in size for an Android app, but its platform-hook and runtime-lifecycle complexity is high. File size alone is not a defect; the main maintenance risk is that unrelated responsibilities share mutable state and release-critical paths.
 
 ## Verified in this pass
 
 - The jitter dialog stores radius and speed through `MainViewModel` / `SettingsRepository` and passes them to `LocationRepository`; `SpoofingService` publishes the full runtime JSON. The service had omitted the radius and speed from its system-property fallback, so that reduced source could silently use 30 m / medium after a refresh. The active writer now mirrors both properties, and one runtime snapshot drives coordinate drift and accuracy for each fix. Joystick mode still disables jitter.
 - Extracted `LocationJitterEngine` from `LocationHooker`; it owns bounded drift, the RF-cell constraint, and horizontal accuracy. Its sample method serializes the mutable drift state across provider callbacks.
 - Extracted `NmeaSentenceFactory` and `CellPayloadReader`; `SatelliteData` is now a shared top-level type. Hook installation and caller authorization remain in `LocationHooker`.
+- Extracted the complete client Wi-Fi hook family into `ClientWifiHook`. Runtime configuration and scope policy remain supplied by `LocationHooker`; the existing empty-result block path is unchanged.
+- Added independent specified connected Wi-Fi and classic Bluetooth switches. `SavedConnectionImporter` reads saved Wi-Fi network metadata through root `cmd wifi list-networks` and paired classic Bluetooth devices through the Android API. The active service publishes both selections in the runtime snapshot. `ClientWifiHook` replaces only the connected AP selection while retaining the existing simulated nearby list; `ClientBluetoothHook` adds selected devices to bonded/A2DP/Headset results without removing real devices.
 - The app-access list places enabled apps first when the installed list arrives. Its location and RF selections now use compact toggle icons and keep their row order during taps.
 - Removed explicit Room migrations. The current schema is opened directly; any older schema is dropped and recreated as requested because there is no user data to preserve. The database file remains named `environment_database`, and the current schema version remains 8.
 - The active runtime writer is `SpoofingService`. All three current `ConfigManager.saveConfig` call sites pass `active=false`, so its older active-write branch is unreachable in the current app. Its stop-generation fence remains safety critical; the branch should be removed in a focused stop-path refactor with reboot, replacement, and concurrent-writer verification.
 - Missing or hidden SSIDs previously became patterned `WIFI_...` or `HOME_WIFI` names in client hooks. They now remain unknown. The opt-in country-matched synthetic RF generator still creates its own varied, simulation-cycle-stable names.
 - Removed unused package-install permission, unused picture-in-picture activity declaration, an obsolete signing comment, redundant condition, and old module-name log prefixes.
-- `testDebugUnitTest`, `lintRelease`, and `assembleDebug` passed locally. Lint reports 0 errors, 150 warnings, and 2 hints; many warnings concern locale-dependent coordinate formatting and intentionally reflected Android internals. The first Windows lint attempt hit an internal PSI exception, but a fresh stable run completed successfully.
+- `testDebugUnitTest`, `lintDebug`, and `assembleDebug` passed locally after the specified-connection changes. Existing lint warnings concern locale-dependent coordinate formatting, deprecated compatibility APIs, and intentionally reflected Android internals.
 - On Android 17 (API 37), the 2.0.1 Debug build published a 76 m / slow / enabled jitter setting to the runtime properties. Repeated `dumpsys location` GPS samples moved around the selected synthetic Hong Kong anchor while reporting horizontal accuracy; the original 30 m / slow setting was restored and simulation stopped afterward.
 
 ## Follow-up risks
@@ -35,4 +37,4 @@ The four largest files are `LocationHooker.kt` (4,444 physical lines at this sna
 3. The new `LocationJitterEngineTest` covers radius, disabled-mode reset, and same-cell RF drift. No device instrumentation suite yet covers framework ordering, LSPosed scope, Pure mode, or live GNSS behavior. Add focused service-serialization tests and instrumentation checks where possible.
 4. Several coordinate strings use `String.format` without an explicit locale. Lint flags this because decimal separators can differ by device language; use `Locale.US` or a numeric formatter at serialization/input boundaries before widening locale support.
 
-Historical Bluetooth Room relations and JSON fields remain for existing import/export shape. Runtime values stay `false` or empty. They can be removed in a focused data-format cleanup without preserving old schema upgrades.
+Historical Bluetooth Room relations and legacy `bluetooth_json` remain unused. The new additive connection feature has a separate `specified_bluetooth_json` payload and never turns on the legacy global Bluetooth-blocking switch. Old fields can be removed in a focused data-format cleanup without preserving schema upgrades.

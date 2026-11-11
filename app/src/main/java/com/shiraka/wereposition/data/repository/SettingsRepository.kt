@@ -102,6 +102,22 @@ class SettingsRepository(private val settingsManager: SettingsManager) {
         get() = settingsManager.mockCell
         set(value) { settingsManager.mockCell = value }
 
+    var specifiedWifiEnabled: Boolean
+        get() = settingsManager.specifiedWifiEnabled
+        set(value) { settingsManager.specifiedWifiEnabled = value }
+
+    var specifiedWifi: com.shiraka.wereposition.data.model.SpecifiedWifiConnection
+        get() = settingsManager.specifiedWifi
+        set(value) { settingsManager.specifiedWifi = value }
+
+    var specifiedBluetoothEnabled: Boolean
+        get() = settingsManager.specifiedBluetoothEnabled
+        set(value) { settingsManager.specifiedBluetoothEnabled = value }
+
+    var specifiedBluetoothDevices: List<com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice>
+        get() = settingsManager.specifiedBluetoothDevices
+        set(value) { settingsManager.specifiedBluetoothDevices = value }
+
     var syntheticRfEnabled: Boolean
         get() = settingsManager.syntheticRfEnabled
         set(value) { settingsManager.syntheticRfEnabled = value }

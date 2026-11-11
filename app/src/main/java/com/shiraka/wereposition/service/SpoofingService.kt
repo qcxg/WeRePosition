@@ -116,6 +116,10 @@ class SpoofingService : Service() {
         val cellJson: String,
         val mockWifi: Boolean,
         val mockCell: Boolean,
+        val specifiedWifiEnabled: Boolean,
+        val specifiedWifiJson: String,
+        val specifiedBluetoothEnabled: Boolean,
+        val specifiedBluetoothJson: String,
         val enableJitter: Boolean,
         val jitterRadiusMeters: Int,
         val jitterSpeed: String,
@@ -463,6 +467,12 @@ class SpoofingService : Service() {
             cellJson = rfSnapshot.cellJson,
             mockWifi = rfSnapshot.mockWifi,
             mockCell = rfSnapshot.mockCell,
+            specifiedWifiEnabled = settingsManager.specifiedWifiEnabled,
+            specifiedWifiJson = settingsManager.specifiedWifi.toJson().toString(),
+            specifiedBluetoothEnabled = settingsManager.specifiedBluetoothEnabled,
+            specifiedBluetoothJson = com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice.listToJson(
+                settingsManager.specifiedBluetoothDevices
+            ).toString(),
             enableJitter = SpooferProvider.enableJitter && !isJoystickVisible,
             jitterRadiusMeters = SpooferProvider.jitterRadiusMeters,
             jitterSpeed = SpooferProvider.jitterSpeed,
@@ -815,6 +825,12 @@ class SpoofingService : Service() {
             put("mock_wifi", rfSnapshot.mockWifi)
             put("mock_cell", rfSnapshot.mockCell)
             put("mock_bluetooth", false)
+            put("specified_wifi_enabled", settingsManager.specifiedWifiEnabled && settingsManager.specifiedWifi.isValid)
+            put("specified_wifi_json", settingsManager.specifiedWifi.toJson())
+            put("specified_bluetooth_enabled", settingsManager.specifiedBluetoothEnabled)
+            put("specified_bluetooth_json", com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice.listToJson(
+                settingsManager.specifiedBluetoothDevices.filter { it.isValid }
+            ))
             put("enable_jitter", SpooferProvider.enableJitter && !isJoystickVisible)
             put("jitter_radius_meters", SpooferProvider.jitterRadiusMeters.coerceIn(1, 80))
             put("jitter_speed", SpooferProvider.jitterSpeed)
@@ -869,6 +885,9 @@ class SpoofingService : Service() {
             chmod 644 /data/system/wereposition_config.json
             chcon u:object_r:system_data_file:s0 /data/system/wereposition_config.json 2>/dev/null || true
 
+            setprop gsm.wrp.mock_wifi ${rfSnapshot.mockWifi ||
+                (settingsManager.specifiedWifiEnabled && settingsManager.specifiedWifi.isValid)}
+            setprop gsm.wrp.mock_cell ${rfSnapshot.mockCell}
             setprop gsm.wrp.active true
             setprop gsm.wrp.location_allowlist_enabled ${settingsManager.perAppLocationEnabled}
             setprop gsm.wrp.joystick_mode $isJoystickVisible

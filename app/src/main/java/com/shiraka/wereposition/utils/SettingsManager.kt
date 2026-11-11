@@ -6,6 +6,8 @@ import android.content.SharedPreferences
 import com.shiraka.wereposition.data.model.RoutePoint
 import com.shiraka.wereposition.data.model.SavedLocation
 import com.shiraka.wereposition.data.model.SavedRoute
+import com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice
+import com.shiraka.wereposition.data.model.SpecifiedWifiConnection
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -140,6 +142,24 @@ class SettingsManager(context: Context) {
         get() = SyntheticRfOptions(
             syntheticRfEnabled, syntheticWifiCount, syntheticCellCount
         )
+
+    var specifiedWifiEnabled: Boolean
+        get() = prefs.getBoolean("specified_wifi_enabled", false)
+        set(value) = prefs.edit().putBoolean("specified_wifi_enabled", value).apply()
+
+    var specifiedWifi: SpecifiedWifiConnection
+        get() = SpecifiedWifiConnection.fromJson(prefs.getString("specified_wifi", "{}") ?: "{}")
+        set(value) = prefs.edit().putString("specified_wifi", value.toJson().toString()).apply()
+
+    var specifiedBluetoothEnabled: Boolean
+        get() = prefs.getBoolean("specified_bluetooth_enabled", false)
+        set(value) = prefs.edit().putBoolean("specified_bluetooth_enabled", value).apply()
+
+    var specifiedBluetoothDevices: List<SpecifiedBluetoothDevice>
+        get() = SpecifiedBluetoothDevice.listFromJson(prefs.getString("specified_bluetooth", "[]") ?: "[]")
+        set(value) = prefs.edit().putString(
+            "specified_bluetooth", SpecifiedBluetoothDevice.listToJson(value).toString()
+        ).apply()
 
     var mockBluetooth: Boolean
         get() = false

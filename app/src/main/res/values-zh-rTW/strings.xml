@@ -1,5 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="specified_connections_title">指定連線</string>
+    <string name="settings_category_environment_data">環境資料</string>
+    <string name="specified_connections_menu_summary">向作用域 App 指定已連線 Wi-Fi 和傳統藍牙</string>
+    <string name="specified_connections_summary">Wi-Fi 和藍牙可分別啟用。定位模擬期間僅對 Wi-Fi／基站作用域內的 App 生效，其他真實藍牙設備仍可見。</string>
+    <string name="specified_wifi">指定已連線 Wi-Fi</string>
+    <string name="specified_import_saved_wifi">匯入已儲存 Wi-Fi</string>
+    <string name="specified_wifi_import_note">歷史網路通常只有 SSID 和加密類型，沒有 BSSID、IP 等連線資訊；啟用前請補填 BSSID。</string>
+    <string name="specified_ssid">SSID</string>
+    <string name="specified_bssid">BSSID</string>
+    <string name="specified_mac">MAC 位址</string>
+    <string name="specified_frequency">頻率（MHz）</string>
+    <string name="specified_rssi">訊號（dBm）</string>
+    <string name="specified_link_speed">連線速度（Mbps）</string>
+    <string name="specified_wifi_standard">Wi-Fi 標準（Android 代碼）</string>
+    <string name="specified_capabilities">掃描安全能力</string>
+    <string name="specified_ip">IPv4 位址</string>
+    <string name="specified_gateway">閘道</string>
+    <string name="specified_wifi_validation">請填寫 SSID 和有效的 BSSID 後再啟用。</string>
+    <string name="specified_bluetooth">指定傳統藍牙</string>
+    <string name="specified_bluetooth_summary">將所選裝置加入已配對及已連線裝置結果；其他真實裝置仍可見。</string>
+    <string name="specified_import_bluetooth">匯入已配對藍牙</string>
+    <string name="specified_add_device">新增裝置</string>
+    <string name="specified_device_number">裝置 %1$d</string>
+    <string name="specified_device_name">裝置名稱</string>
+    <string name="specified_device_alias">別名</string>
+    <string name="specified_device_class">藍牙裝置類別（十進位）</string>
+    <string name="specified_device_uuids">服務 UUID（逗號分隔）</string>
+    <string name="specified_import_unavailable">沒有找到已儲存裝置，或無法匯入</string>
+    <string name="specified_bluetooth_permission">匯入已配對裝置需要藍牙權限</string>
+    <string name="specified_bluetooth_validation">請填寫有效的 MAC 位址及裝置類別；服務 UUID 可留空，填寫時須使用有效格式。</string>
     <string name="app_name">WeRePosition</string>
     <string name="map_type_label">地圖類型</string>
     <string name="map_type_standard">標準地圖</string>
