@@ -2,6 +2,8 @@ package com.shiraka.wereposition.ui.screen
 
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.os.LocaleListCompat
@@ -49,7 +52,7 @@ fun LanguageSelectionScreen(viewModel: MainViewModel) {
     var selectedLang by remember(defaultLang) { mutableStateOf(defaultLang) }
 
     Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -71,11 +74,14 @@ fun LanguageSelectionScreen(viewModel: MainViewModel) {
             }
             
             Text(
-                text = "Select Language / 选择语言",
+                text = "Select language\n选择语言 · 選擇語言",
+                textAlign = TextAlign.Center,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
+
+            Text("1 / 3", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -103,9 +109,9 @@ fun LanguageSelectionScreen(viewModel: MainViewModel) {
             ) {
                 Text(
                     text = when(selectedLang) {
-                        "zh" -> "确定"
-                        "zh-TW" -> "確定"
-                        else -> "Confirm"
+                        "zh" -> "继续"
+                        "zh-TW" -> "繼續"
+                        else -> "Continue"
                     },
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
@@ -123,8 +129,8 @@ fun LanguageItem(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
         border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier.fillMaxWidth()
     ) {

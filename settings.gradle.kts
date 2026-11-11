@@ -22,3 +22,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "WeRePosition"
 include(":app")
+// Opt-in device fixture; excluded from normal app and release builds.
+if (providers.gradleProperty("bluetoothProbe").orNull == "true") {
+    include(":bluetooth-probe")
+    project(":bluetooth-probe").projectDir = file("tools/bluetooth-probe")
+}

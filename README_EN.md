@@ -142,6 +142,8 @@ After changing module code or its scope, reboot so `system_server` and target pr
 
 ## Usage
 
+First launch walks through language selection, project/use information and consent, then root/LSPosed/precise-location setup. Overlay and other feature permissions are optional. Later launches show the main UI while checking access in the background; only missing required access prompts for recovery. Settings > Permissions and access lets you manage grants and reread project information. Existing installations complete the new information/access steps once without losing settings or data.
+
 1. Install the APK and grant root access.
 2. Enable the module for the Android framework in LSPosed; leave Google Play services and Fused Location out of scope.
 3. Add only apps that need direct RF/GNSS/NMEA supplements, then reboot.

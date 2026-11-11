@@ -20,12 +20,6 @@ import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
@@ -108,6 +102,7 @@ fun SettingsScreen(
         "location" -> stringResource(R.string.settings_location)
         "environment" -> stringResource(R.string.settings_environment)
         "connections" -> stringResource(R.string.specified_connections_title)
+        "permissions" -> stringResource(R.string.setup_permissions)
         "about" -> stringResource(R.string.settings_about)
         else -> stringResource(R.string.settings)
     }
@@ -129,393 +124,394 @@ fun SettingsScreen(
 
         AnimatedContent(
             targetState = currentPage,
-            transitionSpec = {
-                val forward = targetState != "home"
-                (slideInHorizontally(tween(260)) { width -> if (forward) width / 3 else -width / 3 } +
-                    fadeIn(tween(180))) togetherWith
-                    (slideOutHorizontally(tween(260)) { width -> if (forward) -width / 3 else width / 3 } +
-                        fadeOut(tween(180)))
-            },
+            transitionSpec = { com.shiraka.wereposition.ui.components.horizontalPageTransition(targetState != "home") },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .clipToBounds()
         ) { page ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            if (page == "home") {
-                SettingsMenuGroup(title = stringResource(R.string.settings_category_preferences)) {
-                    SettingsMenuItem(stringResource(R.string.settings_appearance),
-                        "$selectedLanguageName · ${if (useDynamicColor) stringResource(R.string.theme_dynamic) else stringResource(R.string.theme_custom)}") {
-                        currentPage = "appearance"
-                    }
-                }
-                SettingsMenuGroup(title = stringResource(R.string.settings_category_simulation)) {
-                    SettingsMenuItem(stringResource(R.string.settings_location),
-                        stringResource(R.string.settings_location_summary)) { currentPage = "location" }
-                    HorizontalDivider(Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant)
-                    SettingsMenuItem(stringResource(R.string.app_access_title),
-                        stringResource(R.string.app_access_summary)) { showAppAccessPage = true }
-                    HorizontalDivider(Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant)
-                    SettingsMenuItem(stringResource(R.string.specified_connections_title),
-                        stringResource(R.string.specified_connections_menu_summary)) { currentPage = "connections" }
-                }
-                SettingsMenuGroup(title = stringResource(R.string.settings_category_environment_data)) {
-                    SettingsMenuItem(stringResource(R.string.settings_environment),
-                        stringResource(R.string.api_config)) { currentPage = "environment" }
-                }
-                SettingsMenuGroup(title = stringResource(R.string.settings_category_more)) {
-                    SettingsMenuItem(stringResource(R.string.settings_about),
-                        stringResource(R.string.settings_version, BuildConfig.VERSION_NAME)) {
-                        currentPage = "about"
-                    }
-                }
-            }
-            if (page == "appearance") {
-            SettingsDetailSection(
-                title = stringResource(R.string.theme_colors),
-                summary = if (useDynamicColor) stringResource(R.string.theme_dynamic)
-                    else stringResource(R.string.theme_custom),
+        if (page == "permissions") {
+            SetupScreen(viewModel, uiState, onClose = { currentPage = "home" }, showHeader = false)
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.theme_dynamic), modifier = Modifier.weight(1f))
-                    Switch(checked = useDynamicColor, onCheckedChange = {
-                        useDynamicColor = it
-                        themePrefs.edit().putBoolean("theme_dynamic_color", it).apply()
-                    })
-                }
-                Text(stringResource(R.string.theme_tone), style = MaterialTheme.typography.labelMedium)
-                listOf("blue", "teal", "violet", "amber", "rose").chunked(3).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { tone ->
-                            FilterChip(
-                                selected = selectedTone == tone,
-                                onClick = {
-                                    selectedTone = tone
-                                    themePrefs.edit().putString("theme_tone", tone).apply()
-                                },
-                                enabled = !useDynamicColor,
-                                label = { Text(tone.replaceFirstChar { it.uppercase() }) }
-                            )
+                if (page == "home") {
+                    SettingsMenuGroup(title = stringResource(R.string.settings_category_preferences)) {
+                        SettingsMenuItem(stringResource(R.string.settings_appearance),
+                            "$selectedLanguageName · ${if (useDynamicColor) stringResource(R.string.theme_dynamic) else stringResource(R.string.theme_custom)}") {
+                            currentPage = "appearance"
+                        }
+                    }
+                    SettingsMenuGroup(title = stringResource(R.string.settings_category_simulation)) {
+                        SettingsMenuItem(stringResource(R.string.settings_location),
+                            stringResource(R.string.settings_location_summary)) { currentPage = "location" }
+                        HorizontalDivider(Modifier.padding(horizontal = 18.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant)
+                        SettingsMenuItem(stringResource(R.string.app_access_title),
+                            stringResource(R.string.app_access_summary)) { showAppAccessPage = true }
+                        HorizontalDivider(Modifier.padding(horizontal = 18.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant)
+                        SettingsMenuItem(stringResource(R.string.specified_connections_title),
+                            stringResource(R.string.specified_connections_menu_summary)) { currentPage = "connections" }
+                    }
+                    SettingsMenuGroup(title = stringResource(R.string.settings_category_environment_data)) {
+                        SettingsMenuItem(stringResource(R.string.settings_environment),
+                            stringResource(R.string.api_config)) { currentPage = "environment" }
+                    }
+                    SettingsMenuGroup(title = stringResource(R.string.settings_category_more)) {
+                        SettingsMenuItem(stringResource(R.string.setup_permissions),
+                            stringResource(R.string.setup_permissions_summary)) { currentPage = "permissions" }
+
+                        SettingsMenuItem(stringResource(R.string.settings_about),
+                            stringResource(R.string.settings_version, BuildConfig.VERSION_NAME)) {
+                            currentPage = "about"
                         }
                     }
                 }
-                val hue = selectedTone.removePrefix("hue_").toFloatOrNull() ?: when (selectedTone) {
-                    "teal" -> 175f
-                    "violet" -> 270f
-                    "amber" -> 38f
-                    "rose" -> 338f
-                    else -> 215f
+                if (page == "appearance") {
+                SettingsDetailSection(
+                    title = stringResource(R.string.theme_colors),
+                    summary = if (useDynamicColor) stringResource(R.string.theme_dynamic)
+                        else stringResource(R.string.theme_custom),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.theme_dynamic), modifier = Modifier.weight(1f))
+                        Switch(checked = useDynamicColor, onCheckedChange = {
+                            useDynamicColor = it
+                            themePrefs.edit().putBoolean("theme_dynamic_color", it).apply()
+                        })
+                    }
+                    Text(stringResource(R.string.theme_tone), style = MaterialTheme.typography.labelMedium)
+                    listOf("blue", "teal", "violet", "amber", "rose").chunked(3).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.forEach { tone ->
+                                FilterChip(
+                                    selected = selectedTone == tone,
+                                    onClick = {
+                                        selectedTone = tone
+                                        themePrefs.edit().putString("theme_tone", tone).apply()
+                                    },
+                                    enabled = !useDynamicColor,
+                                    label = { Text(tone.replaceFirstChar { it.uppercase() }) }
+                                )
+                            }
+                        }
+                    }
+                    val hue = selectedTone.removePrefix("hue_").toFloatOrNull() ?: when (selectedTone) {
+                        "teal" -> 175f
+                        "violet" -> 270f
+                        "amber" -> 38f
+                        "rose" -> 338f
+                        else -> 215f
+                    }
+                    Text(stringResource(R.string.theme_hue_value, hue.toInt()), style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = hue,
+                        onValueChange = {
+                            selectedTone = "hue_${it.toInt()}"
+                        },
+                        onValueChangeFinished = {
+                            themePrefs.edit().putString("theme_tone", selectedTone).apply()
+                        },
+                        valueRange = 0f..360f,
+                        enabled = !useDynamicColor
+                    )
                 }
-                Text(stringResource(R.string.theme_hue_value, hue.toInt()), style = MaterialTheme.typography.bodySmall)
-                Slider(
-                    value = hue,
-                    onValueChange = {
-                        selectedTone = "hue_${it.toInt()}"
-                    },
-                    onValueChangeFinished = {
-                        themePrefs.edit().putString("theme_tone", selectedTone).apply()
-                    },
-                    valueRange = 0f..360f,
-                    enabled = !useDynamicColor
-                )
-            }
 
-            SettingsDetailSection(
-                title = stringResource(R.string.select_language),
-                summary = selectedLanguageName,
-            ) {
-                LANGUAGES.forEach { lang ->
-                    LanguageItem(
-                        option = lang,
-                        isSelected = viewModel.getSavedLanguage() == lang.code,
-                        onClick = {
-                            viewModel.selectLanguage(lang.code)
-                            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
-                                androidx.core.os.LocaleListCompat.forLanguageTags(lang.code)
+                SettingsDetailSection(
+                    title = stringResource(R.string.select_language),
+                    summary = selectedLanguageName,
+                ) {
+                    LANGUAGES.forEach { lang ->
+                        LanguageItem(
+                            option = lang,
+                            isSelected = viewModel.getSavedLanguage() == lang.code,
+                            onClick = {
+                                viewModel.selectLanguage(lang.code)
+                                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+                                    androidx.core.os.LocaleListCompat.forLanguageTags(lang.code)
+                                )
+                            }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+
+                }
+                if (page == "location") {
+
+                SettingsDetailSection(
+                    title = stringResource(R.string.recent_locations),
+                    summary = stringResource(R.string.recent_display_count, uiState.recentLocationDisplayCount),
+                ) {
+                    Text(stringResource(R.string.recent_display_count, recentDisplayCount.toInt()))
+                    Slider(
+                        value = recentDisplayCount,
+                        onValueChange = { recentDisplayCount = it },
+                        onValueChangeFinished = { viewModel.setRecentLocationDisplayCount(recentDisplayCount.toInt()) },
+                        valueRange = 1f..20f,
+                        steps = 18
+                    )
+                }
+
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.pure_mode_title), style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                stringResource(if (uiState.isSpoofingActive || uiState.isSavingConfig)
+                                    R.string.pure_mode_locked else R.string.pure_mode_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                        Switch(
+                            checked = uiState.pureModeEnabled,
+                            enabled = !uiState.isSpoofingActive && !uiState.isSavingConfig,
+                            onCheckedChange = viewModel::setPureModeEnabled
+                        )
+                    }
+                }
+
+                }
+                if (page == "about") {
+
+                SettingsDetailSection(
+                    title = stringResource(R.string.app_identity),
+                    summary = context.packageName,
+                ) {
+                    CopyableReadOnlyField(
+                        value = context.packageName,
+                        label = stringResource(R.string.app_package_name),
+                        onCopy = {
+                            clipboardManager.setText(AnnotatedString(context.packageName))
+                            Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
                         }
                     )
                     Spacer(Modifier.height(8.dp))
-                }
-            }
-
-            }
-            if (page == "location") {
-
-            SettingsDetailSection(
-                title = stringResource(R.string.recent_locations),
-                summary = stringResource(R.string.recent_display_count, uiState.recentLocationDisplayCount),
-            ) {
-                Text(stringResource(R.string.recent_display_count, recentDisplayCount.toInt()))
-                Slider(
-                    value = recentDisplayCount,
-                    onValueChange = { recentDisplayCount = it },
-                    onValueChangeFinished = { viewModel.setRecentLocationDisplayCount(recentDisplayCount.toInt()) },
-                    valueRange = 1f..20f,
-                    steps = 18
-                )
-            }
-
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.pure_mode_title), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            stringResource(if (uiState.isSpoofingActive || uiState.isSavingConfig)
-                                R.string.pure_mode_locked else R.string.pure_mode_summary),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.pureModeEnabled,
-                        enabled = !uiState.isSpoofingActive && !uiState.isSavingConfig,
-                        onCheckedChange = viewModel::setPureModeEnabled
+                    CopyableReadOnlyField(
+                        value = uiState.appSha1,
+                        label = stringResource(R.string.app_sha1),
+                        onCopy = {
+                            clipboardManager.setText(AnnotatedString(uiState.appSha1))
+                            Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
-            }
 
-            }
-            if (page == "about") {
-
-            SettingsDetailSection(
-                title = stringResource(R.string.app_identity),
-                summary = context.packageName,
-            ) {
-                CopyableReadOnlyField(
-                    value = context.packageName,
-                    label = stringResource(R.string.app_package_name),
-                    onCopy = {
-                        clipboardManager.setText(AnnotatedString(context.packageName))
-                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
-                    }
-                )
-                Spacer(Modifier.height(8.dp))
-                CopyableReadOnlyField(
-                    value = uiState.appSha1,
-                    label = stringResource(R.string.app_sha1),
-                    onCopy = {
-                        clipboardManager.setText(AnnotatedString(uiState.appSha1))
-                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
-                    }
-                )
-            }
-
-            }
-            if (page == "connections") {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                )
-            ) {
-                Column(Modifier.padding(18.dp)) {
-                    SpecifiedConnectionsSettings(viewModel, uiState)
                 }
-            }
-            }
-            if (page == "environment") {
-
-            SettingsDetailSection(
-                title = stringResource(R.string.synthetic_rf_title),
-                summary = stringResource(if (uiState.syntheticRfEnabled) R.string.synthetic_rf_on else R.string.synthetic_rf_off),
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Rounded.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            stringResource(R.string.synthetic_rf_warning),
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.synthetic_rf_enable), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                    Switch(checked = syntheticEnabled, onCheckedChange = { syntheticEnabled = it })
-                }
-                Text(stringResource(R.string.synthetic_wifi_count, syntheticWifiCount.toInt()), style = MaterialTheme.typography.bodyMedium)
-                Slider(value = syntheticWifiCount, onValueChange = { syntheticWifiCount = it }, valueRange = 0f..8f, steps = 7, enabled = syntheticEnabled)
-                Text(stringResource(R.string.synthetic_cell_count, syntheticCellCount.toInt()), style = MaterialTheme.typography.bodyMedium)
-                Slider(value = syntheticCellCount, onValueChange = { syntheticCellCount = it }, valueRange = 0f..3f, steps = 2, enabled = syntheticEnabled)
-                SaveSettingsButton {
-                    viewModel.setSyntheticRfConfig(
-                        syntheticEnabled, syntheticWifiCount.toInt(),
-                        syntheticCellCount.toInt()
+                if (page == "connections") {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
-                    Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        SpecifiedConnectionsSettings(viewModel, uiState)
+                    }
                 }
-            }
-
-            val configuredApiCount = listOf(localGoogleApiKey, localWigleToken, localOpencellidToken).count { it.isNotBlank() }
-            SettingsDetailSection(
-                title = stringResource(R.string.api_config),
-                summary = stringResource(R.string.api_config_summary, configuredApiCount, 3),
-            ) {
-                ApiCredentialField(
-                    value = localGoogleApiKey,
-                    onValueChange = {
-                        localGoogleApiKey = it
-                        googleApiTest = ApiTestUiState()
-                    },
-                    label = stringResource(R.string.custom_google_key),
-                    placeholder = stringResource(R.string.custom_google_key_hint),
-                    state = googleApiTest,
-                    onTest = {
-                        val keyBeingTested = localGoogleApiKey
-                        googleApiTest = ApiTestUiState(isTesting = true)
-                        apiTestScope.launch {
-                            val result = ExternalApiTester.testGooglePlaces(
-                                apiKey = keyBeingTested,
-                                context = context
-                            )
-                            googleApiTest = ApiTestUiState(result = result)
-                        }
-                    }
-                )
-                Text(
-                    text = stringResource(R.string.maps_sdk_build_key_notice),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                Spacer(Modifier.height(8.dp))
-                ApiCredentialField(
-                    value = localWigleToken,
-                    onValueChange = {
-                        localWigleToken = it
-                        wigleApiTest = ApiTestUiState()
-                    },
-                    label = stringResource(R.string.custom_wigle_token),
-                    placeholder = stringResource(R.string.custom_wigle_token_hint),
-                    state = wigleApiTest,
-                    onTest = {
-                        val tokenBeingTested = localWigleToken
-                        wigleApiTest = ApiTestUiState(isTesting = true)
-                        apiTestScope.launch {
-                            wigleApiTest = ApiTestUiState(
-                                result = ExternalApiTester.testWigle(tokenBeingTested)
-                            )
-                        }
-                    }
-                )
-                Spacer(Modifier.height(8.dp))
-                ApiCredentialField(
-                    value = localOpencellidToken,
-                    onValueChange = {
-                        localOpencellidToken = it
-                        openCellIdApiTest = ApiTestUiState()
-                    },
-                    label = stringResource(R.string.custom_opencellid_token),
-                    placeholder = stringResource(R.string.custom_opencellid_token_hint),
-                    state = openCellIdApiTest,
-                    onTest = {
-                        val tokenBeingTested = localOpencellidToken
-                        openCellIdApiTest = ApiTestUiState(isTesting = true)
-                        apiTestScope.launch {
-                            openCellIdApiTest = ApiTestUiState(
-                                result = ExternalApiTester.testOpenCellId(tokenBeingTested)
-                            )
-                        }
-                    }
-                )
-                SaveSettingsButton {
-                    viewModel.setGoogleApiKey(localGoogleApiKey)
-                    viewModel.setWigleApiToken(localWigleToken)
-                    viewModel.setOpencellidApiToken(localOpencellidToken)
-                    Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
                 }
-            }
+                if (page == "environment") {
 
-            }
-            if (page == "about") {
-            SettingsDetailSection(title = stringResource(R.string.settings_check_update)) {
-                Text(stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(12.dp))
-                FilledTonalButton(
-                    onClick = {
-                        updateChecking = true
-                        updateMessage = ""
-                        apiTestScope.launch {
-                            val release = withContext(Dispatchers.IO) { runCatching { fetchLatestRelease() }.getOrNull() }
-                            updateChecking = false
-                            if (release == null) {
-                                updateMessage = updateFailedText
-                                updateUrl = null
-                            } else {
-                                updateMessage = if (isVersionNewer(release.first, BuildConfig.VERSION_NAME))
-                                    "$updateAvailableText ${release.first}" else upToDateText
-                                updateUrl = if (isVersionNewer(release.first, BuildConfig.VERSION_NAME)) release.second else null
+                SettingsDetailSection(
+                    title = stringResource(R.string.synthetic_rf_title),
+                    summary = stringResource(if (uiState.syntheticRfEnabled) R.string.synthetic_rf_on else R.string.synthetic_rf_off),
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Rounded.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                stringResource(R.string.synthetic_rf_warning),
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.synthetic_rf_enable), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Switch(checked = syntheticEnabled, onCheckedChange = { syntheticEnabled = it })
+                    }
+                    Text(stringResource(R.string.synthetic_wifi_count, syntheticWifiCount.toInt()), style = MaterialTheme.typography.bodyMedium)
+                    Slider(value = syntheticWifiCount, onValueChange = { syntheticWifiCount = it }, valueRange = 0f..8f, steps = 7, enabled = syntheticEnabled)
+                    Text(stringResource(R.string.synthetic_cell_count, syntheticCellCount.toInt()), style = MaterialTheme.typography.bodyMedium)
+                    Slider(value = syntheticCellCount, onValueChange = { syntheticCellCount = it }, valueRange = 0f..3f, steps = 2, enabled = syntheticEnabled)
+                    SaveSettingsButton {
+                        viewModel.setSyntheticRfConfig(
+                            syntheticEnabled, syntheticWifiCount.toInt(),
+                            syntheticCellCount.toInt()
+                        )
+                        Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                val configuredApiCount = listOf(localGoogleApiKey, localWigleToken, localOpencellidToken).count { it.isNotBlank() }
+                SettingsDetailSection(
+                    title = stringResource(R.string.api_config),
+                    summary = stringResource(R.string.api_config_summary, configuredApiCount, 3),
+                ) {
+                    ApiCredentialField(
+                        value = localGoogleApiKey,
+                        onValueChange = {
+                            localGoogleApiKey = it
+                            googleApiTest = ApiTestUiState()
+                        },
+                        label = stringResource(R.string.custom_google_key),
+                        placeholder = stringResource(R.string.custom_google_key_hint),
+                        state = googleApiTest,
+                        onTest = {
+                            val keyBeingTested = localGoogleApiKey
+                            googleApiTest = ApiTestUiState(isTesting = true)
+                            apiTestScope.launch {
+                                val result = ExternalApiTester.testGooglePlaces(
+                                    apiKey = keyBeingTested,
+                                    context = context
+                                )
+                                googleApiTest = ApiTestUiState(result = result)
                             }
                         }
-                    },
-                    enabled = !updateChecking,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (updateChecking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text(stringResource(R.string.settings_check_update))
+                    )
+                    Text(
+                        text = stringResource(R.string.maps_sdk_build_key_notice),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ApiCredentialField(
+                        value = localWigleToken,
+                        onValueChange = {
+                            localWigleToken = it
+                            wigleApiTest = ApiTestUiState()
+                        },
+                        label = stringResource(R.string.custom_wigle_token),
+                        placeholder = stringResource(R.string.custom_wigle_token_hint),
+                        state = wigleApiTest,
+                        onTest = {
+                            val tokenBeingTested = localWigleToken
+                            wigleApiTest = ApiTestUiState(isTesting = true)
+                            apiTestScope.launch {
+                                wigleApiTest = ApiTestUiState(
+                                    result = ExternalApiTester.testWigle(tokenBeingTested)
+                                )
+                            }
+                        }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ApiCredentialField(
+                        value = localOpencellidToken,
+                        onValueChange = {
+                            localOpencellidToken = it
+                            openCellIdApiTest = ApiTestUiState()
+                        },
+                        label = stringResource(R.string.custom_opencellid_token),
+                        placeholder = stringResource(R.string.custom_opencellid_token_hint),
+                        state = openCellIdApiTest,
+                        onTest = {
+                            val tokenBeingTested = localOpencellidToken
+                            openCellIdApiTest = ApiTestUiState(isTesting = true)
+                            apiTestScope.launch {
+                                openCellIdApiTest = ApiTestUiState(
+                                    result = ExternalApiTester.testOpenCellId(tokenBeingTested)
+                                )
+                            }
+                        }
+                    )
+                    SaveSettingsButton {
+                        viewModel.setGoogleApiKey(localGoogleApiKey)
+                        viewModel.setWigleApiToken(localWigleToken)
+                        viewModel.setOpencellidApiToken(localOpencellidToken)
+                        Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
+                    }
                 }
-                if (updateMessage.isNotBlank()) Text(updateMessage,
-                    modifier = Modifier.padding(top = 8.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (updateUrl != null) TextButton(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
-                }) {
-                    Icon(Icons.Rounded.OpenInNew, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.settings_open_release))
-                }
-            }
 
-            SettingsDetailSection(
-                title = stringResource(R.string.runtime_recovery),
-                summary = stringResource(R.string.cleanup_runtime_env),
-            ) {
-                Text(
-                    stringResource(R.string.runtime_recovery_desc),
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                    lineHeight = 18.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showCleanupDialog = true },
-                    enabled = !isCleaningRuntime,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                }
+                if (page == "about") {
+                SettingsDetailSection(title = stringResource(R.string.settings_check_update)) {
+                    Text(stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(12.dp))
+                    FilledTonalButton(
+                        onClick = {
+                            updateChecking = true
+                            updateMessage = ""
+                            apiTestScope.launch {
+                                val release = withContext(Dispatchers.IO) { runCatching { fetchLatestRelease() }.getOrNull() }
+                                updateChecking = false
+                                if (release == null) {
+                                    updateMessage = updateFailedText
+                                    updateUrl = null
+                                } else {
+                                    updateMessage = if (isVersionNewer(release.first, BuildConfig.VERSION_NAME))
+                                        "$updateAvailableText ${release.first}" else upToDateText
+                                    updateUrl = if (isVersionNewer(release.first, BuildConfig.VERSION_NAME)) release.second else null
+                                }
+                            }
+                        },
+                        enabled = !updateChecking,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (updateChecking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Text(stringResource(R.string.settings_check_update))
+                    }
+                    if (updateMessage.isNotBlank()) Text(updateMessage,
+                        modifier = Modifier.padding(top = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (updateUrl != null) TextButton(onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
+                    }) {
+                        Icon(Icons.Rounded.OpenInNew, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings_open_release))
+                    }
+                }
+
+                SettingsDetailSection(
+                    title = stringResource(R.string.runtime_recovery),
+                    summary = stringResource(R.string.cleanup_runtime_env),
                 ) {
                     Text(
-                        if (isCleaningRuntime) stringResource(R.string.cleaning_runtime_env) else stringResource(R.string.cleanup_runtime_env),
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        stringResource(R.string.runtime_recovery_desc),
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                        lineHeight = 18.sp
                     )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { showCleanupDialog = true },
+                        enabled = !isCleaningRuntime,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(
+                            if (isCleaningRuntime) stringResource(R.string.cleaning_runtime_env) else stringResource(R.string.cleanup_runtime_env),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
                 }
-            }
-            }
+                }
 
-            Spacer(Modifier.height(120.dp))
+                Spacer(Modifier.height(120.dp))
+            }
         }
         }
     }

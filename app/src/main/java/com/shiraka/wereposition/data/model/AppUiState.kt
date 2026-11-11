@@ -71,6 +71,9 @@ data class RecentPlaceLabel(val place: String, val country: String)
 data class AppState(
     val mapType: AppMapType = AppMapType.NORMAL,
     val isInitializing: Boolean = true,
+    val onboardingCompleted: Boolean = false,
+    val isCheckingAccess: Boolean = false,
+    val accessChecked: Boolean = false,
     val isLanguageSet: Boolean = true, // Default to true to avoid flicker if not needed
     val currentLanguage: String = "",
     val hasRootAccess: Boolean = false,

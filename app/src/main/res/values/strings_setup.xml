@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_welcome">Welcome to WeRePosition</string>
+    <string name="setup_intro_title">Before you begin</string>
+    <string name="setup_intro_summary">Choose your language, review the project information, then configure access. You stay in control of optional permissions.</string>
+    <string name="setup_permissions">Permissions and access</string>
+    <string name="setup_permissions_summary">Root, LSPosed and precise location are required. Other permissions support optional features and can be enabled later in Settings.</string>
+    <string name="setup_project_title">Open source · independently maintained</string>
+    <string name="setup_project_body">WeRePosition is open source under GPL-3.0-or-later and independently maintained by qcxg. It began from the early public source of HuangZhuoRui/LocationSpoofer. This project has no affiliation or partnership with that project, its current maintainers or services. Source and license information are available in the repository.</string>
+    <string name="setup_source">View source and license</string>
+    <string name="setup_boundaries_title">Responsible use</string>
+    <string name="setup_boundaries_body">Use this tool only in environments you own or are authorized to test. Follow the laws of the country or region where you use it and the terms of affected services. Do not use it for fraud, unlawful access, interference with others or infringement of their rights. You are responsible for your configuration and use.</string>
+    <string name="setup_disclaimer_title">Limitations and disclaimer</string>
+    <string name="setup_disclaimer_body">The software is provided without warranty, to the extent permitted by applicable law. Root and framework hooks can affect system stability, location-dependent apps and service accounts. Back up important data and stop simulation when it is no longer needed. The maintainer cannot guarantee compatibility, uninterrupted operation or acceptance by third-party services. Nothing here limits rights or responsibilities that applicable law does not allow to be excluded.</string>
+    <string name="setup_data_title">Data and permissions</string>
+    <string name="setup_data_body">Collected environment records and settings are stored on this device. If you configure external map or environment services, requests can send coordinates and credentials to those providers. Review their terms before enabling them. Bluetooth access reads paired-device metadata; it does not start a Bluetooth scan. Optional permissions can be revoked in Android settings.</string>
+    <string name="setup_agree">I have read and agree to the project information, responsible-use requirements and disclaimer above.</string>
+    <string name="setup_continue">Continue</string>
+    <string name="setup_finish">Finish setup</string>
+    <string name="setup_root">Root · required</string>
+    <string name="setup_root_body">Allow WeRePosition in your root manager, then check again. Root is used to publish simulation state and control the location runtime.</string>
+    <string name="setup_module">LSPosed module · required</string>
+    <string name="setup_module_body">In LSPosed, enable WeRePosition and select System Framework. Restart the device after changing framework scope. Add apps that need Wi-Fi, cell or Bluetooth overrides, then restart those apps. Leave Google Play services and Fused Location out of scope. Return here and check again.</string>
+    <string name="setup_location">Precise location · required</string>
+    <string name="setup_location_body">Allow precise location while using the app to start the location foreground service and read your current position. If you previously denied it, open Android settings.</string>
+    <string name="setup_overlay">Floating joystick · optional</string>
+    <string name="setup_overlay_body">Display over other apps is needed only for the floating joystick. Fixed-point and route simulation do not require it.</string>
+    <string name="setup_notifications">Notifications · optional</string>
+    <string name="setup_notifications_body">Show simulation status and a stop action in notifications. Denying this permission does not prevent setup.</string>
+    <string name="setup_phone">Phone state · optional</string>
+    <string name="setup_phone_body">Read cellular information for environment collection. Needed only when using the relevant collection features.</string>
+    <string name="setup_bluetooth">Paired Bluetooth devices · optional</string>
+    <string name="setup_bluetooth_body">Import names and addresses of paired classic Bluetooth devices into specified connections. No scanning or pairing is started.</string>
+    <string name="setup_background">Background location · optional</string>
+    <string name="setup_background_body">For environment access while the app is in the background. First allow foreground location, then choose Allow all the time in Android location permission settings if you need it.</string>
+    <string name="setup_granted">Granted</string>
+    <string name="setup_grant">Configure</string>
+    <string name="setup_recheck">Check again</string>
+    <string name="setup_open_manager">Open LSPosed</string>
+    <string name="setup_manager_hint">Open LSPosed from its notification or manager shortcut, enable WeRePosition and select System Framework.</string>
+    <string name="setup_open_failed">Could not open settings. Please open the app permissions in Android settings.</string>
+    <string name="setup_recovery_title">Access needs attention</string>
+    <string name="setup_read_information">Project and usage information</string>
+</resources>

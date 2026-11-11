@@ -3,7 +3,6 @@ package com.shiraka.wereposition
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -21,8 +20,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Storage
@@ -42,9 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import com.shiraka.wereposition.ui.screen.BlockingScreen
 import com.shiraka.wereposition.ui.screen.FullScreenMapPage
-import com.shiraka.wereposition.ui.screen.InitializingScreen
 import com.shiraka.wereposition.ui.screen.JoystickSettingsScreen
 import com.shiraka.wereposition.ui.screen.SpoofingScreen
 import com.shiraka.wereposition.ui.screen.LanguageSelectionScreen
@@ -88,7 +83,6 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        checkAndRequestPermissions()
 
         // 拦截 Back 键：模拟定位开启时退到后台，由前台服务与通知保持运行
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -156,51 +150,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshRuntimeStatus()
+        if (viewModel.uiState.value.onboardingCompleted) viewModel.refreshAccessStatus()
     }
 
     companion object {
         private val SUPPORTED_LANGUAGE_TAGS = setOf("en", "zh", "zh-TW")
-    }
-
-    private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.READ_PHONE_STATE
-        )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val notGranted = permissions.filter {
-            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (notGranted.isNotEmpty()) {
-            requestPermissions(notGranted.toTypedArray(), 100)
-        } else {
-            checkBackgroundLocation()
-        }
-    }
-
-    private fun checkBackgroundLocation() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), 101)
-            }
-        }
-    }
-
-    @Deprecated("Deprecated in Android framework; kept for permission flow compatibility.")
-    @Suppress("DEPRECATION")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                checkBackgroundLocation()
-            }
-        }
     }
 
     override fun onUserLeaveHint() {
@@ -225,7 +179,23 @@ fun MainScreen(
     var isScannerMap by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(MainTab.FIXED) }
     var settingsSubpage by remember { mutableStateOf(false) }
-
+    var showPermissions by remember { mutableStateOf(false) }
+    var permissionRevision by remember { mutableIntStateOf(0) }
+    val activity = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) permissionRevision++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(uiState.onboardingCompleted) {
+        if (uiState.onboardingCompleted) viewModel.refreshAccessStatus()
+    }
+    val locationGranted = remember(permissionRevision, showPermissions) {
+        activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
     LaunchedEffect(selectedTab) {
         if (selectedTab == MainTab.DATA) viewModel.loadManageData()
     }
@@ -248,82 +218,99 @@ fun MainScreen(
         }
     }
 
-    when {
-        uiState.isInitializing -> InitializingScreen(isDark)
-        !uiState.isLanguageSet -> LanguageSelectionScreen(viewModel)
-        !uiState.hasRootAccess -> BlockingScreen(
-            icon = Icons.Rounded.Lock,
-            title = stringResource(R.string.root_required),
-            message = stringResource(R.string.root_message),
-            isDark = isDark
-        )
-        !uiState.isLSPosedActive -> BlockingScreen(
-            icon = Icons.Rounded.Extension,
-            title = stringResource(R.string.lsposed_not_active),
-            message = stringResource(R.string.lsposed_message),
-            isDark = isDark
-        )
-        isFullScreenMap -> FullScreenMapPage(
-            viewModel = viewModel, uiState = uiState, isDark = isDark,
-            isInPipMode = false, onClose = closeMapAndResetRouteIfNeeded
-        )
-        isScannerMap -> com.shiraka.wereposition.ui.screen.ScannerMapScreen(
-            viewModel = viewModel, uiState = uiState, isDark = isDark,
-            onClose = { isScannerMap = false }
-        )
-        else -> {
-            val hazeState = rememberHazeState()
-            val navigationItems = MainTab.entries.map { GlassNavigationItem(stringResource(it.label), it.icon) }
-            Box(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).hazeSource(hazeState)) {
-                    AnimatedContent(
-                        targetState = selectedTab,
-                        transitionSpec = {
-                            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                            (slideInHorizontally(tween(260)) { it * direction } + fadeIn(tween(180)))
-                                .togetherWith(slideOutHorizontally(tween(260)) { -it * direction } + fadeOut(tween(180)))
-                        },
-                        modifier = Modifier.fillMaxSize().clipToBounds(),
-                        label = "mainTabSlide"
-                    ) { tab ->
-                    when (tab) {
-                        MainTab.FIXED -> SpoofingScreen(
-                            viewModel = viewModel, uiState = uiState, isDark = isDark,
-                            onExpandMap = { isFullScreenMap = true }
-                        )
-                        MainTab.JOYSTICK -> JoystickSettingsScreen(
-                            viewModel = viewModel,
-                            uiState = uiState,
-                            onPlanRoute = {
-                                viewModel.enterRoutePlanning()
-                                isFullScreenMap = true
+    val startupPage = when {
+        !uiState.isLanguageSet -> 0
+        !uiState.onboardingCompleted -> 1
+        showPermissions -> 3
+        else -> 2
+    }
+    AnimatedContent(
+        targetState = startupPage,
+        transitionSpec = { com.shiraka.wereposition.ui.components.horizontalPageTransition(targetState > initialState) },
+        modifier = Modifier.fillMaxSize().clipToBounds(), label = "startupPageSlide"
+    ) { page ->
+        when (page) {
+            0 -> LanguageSelectionScreen(viewModel)
+            1 -> com.shiraka.wereposition.ui.screen.SetupScreen(viewModel, uiState)
+            3 -> {
+                BackHandler { showPermissions = false; permissionRevision++ }
+                com.shiraka.wereposition.ui.screen.SetupScreen(viewModel, uiState, onClose = {
+                    showPermissions = false
+                    permissionRevision++
+                    viewModel.refreshAccessStatus()
+                })
+            }
+            else -> when {
+                isFullScreenMap -> FullScreenMapPage(
+                    viewModel = viewModel, uiState = uiState, isDark = isDark,
+                    isInPipMode = false, onClose = closeMapAndResetRouteIfNeeded
+                )
+                isScannerMap -> com.shiraka.wereposition.ui.screen.ScannerMapScreen(
+                    viewModel = viewModel, uiState = uiState, isDark = isDark,
+                    onClose = { isScannerMap = false }
+                )
+                else -> {
+                    val hazeState = rememberHazeState()
+                    val navigationItems = MainTab.entries.map { GlassNavigationItem(stringResource(it.label), it.icon) }
+                    Box(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).hazeSource(hazeState)) {
+                            AnimatedContent(
+                                targetState = selectedTab,
+                                transitionSpec = {
+                                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                                    (slideInHorizontally(tween(260)) { it * direction } + fadeIn(tween(180)))
+                                        .togetherWith(slideOutHorizontally(tween(260)) { -it * direction } + fadeOut(tween(180)))
+                                },
+                                modifier = Modifier.fillMaxSize().clipToBounds(),
+                                label = "mainTabSlide"
+                            ) { tab ->
+                            when (tab) {
+                                MainTab.FIXED -> SpoofingScreen(
+                                    viewModel = viewModel, uiState = uiState, isDark = isDark,
+                                    onExpandMap = { isFullScreenMap = true }
+                                )
+                                MainTab.JOYSTICK -> JoystickSettingsScreen(
+                                    viewModel = viewModel,
+                                    uiState = uiState,
+                                    onPlanRoute = {
+                                        viewModel.enterRoutePlanning()
+                                        isFullScreenMap = true
+                                    }
+                                )
+                                MainTab.DATA -> com.shiraka.wereposition.ui.screen.ManageDataScreen(
+                                    viewModel = viewModel, uiState = uiState, isDark = isDark,
+                                    onOpenScanner = { isScannerMap = true },
+                                    onLocate = { lat, lng ->
+                                        viewModel.confirmMapPoint(lat, lng)
+                                        selectedTab = MainTab.FIXED
+                                    }
+                                )
+                                MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
+                                    viewModel = viewModel, uiState = uiState,
+                                    onSubpageChanged = { settingsSubpage = it }
+                                )
                             }
-                        )
-                        MainTab.DATA -> com.shiraka.wereposition.ui.screen.ManageDataScreen(
-                            viewModel = viewModel, uiState = uiState, isDark = isDark,
-                            onOpenScanner = { isScannerMap = true },
-                            onLocate = { lat, lng ->
-                                viewModel.confirmMapPoint(lat, lng)
-                                selectedTab = MainTab.FIXED
                             }
-                        )
-                        MainTab.SETTINGS -> com.shiraka.wereposition.ui.screen.SettingsScreen(
-                            viewModel = viewModel, uiState = uiState,
-                            onSubpageChanged = { settingsSubpage = it }
-                        )
-                    }
+                        }
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = selectedTab != MainTab.SETTINGS || !settingsSubpage,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        ) { FloatingGlassNavigationBar(
+                            items = navigationItems,
+                            selectedIndex = selectedTab.ordinal,
+                            onDestinationSelected = { selectedTab = MainTab.entries[it] },
+                            hazeState = hazeState
+                        ) }
                     }
                 }
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = selectedTab != MainTab.SETTINGS || !settingsSubpage,
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                ) { FloatingGlassNavigationBar(
-                    items = navigationItems,
-                    selectedIndex = selectedTab.ordinal,
-                    onDestinationSelected = { selectedTab = MainTab.entries[it] },
-                    hazeState = hazeState
-                ) }
             }
         }
     }
+    if (!showPermissions && uiState.onboardingCompleted && uiState.accessChecked && !uiState.isCheckingAccess &&
+        (!uiState.hasRootAccess || !uiState.isLSPosedActive || !locationGranted)) {
+        com.shiraka.wereposition.ui.screen.AccessRecoveryDialog(uiState,
+            onRetry = { permissionRevision++; viewModel.refreshAccessStatus() },
+            onPermissions = { showPermissions = true })
+    }
+
 }

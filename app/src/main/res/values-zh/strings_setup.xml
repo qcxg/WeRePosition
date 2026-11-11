@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_welcome">欢迎使用 WeRePosition</string>
+    <string name="setup_intro_title">开始之前</string>
+    <string name="setup_intro_summary">选择语言、阅读项目说明，再配置权限。可选权限由你决定。</string>
+    <string name="setup_permissions">权限与访问</string>
+    <string name="setup_permissions_summary">Root、LSPosed 和精确位置为必要条件。其他权限用于可选功能，可稍后在设置中开启。</string>
+    <string name="setup_project_title">开源 · 独立维护</string>
+    <string name="setup_project_body">WeRePosition 以 GPL-3.0-or-later 开源，由 qcxg 独立维护。代码起点来自 HuangZhuoRui/LocationSpoofer 早期公开源码，与原项目、其现任维护者及服务无合作或隶属关系。完整源码和授权信息见项目仓库。</string>
+    <string name="setup_source">查看源码与许可证</string>
+    <string name="setup_boundaries_title">使用边界</string>
+    <string name="setup_boundaries_body">仅在你拥有或获授权测试的环境使用。遵守使用所在国家或地区的法律法规及相关服务条款，不得用于欺诈、非法访问、干扰他人或侵犯他人权益。你需对自己的配置和使用行为负责。</string>
+    <string name="setup_disclaimer_title">限制与免责声明</string>
+    <string name="setup_disclaimer_body">本软件在适用法律允许的范围内不提供担保。Root 与框架 Hook 可能影响系统稳定性、依赖位置的应用及服务账号。请备份重要数据，不再需要时停止模拟。维护者无法保证兼容性、持续运行或第三方服务接受模拟结果。本说明不排除适用法律不允许排除的权利或责任。</string>
+    <string name="setup_data_title">数据与权限</string>
+    <string name="setup_data_body">采集的环境记录和设置保存在本机。配置外部地图或环境服务后，请求可能向相应提供方发送坐标和凭据，启用前请阅读其条款。蓝牙权限用于读取已配对装置资料，不会启动蓝牙扫描。可选权限可在 Android 设置中撤回。</string>
+    <string name="setup_agree">我已阅读并同意以上项目说明、使用边界及免责声明。</string>
+    <string name="setup_continue">继续</string>
+    <string name="setup_finish">完成设置</string>
+    <string name="setup_root">Root · 必需</string>
+    <string name="setup_root_body">请在 Root 管理器中允许 WeRePosition，再重新检测。Root 用于发布模拟状态和控制定位运行环境。</string>
+    <string name="setup_module">LSPosed 模块 · 必需</string>
+    <string name="setup_module_body">在 LSPosed 中启用 WeRePosition，并勾选系统框架；修改框架作用域后重启设备。需要 Wi-Fi、基站或蓝牙模拟的应用也应加入作用域并重启。请勿勾选 Google Play 服务或融合定位。返回后重新检测。</string>
+    <string name="setup_location">精确位置 · 必需</string>
+    <string name="setup_location_body">请允许使用应用时访问精确位置，用于启动定位前台服务及读取当前位置。如已拒绝，请到 Android 设置中开启。</string>
+    <string name="setup_overlay">悬浮摇杆 · 可选</string>
+    <string name="setup_overlay_body">仅悬浮摇杆需要“显示在其他应用上层”。定点和路线模拟不需要此权限。</string>
+    <string name="setup_notifications">通知 · 可选</string>
+    <string name="setup_notifications_body">显示模拟状态及停止操作。拒绝此权限仍可完成设置。</string>
+    <string name="setup_phone">电话状态 · 可选</string>
+    <string name="setup_phone_body">用于环境采集时读取基站信息，仅相关采集功能需要。</string>
+    <string name="setup_bluetooth">已配对蓝牙装置 · 可选</string>
+    <string name="setup_bluetooth_body">将已配对传统蓝牙装置的名称及地址导入指定连接，不会启动扫描或配对。</string>
+    <string name="setup_background">后台位置 · 可选</string>
+    <string name="setup_background_body">用于应用在后台时访问环境。先允许前台位置，如有需要再到 Android 位置权限设置中选择“始终允许”。</string>
+    <string name="setup_granted">已授权</string>
+    <string name="setup_grant">设置权限</string>
+    <string name="setup_recheck">重新检测</string>
+    <string name="setup_open_manager">打开 LSPosed</string>
+    <string name="setup_manager_hint">请从通知或管理器快捷方式打开 LSPosed，启用 WeRePosition 并勾选系统框架。</string>
+    <string name="setup_open_failed">无法打开设置，请从 Android 设置进入本应用权限页。</string>
+    <string name="setup_recovery_title">需要恢复权限</string>
+    <string name="setup_read_information">项目与使用说明</string>
+</resources>

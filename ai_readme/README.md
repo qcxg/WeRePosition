@@ -4,8 +4,10 @@ This folder is the maintained AI-facing technical memory for the project.
 
 ## Handoff For The Next Conversation
 
-- Current source version is `2.0.2`. The specified-connection feature and the Wi-Fi hook extraction are documented in `technical_readme.md`, `docs/ARCHITECTURE.md`, and `docs/CODE_AUDIT.md`.
-- The new settings page was smoke-tested on the connected Android 17 device, including collapsed/expanded forms and saved Wi-Fi/paired Bluetooth import lists. A scoped third-party app read of the new classic Bluetooth hook is still pending.
+- Current source version is `2.0.3` (`versionCode=20003`). Onboarding/startup access, shared horizontal page transitions, and specified-connection testing are documented in `technical_readme.md`.
+- Onboarding language/information/permissions/completion and Settings > Permissions now use the existing Settings slide/fade timing, with reverse back navigation. Android 17 transition screenshots confirmed intermediate horizontal positions. User settings and animation scale were restored after verification; do not reset onboarding for another user handoff unless requested.
+- The independent classic-Bluetooth fixture passed on Android 17: bonded 5 -> 8 -> 5 -> 8 -> 5 across baseline/active/disabled/re-enabled/stopped, with A2DP and Headset connected lists 0 -> 1 -> 0 -> 1 -> 0. Metadata, state filtering and real-device preservation assertions passed. The first run correctly returned baseline data with the location master switch off; the fixture now temporarily enables that switch and restores it in `finally`.
+- Scope preparation remains manual in LSPosed. The user authorized resuming Bluetooth verification; only the independent test client was temporarily selected, never the host app. The temporary scope and APK were removed after testing; the final LSPosed scope matches the original scope. See `tools/bluetooth-probe/README.md` for commands and evidence. The fixture emits count-only `WRP_BT_PROBE` logs and preserves full private JSON reports on-device.
 - The most important invariant is that specified Wi-Fi must never expose real scan results; `ClientWifiHook` returns simulated nearby APs or an empty scan. The classic Bluetooth addition must leave other real devices visible.
 
 ## Current Source Of Truth

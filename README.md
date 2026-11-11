@@ -161,6 +161,8 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## 基本使用
 
+首次開啟會依序選擇語言、閱讀並同意專案與使用說明，再設定 Root／LSPosed／精確位置權限；懸浮窗等權限可選。完成後再次啟動直接進主畫面，背景確認缺少必要權限時才提示。可從「設定 → 權限與存取」調整授權或重新閱讀說明。既有安裝會補做一次新引導，保留原設定與資料。
+
 1. 安裝 APK，授予 Root 權限。
 2. 在 LSPosed 中啟用模組並只啟用系統框架作用域；不要勾選 Google Play 服務或 Fused Location。需要 RF 或 GNSS/NMEA 補充時再加入相應 App。
 3. 修改 module 或 scope 後重啟手機，確保 `system_server` 載入同一版本的唯一定位鏈。

@@ -7,6 +7,10 @@ import com.shiraka.wereposition.utils.SyntheticRfOptions
 
 class SettingsRepository(private val settingsManager: SettingsManager) {
 
+    var onboardingCompleted: Boolean
+        get() = settingsManager.onboardingCompleted
+        set(value) { settingsManager.onboardingCompleted = value }
+
     fun getSavedLocations(): List<SavedLocation> = settingsManager.getSavedLocations()
 
     fun getRecentLocations(): List<SavedLocation> = settingsManager.getRecentLocations()

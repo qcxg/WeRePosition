@@ -85,6 +85,7 @@ class MainViewModel(
             savedRoutes = emptyList(), // Will be populated by Room Flow
             currentLanguage = normalizeLanguageTag(settingsRepository.getLanguage()),
             isLanguageSet = settingsRepository.isLanguageSet(),
+            onboardingCompleted = settingsRepository.onboardingCompleted,
             mockWifi = settingsRepository.mockWifi,
             mockCell = settingsRepository.mockCell,
             mockBluetooth = false,
@@ -110,6 +111,39 @@ class MainViewModel(
         )
     )
     val uiState: StateFlow<AppState> = _uiState.asStateFlow()
+
+    private var accessCheckJob: Job? = null
+
+    // Bind callbacks arrive asynchronously. Never present an unverified initial false as failure.
+    fun refreshAccessStatus() {
+        if (accessCheckJob?.isActive == true) return
+        accessCheckJob = viewModelScope.launch {
+            _uiState.update { it.copy(isCheckingAccess = true) }
+            try {
+                val root = locationRepository.checkRootAccess()
+                if (!com.shiraka.wereposition.LocationApp.isModuleActive.value) {
+                    kotlinx.coroutines.withTimeoutOrNull(2_500L) {
+                        com.shiraka.wereposition.LocationApp.isModuleActive.first { it }
+                    }
+                }
+                _uiState.update { it.copy(
+                    hasRootAccess = root,
+                    isLSPosedActive = lsposedManager.isModuleActive(),
+                    accessChecked = true
+                ) }
+            } finally {
+                _uiState.update { it.copy(isCheckingAccess = false) }
+            }
+        }
+    }
+
+    fun completeOnboarding() {
+        if (!_uiState.value.accessChecked || _uiState.value.isCheckingAccess || !_uiState.value.hasRootAccess ||
+            !_uiState.value.isLSPosedActive || context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        settingsRepository.onboardingCompleted = true
+        _uiState.update { it.copy(onboardingCompleted = true) }
+    }
 
     fun refreshRuntimeStatus() {
         if (_uiState.value.isSavingConfig) return
@@ -178,7 +212,6 @@ class MainViewModel(
 
     private fun initialize() {
         viewModelScope.launch(Dispatchers.IO) {
-            val root = locationRepository.checkRootAccess()
             val runtimeActive = SpoofingService.isRunning || SpooferProvider.isActive
 
             if (settingsRepository.isSpoofingActive) {
@@ -211,7 +244,6 @@ class MainViewModel(
             _uiState.update {
                 it.copy(
                     isInitializing = false,
-                    hasRootAccess = root,
                     isSpoofingActive = settingsRepository.isSpoofingActive,
                     latitudeInput = if (hasLastLocation) lastLat else it.latitudeInput,
                     longitudeInput = if (hasLastLocation) lastLng else it.longitudeInput,

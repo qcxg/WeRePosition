@@ -1,6 +1,6 @@
 # WeRePosition Current Simulation Pipeline
 
-Last maintained: 2026-11-11 (v2.0.2 specified connections and hook extraction)
+Last maintained: 2026-11-11 (v2.0.3 onboarding, page transitions, and classic Bluetooth verification)
 
 This document is the current source of truth for how WeRePosition simulates GNSS, Wi-Fi, cellular, and related environment signals. It is written for future coding agents and developers so the implementation stays understandable and does not drift into hidden generated telemetry.
 
@@ -37,6 +37,14 @@ Primary components:
 - `LocationHooker.kt`: libxposed module injected into scoped processes.
 
 Debug/test apps that directly inspect Wi-Fi, cell, GNSS status, or NMEA must also be in the LSPosed scope. System framework scope is enough for many normal location consumers, but tools such as Cellular-Z and GPSTest read several APIs inside their own app process, so their package processes must be hooked too. Never scope Play services or Fused Location.
+
+### First Run And Startup Access
+
+- `is_language_set` and versioned `app_settings.onboarding_version` are independent. A new install selects a language, reviews project provenance/GPL-3.0-or-later, independent maintenance, responsible use, disclaimer and data disclosure, then grants access. Existing installations preserve language/data and complete the new information/access steps once. Consent must be checked before the permission page, and completion requires verified root, the LSPosed service binding and precise foreground location.
+- `MainActivity` no longer requests runtime permissions on launch. Root is first requested on the onboarding permission page. Overlay (joystick only), notifications, phone state, paired-device Bluetooth access and background location are optional and individually explained. Android permission settings are available after a denial; background access is configured separately after foreground access.
+- Completed installations immediately render the main UI and verify root in the background. A missing initial libxposed binding is given up to 2.5 seconds to arrive. `accessChecked` and `isCheckingAccess` prevent initial false values from producing a module warning. Rechecking on resume updates access; an actual missing root/module/precise-location grant produces `AccessRecoveryDialog` with recovery instructions and a permission-page link. This UI policy never fabricates a successful root result.
+- `SetupScreen` uses the same Material expressive theme and surfaces as Settings, has safe insets and scrolling, and resets scrolling when changing steps. Settings > Permissions and access reuses the permission controls and offers a read-only project-information page. No old `BlockingScreen` remains. `horizontalPageTransition()` shares Settings’ 260 ms, one-third-width slide with 180 ms fades. Onboarding is inside the root `AnimatedContent` for language/information and completion/main transitions; its information/permission steps have their own directional `AnimatedContent`. The settings permission page stays inside the existing settings `AnimatedContent`, reusing its common header instead of returning early. Animated lambdas render their supplied target, preserving distinct outgoing/incoming content and scroll state.
+- Device checks on Android 17 passed for consent gating, the permission page, completion followed by cold relaunch without a module prompt, and precise-location revocation followed by a recovery dialog. Test grants were restored. The earlier handoff reset only wizard/language markers for user testing. Subsequent 2.0.3 animation checks temporarily reset those markers, captured language/information/permissions/reverse/completion transitions, and restored the original preferences and system animation scale. The user requested no additional first-run handoff.
 
 ### Config Channels
 
@@ -330,7 +338,10 @@ As with Wi-Fi, this is a local readiness check; hook delivery is verified throug
 - `SavedConnectionImporter` reads previously paired classic or dual-mode devices through `BluetoothAdapter.getBondedDevices` after requesting `BLUETOOTH_CONNECT`. It imports metadata, not an active connection. The app does not start BLE/GATT scanning.
 - `ClientBluetoothHook` is installed only inside selected LSPosed client processes. When the active snapshot enables `specified_bluetooth_enabled`, it adds configured devices to the bonded set and selected A2DP/Headset connected-device and state results. Configured device getters report their specified name, alias, class, UUIDs, bonded state and classic type. Other real Bluetooth devices remain visible. No Bluetooth hook runs in `system_server`, Play services, or Fused Location.
 - Legacy `bluetooth_json=[]` and `mock_bluetooth=false` are compatibility tombstones, separate from `specified_bluetooth_json`. Existing Bluetooth Room entities and import/export fields are not used for runtime specified devices or RF coverage. Older database versions are intentionally rebuilt rather than migrated.
-- The form, import list, and local debug build have been checked on a connected Android 17 device; a third-party scoped-app read of the new Bluetooth hook has not yet been verified.
+- The form, import list and independent scoped-client APIs were verified on Android 17. `tools/bluetooth-probe` is an opt-in, debug-only independent APK with no module dependency. `ClassicBluetoothRuntimeTest` uses actual Android bonded/profile APIs: 5 real paired devices became 8 with three specified devices; A2DP/Headset each gained one correctly filtered connected device. Name, alias, class, UUID, bond/type and connection-state assertions passed. Disabling restored 5/0/0; re-enabling restored 8/1/1; stopping restored 5/0/0. The host app was never scoped.
+- The first attempt in the previous session stopped at an unapproved scope request. After the user authorized resuming testing, the independent client was manually selected in LSPosed. The first API assertion saw 5 instead of 8 because Android’s location master switch was off, correctly pausing simulation. The test now saves that switch, temporarily enables it, restores settings and stops simulation in `finally`, and restores the switch. The second run passed all assertions. A final rerun with phase/count logs also passed; the test scope and APK were then removed, original scope equality was verified, and the host remained unscoped.
+- The fixture emits count-only `WRP_BT_PROBE` logcat entries tagged with baseline/active/disabled/reenabled/stopped phases. Its private JSON reports include paired-device metadata and must remain outside Git. See `tools/bluetooth-probe/README.md` for opt-in build/run instructions.
+
 
 ## Connectivity Layer
 

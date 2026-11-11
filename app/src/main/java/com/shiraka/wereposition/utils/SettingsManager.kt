@@ -73,6 +73,10 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("is_language_set", false)
         set(value) = prefs.edit().putBoolean("is_language_set", value).apply()
 
+    var onboardingCompleted: Boolean
+        get() = prefs.getInt("onboarding_version", 0) >= 1
+        set(value) = prefs.edit().putInt("onboarding_version", if (value) 1 else 0).apply()
+
 
     var googleApiKey: String
         get() = prefs.getString("google_api_key", "") ?: ""
