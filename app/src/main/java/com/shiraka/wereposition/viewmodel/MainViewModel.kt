@@ -146,7 +146,7 @@ class MainViewModel(
     }
 
     fun refreshRuntimeStatus() {
-        if (_uiState.value.isSavingConfig) return
+        if (_uiState.value.isInitializing || _uiState.value.isSavingConfig) return
         val active = settingsRepository.isSpoofingActive &&
             SpooferProvider.isActive && SpoofingService.isRunning
         _uiState.update { state ->
@@ -212,6 +212,14 @@ class MainViewModel(
 
     private fun initialize() {
         viewModelScope.launch(Dispatchers.IO) {
+            try {
+                locationRepository.reconnectActiveRoute(context)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                android.util.Log.w("MainViewModel", "Could not reconnect active route", error)
+                null
+            }
             val runtimeActive = SpoofingService.isRunning || SpooferProvider.isActive
 
             if (settingsRepository.isSpoofingActive) {
@@ -241,22 +249,29 @@ class MainViewModel(
             val lastLng = settingsRepository.lastSpoofedLng
             val hasLastLocation = !lastLat.isNullOrEmpty() && lastLat != "0" && lastLat != "0.0" &&
                                   !lastLng.isNullOrEmpty() && lastLng != "0" && lastLng != "0.0"
+            val restoredRoute = locationRepository.runningRoute()
+            val routePosition = if (restoredRoute != null) SpooferProvider.currentPosition() else null
             _uiState.update {
                 it.copy(
                     isInitializing = false,
                     isSpoofingActive = settingsRepository.isSpoofingActive,
-                    latitudeInput = if (hasLastLocation) lastLat else it.latitudeInput,
-                    longitudeInput = if (hasLastLocation) lastLng else it.longitudeInput,
+                    latitudeInput = routePosition?.latitude?.toString() ?: if (hasLastLocation) lastLat else it.latitudeInput,
+                    longitudeInput = routePosition?.longitude?.toString() ?: if (hasLastLocation) lastLng else it.longitudeInput,
                     mapConfirmedPoint = if (hasLastLocation) {
                         val latD = lastLat.toDoubleOrNull()
                         val lngD = lastLng.toDoubleOrNull()
                         if (latD != null && lngD != null) Pair(latD, lngD) else null
                     } else null,
-                    routePlanStage = RoutePlanStage.IDLE,
+                    routePlanStage = if (restoredRoute != null) RoutePlanStage.RUNNING else RoutePlanStage.IDLE,
+                    routePoints = restoredRoute?.points.orEmpty(),
+                    routeSimMode = restoredRoute?.mode ?: it.routeSimMode,
+                    customSpeedMs = restoredRoute?.speedMs?.toDouble() ?: it.customSpeedMs,
+                    simBearing = routePosition?.bearing ?: it.simBearing,
                     googleApiKey = settingsRepository.getGoogleApiKey(),
                     appSha1 = getAppSignatureSHA1()
                 )
             }
+            if (restoredRoute != null) startRouteUiSync()
             if (!settingsRepository.isSpoofingActive && !hasLastLocation) {
                 fetchCurrentLocation(context)
             }
@@ -1103,6 +1118,7 @@ class MainViewModel(
 
     /** 进入全屏地图，进入选点阶段 */
     fun enterRoutePlanning() {
+        if (locationRepository.runningRoute() != null) return
         _uiState.update {
             it.copy(
                 routePlanStage = RoutePlanStage.SELECTING,
@@ -1130,14 +1146,9 @@ class MainViewModel(
         _uiState.update { it.copy(routePlanStage = RoutePlanStage.READY) }
     }
 
-    /** 重新选点：清空路点，回到 SELECTING */
-    fun restartSelectingPoints() {
-        _uiState.update {
-            it.copy(
-                routePoints = emptyList(),
-                routePlanStage = RoutePlanStage.SELECTING
-            )
-        }
+    /** Return to editing without discarding the route the user just built. */
+    fun editRoutePoints() {
+        _uiState.update { it.copy(routePlanStage = RoutePlanStage.SELECTING) }
     }
 
     fun saveRoute(name: String, points: List<RoutePoint>) {
@@ -1194,7 +1205,8 @@ class MainViewModel(
 
     fun updateSpoofingPositionFromMap(lat: Double, lng: Double): Boolean {
         val state = _uiState.value
-        if (!state.isSpoofingActive || SpoofingService.isJoystickVisible) return false
+        if (state.isInitializing || state.routePlanStage != RoutePlanStage.IDLE ||
+            SpooferProvider.isRouteMode || !state.isSpoofingActive || SpoofingService.isJoystickVisible) return false
         if (lng !in -180.0..180.0 || lat !in -90.0..90.0) return false
 
         val oldLat = state.latitudeInput.toDoubleOrNull()
@@ -1263,7 +1275,6 @@ class MainViewModel(
             publishResolvedRfCoverage(resolved)
             val runtimeState = _uiState.value
             val now = System.currentTimeMillis()
-            SpooferProvider.simSpeed = getEffectiveSpeedMs().toFloat()
 
             try {
                 locationRepository.startSpoofing(
@@ -1276,7 +1287,8 @@ class MainViewModel(
                     runtimeState.enableJitter,
                     runtimeState.jitterRadiusMeters, runtimeState.jitterSpeed.name,
                     runtimeState.signalJitterEnabled, runtimeState.signalJitterLevel,
-                    runtimeState.wifiConnectionMode.name
+                    runtimeState.wifiConnectionMode.name,
+                    speedOverrideMs = getEffectiveSpeedMs().toFloat()
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -1686,10 +1698,11 @@ class MainViewModel(
     }
 
     fun setSpecifiedWifi(enabled: Boolean, connection: SpecifiedWifiConnection) {
-        settingsRepository.specifiedWifi = connection
-        settingsRepository.specifiedWifiEnabled = enabled && connection.isValid
+        val normalized = connection.normalized()
+        settingsRepository.specifiedWifi = normalized
+        settingsRepository.specifiedWifiEnabled = enabled && normalized.isValid
         _uiState.update {
-            it.copy(specifiedWifiEnabled = enabled && connection.isValid, specifiedWifi = connection)
+            it.copy(specifiedWifiEnabled = enabled && normalized.isValid, specifiedWifi = normalized)
         }
         requestActiveConfigRefresh()
     }

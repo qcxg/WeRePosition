@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_route_running">规划路线运行中</string>
+    <string name="return_to_route">返回路线页面</string>
+    <string name="edit_route_points">编辑路点</string>
+    <string name="undo_last_point">撤销上一个选点</string>
+    <string name="app_access_location_heading">位置隔离</string>
+    <string name="route_speed_range">0.1–100 m/s</string>
+    <string name="app_access_result_count">%1$d 个应用</string>
+    <string name="clear_search">清除搜索</string>
+    <string name="route_speed_value">%1$.1f m/s</string>
+</resources>

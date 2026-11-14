@@ -69,6 +69,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.res.stringResource
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.data.model.AppState
+import com.shiraka.wereposition.data.model.RoutePlanStage
 import com.shiraka.wereposition.data.model.JitterSpeed
 import com.shiraka.wereposition.data.model.SearchMode
 import com.shiraka.wereposition.data.model.SavedLocation
@@ -111,6 +112,7 @@ fun SpoofingScreen(
     isDark: Boolean,
     onExpandMap: () -> Unit
 ) {
+    val routeRunning = uiState.routePlanStage == RoutePlanStage.RUNNING
     val scrollState = rememberScrollState()
     var showSavedLocations by remember { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -168,7 +170,7 @@ fun SpoofingScreen(
 
     // 请求当前位置（仅在坐标为空时），并确保本地采集数据已加载
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(
+        if (!routeRunning && ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
         ) {
@@ -184,6 +186,13 @@ fun SpoofingScreen(
     val latestCoverageLocations = rememberUpdatedState(coverageLocations)
     var mapSettleJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val latestUiState = rememberUpdatedState(uiState)
+    LaunchedEffect(routeRunning) {
+        if (routeRunning) {
+            mapSettleJob?.cancel()
+            smallMapRef = null
+            closeSearchPanel()
+        }
+    }
     DisposableEffect(Unit) {
         onDispose { mapSettleJob?.cancel() }
     }
@@ -211,6 +220,32 @@ fun SpoofingScreen(
             .background(MaterialTheme.colorScheme.background)
             .hazeSource(searchHazeState)
     ) {
+        if (routeRunning) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(mapHeight + statusBarHeight),
+                color = MaterialTheme.colorScheme.surfaceContainer
+            ) {
+                Column(
+                    modifier = Modifier.statusBarsPadding().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+                ) {
+                    Surface(shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.primaryContainer) {
+                        Icon(Icons.Rounded.Route, null, Modifier.padding(16.dp).size(32.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Text(stringResource(R.string.home_route_running),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface)
+                    FilledTonalButton(onClick = onExpandMap, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Icon(Icons.Rounded.OpenInFull, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.return_to_route))
+                    }
+                }
+            }
+        } else {
         Box(modifier = Modifier.fillMaxWidth().height(mapHeight + statusBarHeight)) {
             val mapHazeState = rememberHazeState()
             Box(Modifier.fillMaxSize().hazeSource(mapHazeState)) {
@@ -227,11 +262,14 @@ fun SpoofingScreen(
                         map,
                         latestCoverageLocations.value
                     )
-                    if (SpoofingService.isJoystickVisible) {
+                    if (latestUiState.value.isInitializing ||
+                        latestUiState.value.routePlanStage != com.shiraka.wereposition.data.model.RoutePlanStage.IDLE ||
+                        com.shiraka.wereposition.provider.SpooferProvider.isRouteMode ||
+                        SpoofingService.isJoystickVisible) {
                         mapSettleJob?.cancel()
                         return@setOnCameraChangeListener
                     }
-                    if (!latestUiState.value.isSpoofingActive) {
+                    if (!latestUiState.value.isInitializing && !latestUiState.value.isSpoofingActive) {
                         viewModel.confirmMapPoint(lat, lng)
                         return@setOnCameraChangeListener
                     }
@@ -378,6 +416,8 @@ fun SpoofingScreen(
                         .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.28f))
                 )
             }
+        }
+
         }
 
         // 滚动内容

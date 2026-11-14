@@ -5,7 +5,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +22,7 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,11 +41,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import com.shiraka.wereposition.ui.components.GlassOverlaySurface
 import com.shiraka.wereposition.ui.components.AppMapView
 import com.shiraka.wereposition.ui.components.AppMapController
 import com.shiraka.wereposition.ui.components.AppMapMarker
 import com.shiraka.wereposition.ui.components.MarkerType
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.data.model.AppMapType
@@ -69,6 +79,14 @@ fun FullScreenMapPage(
     val coordinateSelectedMessage = stringResource(R.string.coordinate_selected)
     val saveSuccessMessage = stringResource(R.string.save_success)
     var mapRef by remember { mutableStateOf<AppMapController?>(null) }
+    var cameraLat by rememberSaveable { mutableStateOf(uiState.latitudeInput.toDoubleOrNull() ?: 0.0) }
+    var cameraLng by rememberSaveable { mutableStateOf(uiState.longitudeInput.toDoubleOrNull() ?: 0.0) }
+    var cameraZoom by rememberSaveable { mutableFloatStateOf(18f) }
+    fun rememberViewport(map: AppMapController) {
+        map.cameraTargetLat?.let { cameraLat = it }
+        map.cameraTargetLng?.let { cameraLng = it }
+        map.cameraZoom?.let { cameraZoom = it }
+    }
     var showSavedLocations by remember { mutableStateOf(false) }
     var showMapTypeDialog by remember { mutableStateOf(false) }
     var showConfigDialog by remember { mutableStateOf(false) }
@@ -80,6 +98,7 @@ fun FullScreenMapPage(
     var searchResults by remember { mutableStateOf<List<AppPoiItem>>(emptyList()) }
     var showSearchResults by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val mapHazeState = rememberHazeState()
 
     // 拦截返回键：如果有搜索结果，按返回键先关闭搜索结果
     BackHandler(enabled = showSearchResults) {
@@ -164,7 +183,9 @@ fun FullScreenMapPage(
     }
 
     // 根据路线和模式自动缩放
-    LaunchedEffect(isInPipMode, uiState.routePlanStage, routePoints) {
+    // Point edits repaint overlays only. Fit the route once when entering RUNNING
+    // (or attaching a new map), never as a side effect of adding/removing a point.
+    LaunchedEffect(mapRef, isInPipMode, uiState.routePlanStage) {
         if (uiState.routePlanStage == RoutePlanStage.RUNNING && routePoints.size >= 2) {
             // 路线规划运行时，显示完整的路线范围
             val padding = if (isInPipMode) 30 else 150
@@ -186,19 +207,21 @@ fun FullScreenMapPage(
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // 地图
+        // Sample only the map, so controls never blur themselves.
+        Box(Modifier.fillMaxSize().hazeSource(mapHazeState)) {
         AppMapView(modifier = Modifier.fillMaxSize()) { map ->
             mapRef = map
             map.disableUiControls()
-            val initLat = uiState.latitudeInput.toDoubleOrNull() ?: 0.0
-            val initLng = uiState.longitudeInput.toDoubleOrNull() ?: 0.0
-            map.moveCamera(initLat, initLng, 18f)
+            map.moveCamera(cameraLat, cameraLng, cameraZoom)
             map.setOnCameraChangeListener { _, _ ->
+                rememberViewport(map)
                 com.shiraka.wereposition.utils.MapCoverageHelper.drawCoverage(
                     map,
                     latestCoverageLocations.value
                 )
             }
+        }
+
         }
 
         // 选点模式的十字准星
@@ -218,9 +241,7 @@ fun FullScreenMapPage(
             TopBar(
                 stage = stage,
                 routePointCount = routePoints.size,
-                onBack = onClose,
-                canUndo = stage == RoutePlanStage.SELECTING && routePoints.isNotEmpty(),
-                onUndo = { viewModel.undoLastRoutePoint() }
+                onBack = onClose
             )
             // 搜索栏
             if (stage == RoutePlanStage.SELECTING || stage == RoutePlanStage.IDLE) {
@@ -228,6 +249,9 @@ fun FullScreenMapPage(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    GlassOverlaySurface(hazeState = mapHazeState,
+                        modifier = Modifier.weight(1f).shadow(4.dp, MaterialTheme.shapes.extraLarge),
+                        shape = MaterialTheme.shapes.extraLarge) {
                     androidx.compose.foundation.text.BasicTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -247,11 +271,9 @@ fun FullScreenMapPage(
                             }
                         }),
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .height(48.dp)
-                            .shadow(4.dp, RoundedCornerShape(22.dp))
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), RoundedCornerShape(22.dp))
-                            .padding(horizontal = 16.dp),
+                            .padding(start = 16.dp, end = 4.dp),
                         decorationBox = { innerTextField ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Rounded.Search, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
@@ -263,13 +285,16 @@ fun FullScreenMapPage(
                                     innerTextField()
                                 }
                                 if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
-                                        Icon(Icons.Rounded.Close, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
+                                    IconButton(onClick = { searchQuery = ""; showSearchResults = false },
+                                        modifier = Modifier.size(48.dp)) {
+                                        Icon(Icons.Rounded.Close, stringResource(R.string.clear_search),
+                                            modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
                         }
                     )
+                    }
                 }
                 // 搜索结果
                 AnimatedVisibility(visible = showSearchResults && searchResults.isNotEmpty()) {
@@ -308,59 +333,36 @@ fun FullScreenMapPage(
         }
         } // End of if(!isInPipMode) for TopBar
 
-        // 右侧定位和图层按钮
+        // One glass tool group keeps map actions visible after adding points.
         if (!isInPipMode) {
-            Column(
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MapFab(
-                    icon = Icons.Rounded.Layers,
-                    contentDescription = stringResource(R.string.map_type_label),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary
-                ) {
-                    showMapTypeDialog = true
-                }
-
-                AnimatedVisibility(visible = stage == RoutePlanStage.SELECTING && routePoints.isEmpty()) {
-                    MapFab(
-                        icon = Icons.Rounded.Route,
-                        contentDescription = stringResource(R.string.route_library),
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ) {
-                        showSavedRoutesDialog = true
+            GlassOverlaySurface(hazeState = mapHazeState,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)
+                    .shadow(4.dp, MaterialTheme.shapes.extraLarge),
+                shape = MaterialTheme.shapes.extraLarge) {
+                Column(Modifier.padding(6.dp).animateContentSize(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    MapToolButton(Icons.Rounded.Layers, stringResource(R.string.map_type_label)) {
+                        showMapTypeDialog = true
                     }
-                }
-
-                AnimatedVisibility(visible = (stage == RoutePlanStage.SELECTING && routePoints.isEmpty()) || stage == RoutePlanStage.IDLE) {
-                    Column (
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        MapFab(
-                            icon = Icons.Rounded.Bookmarks,
-                            contentDescription = stringResource(R.string.collection_list),
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ) {
+                    AnimatedVisibility(stage == RoutePlanStage.SELECTING && routePoints.isEmpty()) {
+                        MapToolButton(Icons.Rounded.Route, stringResource(R.string.route_library)) {
+                            showSavedRoutesDialog = true
+                        }
+                    }
+                    AnimatedVisibility(stage == RoutePlanStage.SELECTING || stage == RoutePlanStage.IDLE) {
+                        MapToolButton(Icons.Rounded.Bookmarks, stringResource(R.string.collection_list)) {
                             showSavedLocations = true
                         }
-
-                        MapFab(
-                            icon = Icons.Rounded.MyLocation,
-                            contentDescription = stringResource(R.string.locate_to_current),
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ) {
-                            viewModel.fetchCurrentLocation(context) { lLat, lLng ->
-                                mapRef?.animateCamera(lLat, lLng, 16f)
-                            }
+                    }
+                    if (stage != RoutePlanStage.RUNNING) {
+                        HorizontalDivider(Modifier.width(36.dp).align(Alignment.CenterHorizontally),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                        MapToolButton(Icons.Rounded.MyLocation, stringResource(R.string.locate_to_current)) {
+                            viewModel.fetchCurrentLocation(context) { lat, lng -> mapRef?.animateCamera(lat, lng, 16f) }
                         }
                     }
                 }
             }
-
         }
 
         // IDLE阶段（全屏选点模式）只显示单一确认选点按钮
@@ -392,6 +394,7 @@ fun FullScreenMapPage(
             } else {
                 // 底部操作栏 (路线规划模式)
                 BottomActionBar(
+                    hazeState = mapHazeState,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     stage = stage,
                     routePoints = routePoints,
@@ -399,11 +402,13 @@ fun FullScreenMapPage(
                         val tLat = mapRef?.cameraTargetLat
                         val tLng = mapRef?.cameraTargetLng
                         if (tLat != null && tLng != null) {
+                            mapRef?.let(::rememberViewport)
                             viewModel.addRoutePoint(tLat, tLng)
                         }
                     },
+                    onUndoPoint = { viewModel.undoLastRoutePoint() },
                     onFinishSelecting = { viewModel.finishSelectingPoints() },
-                    onRestartSelecting = { viewModel.restartSelectingPoints() },
+                    onRestartSelecting = { viewModel.editRoutePoints() },
                     onSaveRoute = { showSaveRouteDialog = true },
                     onStartPlanning = { showConfigDialog = true },
                     onStopRoute = { viewModel.stopRoutePlanning(); onClose() }
@@ -418,10 +423,6 @@ fun FullScreenMapPage(
             uiState = uiState,
             onDismiss = {
                 showConfigDialog = false
-                // 如果还没开始，回退到 READY
-                if (stage == RoutePlanStage.READY) {
-                    viewModel.restartSelectingPoints()
-                }
             },
             onStartRoute = {
                 showConfigDialog = false
@@ -539,197 +540,135 @@ fun FullScreenMapPage(
     }
 }
 
-// 顶部栏
+// Route controls use official expressive components and the app's shared color scheme.
 
 @Composable
 private fun TopBar(
     stage: RoutePlanStage,
     routePointCount: Int,
-    onBack: () -> Unit,
-    canUndo: Boolean,
-    onUndo: () -> Unit
+    onBack: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Surface(
-            onClick = onBack,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 4.dp,
-            modifier = Modifier.size(44.dp)
+    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        HorizontalFloatingToolbar(
+            expanded = true,
+            modifier = if (stage == RoutePlanStage.IDLE) Modifier else Modifier.fillMaxWidth(),
+            leadingContent = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back))
+                }
+            }
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back), tint = MaterialTheme.colorScheme.onBackground)
-            }
-        }
-
-        if (stage != RoutePlanStage.IDLE) {
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 4.dp,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = when (stage) {
-                        RoutePlanStage.IDLE -> ""
-                        RoutePlanStage.SELECTING -> stringResource(R.string.selecting_points_hint, routePointCount)
-                        RoutePlanStage.READY -> stringResource(R.string.route_ready_hint, routePointCount)
-                        RoutePlanStage.RUNNING -> stringResource(R.string.route_looping)
-                    },
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                )
-            }
-        } else {
-            Spacer(Modifier.weight(1f))
-        }
-
-        AnimatedVisibility(visible = canUndo) {
-            MapFab(
-                icon = Icons.AutoMirrored.Rounded.Undo,
-                contentDescription = stringResource(R.string.undo),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onBackground,
-                onClick = onUndo
+            if (stage != RoutePlanStage.IDLE) Text(
+                when (stage) {
+                    RoutePlanStage.SELECTING -> stringResource(R.string.selecting_points_hint, routePointCount)
+                    RoutePlanStage.READY -> stringResource(R.string.route_ready_hint, routePointCount)
+                    RoutePlanStage.RUNNING -> stringResource(R.string.route_looping)
+                    else -> ""
+                },
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
             )
         }
     }
 }
 
-// 底部操作栏（由阶段驱动）
-
 @Composable
 private fun BottomActionBar(
     modifier: Modifier,
+    hazeState: HazeState,
     stage: RoutePlanStage,
     routePoints: List<RoutePoint>,
     onConfirmPoint: () -> Unit,
+    onUndoPoint: () -> Unit,
     onFinishSelecting: () -> Unit,
     onRestartSelecting: () -> Unit,
     onSaveRoute: () -> Unit,
     onStartPlanning: () -> Unit,
     onStopRoute: () -> Unit
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color.Transparent, MaterialTheme.colorScheme.background.copy(alpha = 0.95f))
-                )
-            )
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+    val shape = MaterialTheme.shapes.large
+    GlassOverlaySurface(
+        hazeState = hazeState,
+        modifier = modifier.fillMaxWidth().navigationBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+            .shadow(5.dp, shape)
+            // Empty glass areas must not pass rapid taps through to map zoom gestures.
+            .pointerInput(Unit) { detectTapGestures(onTap = {}) },
+        shape = shape
     ) {
-        when (stage) {
-            RoutePlanStage.IDLE -> { /* 不会到达此处 */ }
-
-            RoutePlanStage.SELECTING -> {
-                Text(
-                    stringResource(R.string.selected_points_count, routePoints.size, if (routePoints.size < 2) stringResource(R.string.at_least_two_points) else ""),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(
-                        onClick = onConfirmPoint,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Rounded.AddLocation, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.confirm_point), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        AnimatedContent(targetState = stage, label = "routeActions",
+            transitionSpec = { (fadeIn() + slideInVertically { it / 5 }) togetherWith fadeOut() }) { currentStage ->
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Rounded.Route, null, tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp).size(24.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.route_planning), style = MaterialTheme.typography.titleMedium)
+                        Text(if (currentStage == RoutePlanStage.RUNNING) stringResource(R.string.route_looping)
+                            else stringResource(R.string.selected_points_count, routePoints.size,
+                                if (routePoints.size < 2) stringResource(R.string.at_least_two_points) else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Button(
-                        onClick = onFinishSelecting,
-                        enabled = routePoints.size >= 2,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.finish_selecting), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    if (currentStage == RoutePlanStage.SELECTING) IconButton(onClick = onUndoPoint,
+                        enabled = routePoints.isNotEmpty()) {
+                        Icon(Icons.AutoMirrored.Rounded.Undo, stringResource(R.string.undo_last_point))
                     }
-                    Button(
-                        onClick = onSaveRoute,
-                        enabled = routePoints.size >= 2,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Rounded.Star, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.save_route), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    if (currentStage != RoutePlanStage.RUNNING) IconButton(onClick = onSaveRoute,
+                        enabled = routePoints.size >= 2) {
+                        Icon(Icons.Rounded.BookmarkBorder, stringResource(R.string.save_route))
                     }
                 }
-            }
-
-            RoutePlanStage.READY -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = onRestartSelecting,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.re_select), fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when (currentStage) {
+                        RoutePlanStage.IDLE -> Unit
+                        RoutePlanStage.SELECTING -> {
+                            RoutePrimaryButton(stringResource(R.string.confirm_point), Icons.Rounded.AddLocation,
+                                onConfirmPoint, Modifier.weight(1f))
+                            FilledTonalButton(onClick = onFinishSelecting, enabled = routePoints.size >= 2,
+                                shapes = ButtonDefaults.shapesFor(48.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                                Icon(Icons.Rounded.CheckCircle, null, Modifier.size(20.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.finish_selecting))
+                            }
+                        }
+                        RoutePlanStage.READY -> {
+                            FilledTonalButton(onClick = onRestartSelecting, shapes = ButtonDefaults.shapesFor(48.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                                Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.edit_route_points))
+                            }
+                            RoutePrimaryButton(stringResource(R.string.start_planning), Icons.Rounded.PlayArrow,
+                                onStartPlanning, Modifier.weight(1f))
+                        }
+                        RoutePlanStage.RUNNING -> RoutePrimaryButton(stringResource(R.string.stop_planning),
+                            Icons.Rounded.Stop, onStopRoute, Modifier.weight(1f), destructive = true)
                     }
-                    OutlinedButton(
-                        onClick = { onSaveRoute() },
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Icon(Icons.Rounded.Star, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("收藏", fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = onStartPlanning,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        Icon(Icons.Rounded.PlayArrow, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.start_planning), fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            RoutePlanStage.RUNNING -> {
-                Button(
-                    onClick = onStopRoute,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Rounded.Stop, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.stop_planning), fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
 
-// 路线配置对话框
+@Composable
+private fun RoutePrimaryButton(
+    label: String, icon: ImageVector, onClick: () -> Unit,
+    modifier: Modifier = Modifier, destructive: Boolean = false
+) {
+    Button(onClick = onClick, shapes = ButtonDefaults.shapesFor(48.dp),
+        modifier = modifier.heightIn(min = 48.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        colors = if (destructive) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError) else ButtonDefaults.buttonColors()) {
+        Icon(icon, null, Modifier.size(20.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label)
+    }
+}
 
 @Composable
 private fun RoutePlanConfigDialog(
@@ -739,127 +678,93 @@ private fun RoutePlanConfigDialog(
     onSpeedChange: (SimMode) -> Unit,
     onCustomSpeedChange: (Double) -> Unit = {}
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    stringResource(R.string.route_config),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                // 路線頁只配置自動路線；手動控制由系統懸浮搖桿處理。
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            stringResource(R.string.loop_auto),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            stringResource(R.string.loop_description),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            stringResource(R.string.movement_speed),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(
-                                SimMode.WALKING, SimMode.RUNNING,
-                                SimMode.CYCLING, SimMode.DRIVING
-                            ).forEach { mode ->
-                                FilterChip(
-                                    selected = uiState.routeSimMode == mode,
-                                    onClick = { onSpeedChange(mode) },
-                                    label = {
-                                        Text(
-                                            "${when(mode){
-                                                SimMode.WALKING -> stringResource(R.string.walking)
-                                                SimMode.RUNNING -> stringResource(R.string.running)
-                                                SimMode.CYCLING -> stringResource(R.string.cycling)
-                                                SimMode.DRIVING -> stringResource(R.string.driving)
-                                                else -> stringResource(R.string.custom)
-                                            }}\n${mode.speedMs.toInt()}m/s",
-                                            fontSize = 11.sp,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
-                                        selectedLabelColor = MaterialTheme.colorScheme.secondary
-                                    )
-                                )
+    var customInput by remember { mutableStateOf(uiState.customSpeedMs.toString()) }
+    val modes = listOf(SimMode.WALKING, SimMode.RUNNING, SimMode.CYCLING, SimMode.DRIVING, SimMode.CUSTOM)
+    val customSpeed = customInput.toDoubleOrNull()
+    val validSpeed = customSpeed != null && customSpeed.isFinite() && customSpeed in 0.1..100.0
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.Route, null) },
+        title = { Text(stringResource(R.string.route_config)) },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).selectableGroup(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.loop_auto), style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Text(stringResource(R.string.loop_description), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    }
+                }
+                Text(stringResource(R.string.movement_speed), style = MaterialTheme.typography.titleMedium)
+                // Connected toggles retain official checked/pressed shape morphing. Two columns also fit larger fonts.
+                modes.chunked(2).forEach { row ->
+                    Row(Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+                        row.forEachIndexed { index, mode ->
+                            ToggleButton(checked = uiState.routeSimMode == mode,
+                                onCheckedChange = { onSpeedChange(mode) },
+                                modifier = Modifier.weight(1f).heightIn(min = 56.dp)
+                                    .semantics { role = androidx.compose.ui.semantics.Role.RadioButton },
+                                shapes = when {
+                                    row.size == 1 -> ToggleButtonDefaults.shapesFor(56.dp)
+                                    index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                    else -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                }) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(stringResource(when (mode) {
+                                        SimMode.WALKING -> R.string.walking
+                                        SimMode.RUNNING -> R.string.running
+                                        SimMode.CYCLING -> R.string.cycling
+                                        SimMode.DRIVING -> R.string.driving
+                                        else -> R.string.custom
+                                    }))
+                                    if (mode != SimMode.CUSTOM) Text(
+                                        stringResource(R.string.route_speed_value, mode.speedMs),
+                                        style = MaterialTheme.typography.labelSmall)
+                                }
                             }
                         }
-                        // 自定义速度输入
-                        AnimatedVisibility(uiState.routeSimMode == SimMode.CUSTOM) {
-                            var customInput by remember { mutableStateOf(uiState.customSpeedMs.toString()) }
-                            OutlinedTextField(
-                                value = customInput,
-                                onValueChange = { v ->
-                                    customInput = v
-                                    v.toDoubleOrNull()?.let { onCustomSpeedChange(it) }
-                                },
-                                label = { Text(stringResource(R.string.speed_unit)) },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                        }
+                    }
                 }
-
-                // 操作按钮
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text(stringResource(R.string.cancel)) }
-                    Button(
-                        onClick = onStartRoute,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) { Text(stringResource(R.string.start_simulation), fontWeight = FontWeight.Bold) }
+                AnimatedVisibility(uiState.routeSimMode == SimMode.CUSTOM) {
+                    OutlinedTextField(value = customInput, onValueChange = { value ->
+                        customInput = value
+                        value.toDoubleOrNull()?.takeIf { it.isFinite() && it in 0.1..100.0 }?.let(onCustomSpeedChange)
+                    }, label = { Text(stringResource(R.string.speed_unit)) },
+                        supportingText = { Text(stringResource(R.string.route_speed_range)) },
+                        isError = !validSpeed,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
             }
-        }
-    }
+        },
+        confirmButton = {
+            Button(onClick = onStartRoute, shapes = ButtonDefaults.shapes(),
+                enabled = uiState.routeSimMode != SimMode.CUSTOM || validSpeed) {
+                Icon(Icons.Rounded.PlayArrow, null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.start_simulation))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
 }
 
-// 地图悬浮按钮辅助
-
+// Official expressive icon buttons share the glass surface and expose a long-press label.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MapFab(
-    icon: ImageVector,
-    contentDescription: String,
-    enabled: Boolean = true,
-    containerColor: Color,
-    contentColor: Color,
-    onClick: () -> Unit
-) {
-    FloatingActionButton(
-        onClick = { if (enabled) onClick() },
-        modifier = Modifier.size(44.dp),
-        containerColor = if (enabled) containerColor else containerColor.copy(alpha = 0.38f),
-        contentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.38f),
-        shape = CircleShape
-    ) {
-        Icon(icon, contentDescription, modifier = Modifier.size(20.dp))
+private fun MapToolButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Start),
+        tooltip = { PlainTooltip { Text(label) } }, state = rememberTooltipState()) {
+        FilledTonalIconButton(onClick = onClick, shapes = IconButtonDefaults.shapes(),
+            modifier = Modifier.size(48.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
+                contentColor = MaterialTheme.colorScheme.onSurface)) {
+            Icon(icon, label, Modifier.size(24.dp))
+        }
     }
 }
 

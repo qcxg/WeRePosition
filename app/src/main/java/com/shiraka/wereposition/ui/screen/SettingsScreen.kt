@@ -74,7 +74,6 @@ fun SettingsScreen(
     var googleApiTest by remember { mutableStateOf(ApiTestUiState()) }
     var wigleApiTest by remember { mutableStateOf(ApiTestUiState()) }
     var openCellIdApiTest by remember { mutableStateOf(ApiTestUiState()) }
-    var showAppAccessPage by remember { mutableStateOf(false) }
     val apiTestScope = rememberCoroutineScope()
     var updateChecking by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
@@ -85,14 +84,9 @@ fun SettingsScreen(
     val savedLanguage = uiState.currentLanguage.ifBlank { viewModel.getSavedLanguage() }
     val selectedLanguageName = LANGUAGES.firstOrNull { it.code == savedLanguage }?.nativeName ?: savedLanguage.ifBlank { "System" }
 
-    LaunchedEffect(currentPage, showAppAccessPage) {
-        onSubpageChanged(currentPage != "home" || showAppAccessPage)
-    }
-
-    if (showAppAccessPage) {
-        LaunchedEffect(Unit) { viewModel.loadInstalledApps() }
-        AppAccessScreen(viewModel = viewModel, uiState = uiState, onBack = { showAppAccessPage = false })
-        return
+    LaunchedEffect(currentPage) {
+        onSubpageChanged(currentPage != "home")
+        if (currentPage == "app_access") viewModel.loadInstalledApps()
     }
 
     BackHandler(currentPage != "home") { currentPage = "home" }
@@ -102,6 +96,7 @@ fun SettingsScreen(
         "location" -> stringResource(R.string.settings_location)
         "environment" -> stringResource(R.string.settings_environment)
         "connections" -> stringResource(R.string.specified_connections_title)
+        "app_access" -> stringResource(R.string.app_access_title)
         "permissions" -> stringResource(R.string.setup_permissions)
         "about" -> stringResource(R.string.settings_about)
         else -> stringResource(R.string.settings)
@@ -130,7 +125,9 @@ fun SettingsScreen(
                 .weight(1f)
                 .clipToBounds()
         ) { page ->
-        if (page == "permissions") {
+        if (page == "app_access") {
+            AppAccessScreen(viewModel, uiState, onBack = { currentPage = "home" }, showHeader = false)
+        } else if (page == "permissions") {
             SetupScreen(viewModel, uiState, onClose = { currentPage = "home" }, showHeader = false)
         } else {
             Column(
@@ -152,7 +149,7 @@ fun SettingsScreen(
                         HorizontalDivider(Modifier.padding(horizontal = 18.dp),
                             color = MaterialTheme.colorScheme.outlineVariant)
                         SettingsMenuItem(stringResource(R.string.app_access_title),
-                            stringResource(R.string.app_access_summary)) { showAppAccessPage = true }
+                            stringResource(R.string.app_access_summary)) { currentPage = "app_access" }
                         HorizontalDivider(Modifier.padding(horizontal = 18.dp),
                             color = MaterialTheme.colorScheme.outlineVariant)
                         SettingsMenuItem(stringResource(R.string.specified_connections_title),

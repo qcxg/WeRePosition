@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="specified_ssid_error">請填寫網路名稱（SSID）。</string>
+    <string name="specified_bssid_error">請輸入六組十六進位 MAC；不能使用 Android 隱藏位址 02:00:00:00:00:00。</string>
+    <string name="specified_bssid_hint">支援冒號、橫線、點分和 12 位連續 MAC 寫法。BSSID 本身不含國家資訊。</string>
+    <string name="specified_mac_error">裝置 MAC 格式不正確；不需要時可留空。</string>
+    <string name="specified_ip_error">請填寫四段 0–255 的十進位數字，或留空。</string>
+</resources>

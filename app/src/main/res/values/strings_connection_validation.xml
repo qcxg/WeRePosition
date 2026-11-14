@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="specified_ssid_error">Enter the network name (SSID).</string>
+    <string name="specified_bssid_error">Enter a six-byte hexadecimal MAC address. Android’s hidden address 02:00:00:00:00:00 cannot be used.</string>
+    <string name="specified_bssid_hint">Colon, hyphen, dotted and 12-digit MAC formats are accepted. A BSSID does not encode a country.</string>
+    <string name="specified_mac_error">Invalid device MAC address. Leave blank if it is not needed.</string>
+    <string name="specified_ip_error">Use four decimal octets from 0 to 255, or leave blank.</string>
+</resources>

@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.shiraka.wereposition.data.model.RoutePoint
+import com.shiraka.wereposition.data.model.ActiveRouteSession
+import com.shiraka.wereposition.data.model.SimMode
 import com.shiraka.wereposition.provider.SpooferProvider
 import com.shiraka.wereposition.service.SpoofingService
 import com.shiraka.wereposition.utils.ConfigManager
@@ -34,6 +36,46 @@ class LocationRepository(
 
     fun isModuleActive(): Boolean = lsposedManager.isModuleActive()
 
+    fun runningRoute(): ActiveRouteSession? {
+        val token = SpooferProvider.runtimeLifecycleToken
+        if (!SpoofingService.isRunning || !SpooferProvider.isActive || !SpooferProvider.isRouteMode) return null
+        val points = ActiveRouteSession.parsePoints(SpooferProvider.routeJson)
+        val mode = runCatching { SimMode.valueOf(SpooferProvider.simMode) }.getOrNull() ?: return null
+        val speed = if (mode == SimMode.CUSTOM) SpooferProvider.simSpeed else mode.speedMs.toFloat()
+        if (points.size < 2 || !speed.isFinite() || speed !in 0.1f..100f ||
+            token != SpooferProvider.runtimeLifecycleToken || !SpooferProvider.isActive) return null
+        return ActiveRouteSession(points, mode, speed, SpooferProvider.startTimestamp)
+    }
+
+    suspend fun reconnectActiveRoute(context: Context): ActiveRouteSession? {
+        runningRoute()?.let { return it }
+        if (SpoofingService.isRunning || SpooferProvider.isActive || !settingsManager.isSpoofingActive) return null
+        val expectedGeneration = lifecycleGeneration.get()
+        // Read the authoritative snapshot and stop fence together; preferences alone
+        // cannot distinguish a killed host from an explicitly stopped/old-boot run.
+        val output = rootManager.executeCommand("""
+            read_route_session() {
+                flock -x 9 || return 73
+                cat /proc/sys/kernel/random/boot_id
+                printf '%s\n' "${'$'}(getprop gsm.wrp.stop_generation)"
+                cat /data/local/tmp/wereposition_config.json
+            }
+            read_route_session 9>/data/local/tmp/wereposition_runtime.lock
+        """.trimIndent()).split('\n', limit = 3)
+        if (output.size != 3) return null
+        val stop = output[1].trim().let { if (it.isEmpty()) 0L else it.toLongOrNull() } ?: return null
+        val session = ActiveRouteSession.fromSnapshot(output[2], output[0].trim(), stop) ?: return null
+        startSpoofing(context, session.points.first().lat, session.points.first().lng,
+            session.mode.name, 0f, session.startedAt, session.points, true,
+            mockWifi = settingsManager.mockWifi, mockCell = settingsManager.mockCell,
+            enableJitter = settingsManager.enableJitter,
+            jitterRadiusMeters = settingsManager.jitterRadiusMeters, jitterSpeed = settingsManager.jitterSpeed,
+            signalJitterEnabled = settingsManager.signalJitterEnabled, signalJitterLevel = settingsManager.signalJitterLevel,
+            wifiConnectionMode = settingsManager.wifiConnectionMode,
+            speedOverrideMs = session.speedMs, expectedLifecycleGeneration = expectedGeneration)
+        return runningRoute()
+    }
+
     suspend fun startSpoofing(
         context: Context,
         lat: Double,
@@ -55,21 +97,26 @@ class LocationRepository(
         wifiConnectionMode: String = SpooferProvider.wifiConnectionMode,
         syntheticCycleSeed: Long = 0L,
         syntheticWifi: Boolean = false,
-        syntheticCell: Boolean = false
+        syntheticCell: Boolean = false,
+        speedOverrideMs: Float = 0f,
+        expectedLifecycleGeneration: Long? = null
     ) {
         if (settingsManager.moduleRestartRequired) {
             throw IllegalStateException("模組已更新，請在方便解鎖時重啟設備後再啟用模擬")
         }
         val pureMode = settingsManager.pureModeEnabled
-        if (pureMode) {
-            // Arm the system_server guard before changing the location master switch.
-            if (!rootManager.setPureArmed(true) || !rootManager.setLocationMasterEnabled(false)) {
-                throw IllegalStateException("Pure 模式無法安全準備系統定位")
-            }
-        }
         val alt = settingsManager.altitude.toDoubleOrNull() ?: 0.0
         val satCount = settingsManager.satelliteCount.toIntOrNull() ?: 20
         val generation = lifecycleMutex.withLock {
+            if (expectedLifecycleGeneration != null && lifecycleGeneration.get() != expectedLifecycleGeneration) {
+                throw kotlinx.coroutines.CancellationException("Route recovery superseded by a lifecycle action")
+            }
+            if (pureMode) {
+                // Keep recovery and explicit stop ordered, including the location switch.
+                if (!rootManager.setPureArmed(true) || !rootManager.setLocationMasterEnabled(false)) {
+                    throw IllegalStateException("Pure 模式無法安全準備系統定位")
+                }
+            }
             val nextGeneration = lifecycleGeneration.incrementAndGet()
             SpooferProvider.runtimeLifecycleToken = nextGeneration
             SpooferProvider.syntheticCycleSeed = syntheticCycleSeed
@@ -81,6 +128,7 @@ class LocationRepository(
             SpooferProvider.publishRuntimeHeartbeat(startTime)
             SpooferProvider.startTimestamp = startTime
             SpooferProvider.simMode = simMode
+            SpooferProvider.simSpeed = speedOverrideMs
             SpooferProvider.simBearing = simBearing
             SpooferProvider.routeJson = routePointsToJson(routePoints)
             SpooferProvider.isRouteMode = isRouteMode

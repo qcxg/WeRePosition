@@ -151,7 +151,7 @@ class SpoofingService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "SpoofingServiceChannel"
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
-        private const val JOYSTICK_TICK_INTERVAL_MS = 250L
+        private const val JOYSTICK_TICK_INTERVAL_MS = 100L
         private const val LOCATION_DISABLED_TICK_INTERVAL_MS = 60_000L
         private const val FIXED_CONFIG_WRITE_INTERVAL_MS = 60_000L
         private const val RUNTIME_FRAME_HEARTBEAT_INTERVAL_MS = 10_000L
@@ -300,11 +300,10 @@ class SpoofingService : Service() {
                             val currentLoc = computeCurrentLocation()
                             val rfSnapshot = resolveRuntimeRfSnapshot(currentLoc)
                             val wallNow = System.currentTimeMillis()
-                            SpooferProvider.publishCurrentPosition(
-                                currentLoc.lat,
-                                currentLoc.lng,
-                                currentLoc.bearing,
-                                currentLoc.speed
+                            // The overlay input owns the latest position while visible. An IO
+                            // tick must not overwrite a newer turn/release sampled on the UI thread.
+                            if (!isJoystickVisible) SpooferProvider.publishCurrentPosition(
+                                currentLoc.lat, currentLoc.lng, currentLoc.bearing, currentLoc.speed
                             )
                             SpooferProvider.publishRuntimeHeartbeat(wallNow, currentBootId)
 
@@ -329,7 +328,7 @@ class SpoofingService : Service() {
                             val frameHeartbeatDue = nowUptime - lastRuntimeFrameWriteUptimeMs >=
                                 RUNTIME_FRAME_HEARTBEAT_INTERVAL_MS
                             val overlayWriteDue = locationEnabled && !fullWriteDue &&
-                                (moving || positionChanged || frameHeartbeatDue)
+                                (positionChanged || frameHeartbeatDue || (moving && !isJoystickVisible))
                             val retryDelay = WRITE_RETRY_BACKOFF_MS[
                                 (consecutiveWriteFailures - 1).coerceIn(
                                     0,
@@ -359,7 +358,7 @@ class SpoofingService : Service() {
                                 if (writerSuperseded) break
                                 if (committed) {
                                     consecutiveWriteFailures = 0
-                                    lastPublishedPosition = positionFingerprint
+                                    if (fullWriteDue) lastPublishedPosition = positionFingerprint
                                     lastRuntimeFrameWriteUptimeMs = SystemClock.uptimeMillis()
                                     if (fullWriteDue) {
                                         lastPersistedFingerprint = fingerprint
@@ -692,10 +691,9 @@ class SpoofingService : Service() {
         val oldCell = EnvironmentCoveragePolicy.cellFor(anchor.latitude, anchor.longitude)
         SpooferProvider.publishAnchorPosition(lat, lng)
         SpooferProvider.publishCurrentPosition(lat, lng, bearing.toFloat(), speed)
-        if (!joystickMoving) {
-            joystickMoving = true
-            locationStateWake.trySend(Unit)
-        }
+        joystickMoving = true
+        // One conflated wake only: turns replace old input, never enqueue drag positions.
+        locationStateWake.trySend(Unit)
         if (EnvironmentCoveragePolicy.cellFor(lat, lng) != oldCell) SpooferProvider.requestRfRefresh()
     }
 
@@ -725,54 +723,59 @@ class SpoofingService : Service() {
 
     private suspend fun writeRuntimePositionOverlay(loc: SimulatedLocation): Boolean {
         if (!SpooferProvider.isActive) return false
-        val snapshotGeneration = lastFullSnapshotGeneration
-        if (snapshotGeneration <= 0L) return false
         val writeGeneration = RuntimeConfigWriteCoordinator.newGeneration()
-        val heartbeatUptimeMs = SystemClock.uptimeMillis()
-        val runtimeFrame = encodeRuntimeFrame(
-            active = true,
-            snapshotGeneration = snapshotGeneration,
-            heartbeatUptimeMs = heartbeatUptimeMs,
-            location = loc
-        )
-        val command = """
-            wereposition_generation_gt() {
-                left="${'$'}1"
-                right="${'$'}2"
-                [ "${'$'}{#left}" -gt "${'$'}{#right}" ] && return 0
-                [ "${'$'}{#left}" -lt "${'$'}{#right}" ] && return 1
-                [ "${'$'}left" = "${'$'}right" ] && return 1
-                [ "${'$'}left" \> "${'$'}right" ]
-            }
-            wereposition_overlay_write() {
-                flock -x 9 || return 73
-                writer_status=0
-                locked_snapshot_generation="${'$'}(getprop gsm.wrp.snapshot_generation)"
-                locked_stop_generation="${'$'}(getprop gsm.wrp.stop_generation)"
-                case "${'$'}locked_snapshot_generation" in
-                    ''|*[!0-9]*) locked_snapshot_generation=0 ;;
-                esac
-                case "${'$'}locked_stop_generation" in
-                    ''|*[!0-9]*) locked_stop_generation=0 ;;
-                esac
-                if [ "${'$'}locked_stop_generation" = "$snapshotGeneration" ] ||
-                    wereposition_generation_gt "${'$'}locked_stop_generation" "$snapshotGeneration" ||
-                    [ "${'$'}locked_snapshot_generation" != "$snapshotGeneration" ]; then
-                    printf '%s\n' "$STALE_WRITER_MARKER" || writer_status=${'$'}?
-                else
-                    setprop gsm.wrp.frame "$runtimeFrame" || writer_status=${'$'}?
-                fi
-                flock -u 9 || writer_status=${'$'}?
-                test "${'$'}writer_status" -eq 0
-            }
-            wereposition_overlay_write 9>/data/local/tmp/wereposition_runtime.lock
-        """.trimIndent()
         return RuntimeConfigWriteCoordinator.commitIfLatest(writeGeneration) {
             if (!SpooferProvider.isActive) return@commitIfLatest false
+            val snapshotGeneration = lastFullSnapshotGeneration
+            if (snapshotGeneration <= 0L) return@commitIfLatest false
+            val latestLocation = if (isJoystickVisible) computeCurrentLocation() else loc
+            val heartbeatUptimeMs = SystemClock.uptimeMillis()
+            val runtimeFrame = encodeRuntimeFrame(
+                active = true,
+                snapshotGeneration = snapshotGeneration,
+                heartbeatUptimeMs = heartbeatUptimeMs,
+                location = latestLocation
+            )
+            val command = """
+                wereposition_generation_gt() {
+                    left="${'$'}1"
+                    right="${'$'}2"
+                    [ "${'$'}{#left}" -gt "${'$'}{#right}" ] && return 0
+                    [ "${'$'}{#left}" -lt "${'$'}{#right}" ] && return 1
+                    [ "${'$'}left" = "${'$'}right" ] && return 1
+                    [ "${'$'}left" \> "${'$'}right" ]
+                }
+                wereposition_overlay_write() {
+                    flock -x 9 || return 73
+                    writer_status=0
+                    locked_snapshot_generation="${'$'}(getprop gsm.wrp.snapshot_generation)"
+                    locked_stop_generation="${'$'}(getprop gsm.wrp.stop_generation)"
+                    case "${'$'}locked_snapshot_generation" in
+                        ''|*[!0-9]*) locked_snapshot_generation=0 ;;
+                    esac
+                    case "${'$'}locked_stop_generation" in
+                        ''|*[!0-9]*) locked_stop_generation=0 ;;
+                    esac
+                    if [ "${'$'}locked_stop_generation" = "$snapshotGeneration" ] ||
+                        wereposition_generation_gt "${'$'}locked_stop_generation" "$snapshotGeneration" ||
+                        [ "${'$'}locked_snapshot_generation" != "$snapshotGeneration" ]; then
+                        printf '%s\n' "$STALE_WRITER_MARKER" || writer_status=${'$'}?
+                    else
+                        setprop gsm.wrp.frame "$runtimeFrame" || writer_status=${'$'}?
+                    fi
+                    flock -u 9 || writer_status=${'$'}?
+                    test "${'$'}writer_status" -eq 0
+                }
+                wereposition_overlay_write 9>/data/local/tmp/wereposition_runtime.lock
+            """.trimIndent()
             val result = rootManager.executePersistentCommand(command)
             if (consumeStaleWriterMarker(result)) return@commitIfLatest false
             if (result == "ERROR") {
                 logRuntimeErrorThrottled(IllegalStateException("root position overlay failed"))
+            }
+            if (result != "ERROR") {
+                lastPublishedPosition = RuntimePositionFingerprint(latestLocation.lat, latestLocation.lng,
+                    latestLocation.bearing, latestLocation.speed)
             }
             result != "ERROR"
         }

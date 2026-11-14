@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.Box
@@ -170,19 +171,26 @@ private enum class MainTab(val label: Int, val icon: androidx.compose.ui.graphic
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 fun MainScreen(
     viewModel: MainViewModel,
     uiState: com.shiraka.wereposition.data.model.AppState,
     isDark: Boolean
 ) {
-    var isFullScreenMap by remember { mutableStateOf(false) }
-    var isScannerMap by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableStateOf(MainTab.FIXED) }
+    var isFullScreenMap by rememberSaveable { mutableStateOf(false) }
+    var isScannerMap by rememberSaveable { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableStateOf(MainTab.FIXED) }
     var settingsSubpage by remember { mutableStateOf(false) }
     var showPermissions by remember { mutableStateOf(false) }
     var permissionRevision by remember { mutableIntStateOf(0) }
     val activity = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(uiState.isInitializing, uiState.routePlanStage) {
+        if (!uiState.isInitializing && uiState.routePlanStage == com.shiraka.wereposition.data.model.RoutePlanStage.RUNNING) {
+            selectedTab = MainTab.JOYSTICK
+            isFullScreenMap = true
+        }
+    }
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) permissionRevision++
@@ -241,6 +249,11 @@ fun MainScreen(
                 })
             }
             else -> when {
+                // Reconnect runtime state before mounting an editable fixed-point map.
+                // Its initial camera-idle callback must not overwrite a recovering route.
+                uiState.isInitializing -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.LoadingIndicator()
+                }
                 isFullScreenMap -> FullScreenMapPage(
                     viewModel = viewModel, uiState = uiState, isDark = isDark,
                     isInPipMode = false, onClose = closeMapAndResetRouteIfNeeded

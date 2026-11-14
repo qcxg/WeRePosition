@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -34,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.data.model.AppState
@@ -70,6 +72,8 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
     val savedText = stringResource(R.string.settings_saved)
     val unavailableText = stringResource(R.string.specified_import_unavailable)
     val permissionText = stringResource(R.string.specified_bluetooth_permission)
+    val invalidIpText = stringResource(R.string.specified_ip_error)
+    fun ipError(value: String) = invalidIpText.takeIf { value.isNotBlank() && !SpecifiedWifiConnection.validIpv4(value) }
 
     fun importBluetooth() {
         bondedDevices = runCatching { importer.bondedClassicBluetooth() }.getOrDefault(emptyList())
@@ -106,9 +110,9 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
     }) { Text(stringResource(R.string.specified_import_saved_wifi)) }
     Text(stringResource(R.string.specified_wifi_import_note), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
-    SpecifiedField(wifi.ssid, { wifi = wifi.copy(ssid = it) }, stringResource(R.string.specified_ssid))
-    SpecifiedField(wifi.bssid, { wifi = wifi.copy(bssid = it) }, stringResource(R.string.specified_bssid))
-    SpecifiedField(wifi.macAddress, { wifi = wifi.copy(macAddress = it) }, stringResource(R.string.specified_mac))
+    SpecifiedField(wifi.ssid, { wifi = wifi.copy(ssid = it) }, stringResource(R.string.specified_ssid), error = if (wifi.ssid.isBlank()) stringResource(R.string.specified_ssid_error) else null)
+    SpecifiedField(wifi.bssid, { wifi = wifi.copy(bssid = it) }, stringResource(R.string.specified_bssid), error = if (!wifi.hasValidBssid) stringResource(R.string.specified_bssid_error) else null, hint = stringResource(R.string.specified_bssid_hint), ascii = true)
+    SpecifiedField(wifi.macAddress, { wifi = wifi.copy(macAddress = it) }, stringResource(R.string.specified_mac), error = if (wifi.macAddress.isNotBlank() && SpecifiedWifiConnection.normalizedMac(wifi.macAddress) == null) stringResource(R.string.specified_mac_error) else null, ascii = true)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         SpecifiedField(frequency, { frequency = it }, stringResource(R.string.specified_frequency), Modifier.weight(1f))
         SpecifiedField(rssi, { rssi = it }, stringResource(R.string.specified_rssi), Modifier.weight(1f))
@@ -116,18 +120,14 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
     SpecifiedField(linkSpeed, { linkSpeed = it }, stringResource(R.string.specified_link_speed))
     SpecifiedField(wifiStandard, { wifiStandard = it }, stringResource(R.string.specified_wifi_standard))
     SpecifiedField(wifi.capabilities, { wifi = wifi.copy(capabilities = it) }, stringResource(R.string.specified_capabilities))
-    SpecifiedField(ipAddress, { ipAddress = it }, stringResource(R.string.specified_ip))
-    SpecifiedField(gateway, { gateway = it }, stringResource(R.string.specified_gateway))
+    SpecifiedField(ipAddress, { ipAddress = it }, stringResource(R.string.specified_ip), error = ipError(ipAddress))
+    SpecifiedField(gateway, { gateway = it }, stringResource(R.string.specified_gateway), error = ipError(gateway))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        SpecifiedField(dns1, { dns1 = it }, "DNS 1", Modifier.weight(1f))
-        SpecifiedField(dns2, { dns2 = it }, "DNS 2", Modifier.weight(1f))
+        SpecifiedField(dns1, { dns1 = it }, "DNS 1", Modifier.weight(1f), error = ipError(dns1))
+        SpecifiedField(dns2, { dns2 = it }, "DNS 2", Modifier.weight(1f), error = ipError(dns2))
     }
     }
     val wifiDraft = wifi.copy(ipAddress = ipAddress, gateway = gateway, dns1 = dns1, dns2 = dns2)
-    if (wifiEnabled && !wifiDraft.isValid) {
-        Text(stringResource(R.string.specified_wifi_validation), color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall)
-    }
     if (wifiEnabled) Button(onClick = {
         val value = wifi.copy(
             frequency = frequency.toIntOrNull()?.coerceIn(1, 71000) ?: 2412,
@@ -167,7 +167,7 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
         Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             Text(stringResource(R.string.specified_device_number, index + 1), style = MaterialTheme.typography.labelLarge)
             SpecifiedField(device.name, { value -> updateDevice(index) { it.copy(device = it.device.copy(name = value)) } }, stringResource(R.string.specified_device_name))
-            SpecifiedField(device.address, { value -> updateDevice(index) { it.copy(device = it.device.copy(address = value)) } }, stringResource(R.string.specified_mac))
+            SpecifiedField(device.address, { value -> updateDevice(index) { it.copy(device = it.device.copy(address = value)) } }, stringResource(R.string.specified_mac), ascii = true)
             SpecifiedField(device.alias, { value -> updateDevice(index) { it.copy(device = it.device.copy(alias = value)) } }, stringResource(R.string.specified_device_alias))
             SpecifiedField(draft.deviceClassText, { value -> updateDevice(index) { it.copy(deviceClassText = value) } }, stringResource(R.string.specified_device_class))
             SpecifiedField(draft.uuidsText, { value -> updateDevice(index) { it.copy(uuidsText = value) } }, stringResource(R.string.specified_device_uuids))
@@ -230,10 +230,15 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
 
 @Composable
 private fun SpecifiedField(value: String, onValueChange: (String) -> Unit, label: String,
-                           modifier: Modifier = Modifier.fillMaxWidth()) {
+                           modifier: Modifier = Modifier, error: String? = null, hint: String? = null,
+                           ascii: Boolean = false) {
     OutlinedTextField(
         value = value, onValueChange = onValueChange, label = { Text(label) },
-        singleLine = true, modifier = modifier.padding(top = 8.dp)
+        singleLine = true, modifier = modifier.fillMaxWidth().padding(top = 8.dp),
+        keyboardOptions = if (ascii) KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false)
+            else KeyboardOptions.Default,
+        isError = error != null,
+        supportingText = if (error != null || hint != null) ({ Text(error ?: hint.orEmpty()) }) else null
     )
 }
 

@@ -19,15 +19,22 @@ data class SpecifiedWifiConnection(
     val security: String = "",
     val capabilities: String = ""
 ) {
-    val isValid: Boolean get() = ssid.isNotBlank() && MAC_REGEX.matches(bssid) &&
-        !bssid.equals("02:00:00:00:00:00", true) &&
-        (macAddress.isBlank() || MAC_REGEX.matches(macAddress)) &&
+    val hasValidBssid: Boolean get() = normalizedMac(bssid)?.let {
+        it != "02:00:00:00:00:00"
+    } == true
+
+    val isValid: Boolean get() = ssid.isNotBlank() && hasValidBssid &&
+        (macAddress.isBlank() || normalizedMac(macAddress) != null) &&
         listOf(ipAddress, gateway, dns1, dns2).all { it.isBlank() || validIpv4(it) }
+
+    fun normalized() = copy(ssid = ssid.trim(), bssid = normalizedMac(bssid) ?: bssid.trim(),
+        macAddress = normalizedMac(macAddress) ?: macAddress.trim(), ipAddress = ipAddress.trim(),
+        gateway = gateway.trim(), dns1 = dns1.trim(), dns2 = dns2.trim())
 
     fun toJson() = JSONObject().apply {
         put("ssid", ssid.trim())
-        put("bssid", bssid.trim())
-        put("macAddress", macAddress.trim())
+        put("bssid", normalizedMac(bssid) ?: bssid.trim())
+        put("macAddress", normalizedMac(macAddress) ?: macAddress.trim())
         put("frequency", frequency)
         put("level", rssi)
         put("linkSpeed", linkSpeed)
@@ -43,9 +50,12 @@ data class SpecifiedWifiConnection(
 
     companion object {
         val MAC_REGEX = Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")
+        private val DECIMAL_OCTET = Regex("[0-9]{1,3}")
 
-        private fun validIpv4(value: String): Boolean = value.split('.').let { octets ->
-            octets.size == 4 && octets.all { it.toIntOrNull() in 0..255 }
+        fun normalizedMac(value: String): String? = com.shiraka.wereposition.utils.MacAddressInput.normalize(value)
+
+        fun validIpv4(value: String): Boolean = value.trim().split('.').let { octets ->
+            octets.size == 4 && octets.all { it.matches(DECIMAL_OCTET) && it.toIntOrNull() in 0..255 }
         }
 
         fun fromJson(value: String): SpecifiedWifiConnection = runCatching {

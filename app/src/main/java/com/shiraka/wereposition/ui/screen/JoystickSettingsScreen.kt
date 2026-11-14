@@ -187,7 +187,8 @@ fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRo
         Text(stringResource(R.string.joystick_overlay_permission), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         HorizontalDivider()
-        FilledTonalButton(onClick = onPlanRoute, modifier = Modifier.fillMaxWidth()) {
+        FilledTonalButton(onClick = onPlanRoute, shapes = ButtonDefaults.shapesFor(56.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             Icon(Icons.Outlined.Route, null)
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.route_planning))
