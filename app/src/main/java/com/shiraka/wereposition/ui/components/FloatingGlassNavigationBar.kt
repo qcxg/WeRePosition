@@ -200,6 +200,7 @@ fun FloatingGlassNavigationBar(
                 )
                 .clip(CircleShape)
                 .hazeEffect(state = hazeState) {
+                    backgroundColor = scheme.surface
                     blurRadius = 18.dp
                     noiseFactor = 0.03f
                     inputScale = HazeInputScale.Fixed(0.5f)

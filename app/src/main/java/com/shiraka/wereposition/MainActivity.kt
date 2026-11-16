@@ -266,7 +266,9 @@ fun MainScreen(
                     val hazeState = rememberHazeState()
                     val navigationItems = MainTab.entries.map { GlassNavigationItem(stringResource(it.label), it.icon) }
                     Box(Modifier.fillMaxSize()) {
-                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).hazeSource(hazeState)) {
+                        // Record the opaque page background too. Transparent source edges would
+                        // otherwise blend the original sharp button back through the blurred layer.
+                        Box(Modifier.fillMaxSize().hazeSource(hazeState).background(MaterialTheme.colorScheme.background)) {
                             AnimatedContent(
                                 targetState = selectedTab,
                                 transitionSpec = {

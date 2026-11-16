@@ -1,6 +1,6 @@
 # Android App 的 MD3e 遷移與配色實作
 
-適用於使用 Kotlin 與 Jetpack Compose 的 Android App；以 WeRePosition 2.1.2 為實作範例，版本資料核對於 2026 年 11 月 17 日。完成遷移需要同時接好主題、顏色角色、互動元件與動態，而不只是增加圓角。UI 遷移不需要 WeRePosition 的 Root、LSPosed、位置服務或特殊權限。
+適用於使用 Kotlin 與 Jetpack Compose 的 Android App；以 WeRePosition 2.1.3 為實作範例，版本資料核對於 2026 年 11 月 17 日。完成遷移需要同時接好主題、顏色角色、互動元件與動態，而不只是增加圓角。UI 遷移不需要 WeRePosition 的 Root、LSPosed、位置服務或特殊權限。
 
 可直接複用的起點是 [範例目錄](examples/md3e/)：`BrandColors.kt` 提供完整明暗色盤，`AppTheme.kt` 接入系統動態取色與 Expressive 主題，`SettingsToggle.kt` 示範帶勾／叉的開關列。這些檔案使用獨立的 `md3e.example` 包名，移入另一個 App 時一併調整。
 
@@ -141,6 +141,8 @@ Switch(
 ```
 
 `hazeSource` 與 `hazeEffect` 應屬於同一個設計範圍，避免把工具列自身再錄入背景。來源放在需要被取樣的內容，浮動表面使用同一份 `HazeState`。複用元件可參考 [GlassOverlaySurface.kt](../app/src/main/java/com/shiraka/wereposition/ui/components/GlassOverlaySurface.kt) 與 [FloatingGlassNavigationBar.kt](../app/src/main/java/com/shiraka/wereposition/ui/components/FloatingGlassNavigationBar.kt)。
+
+一般頁面的取樣必須包含背景：使用 `Modifier.hazeSource(state).background(scheme.background)`，不能把背景放在取樣 modifier 外面。底欄的 `hazeEffect` 也應設定 `backgroundColor = scheme.surface`，作為模糊內容後方的不透明底色；它不是將模糊圖片蓋住的面板 tint。若來源帶透明像素，原本清晰的按鈕邊緣會透過模糊層露出來，增加 blurRadius 或 tint 都不能正確修復。[Haze 1.7.2 的底色說明](https://github.com/chrisbanes/haze/blob/1.7.2/haze/src/commonMain/kotlin/dev/chrisbanes/haze/HazeStyle.kt)
 
 WeRePosition 使用 Haze `1.7.2`、18 dp 模糊半徑、0.5 倍輸入取樣與 0.03 噪點。一般玻璃 tint 為 `surface` 的 0.38→0.24 垂直漸層；搜尋或需要較清楚內容時使用 0.88→0.80，邊界為 0.7 dp、`outlineVariant` 的 0.20 透明度。這些是專案設計值，其他 App 應依背景細節及字色調整。[Haze 專案](https://github.com/chrisbanes/haze)
 
