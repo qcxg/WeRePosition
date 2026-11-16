@@ -1529,6 +1529,13 @@ class LocationHooker : XposedModule() {
     }
 
     private fun spoofedSpeed(config: JSONObject): Float {
+        if (config.optBoolean("joystick_mode", false)) {
+            val stamp = config.optLong("heartbeat_uptime_ms", 0L)
+            val age = android.os.SystemClock.uptimeMillis() - stamp
+            // A frozen writer is not a held velocity command. Keep its last fake
+            // coordinate, but stop downstream prediction before the general TTL.
+            if (stamp <= 0L || age < 0L || age > 750L) return 0f
+        }
         val base = config.optDouble("sim_speed", 0.0).coerceAtLeast(0.0)
         if (base <= 0.05) return 0f
         val enableJitter = config.optBoolean("enable_jitter", true)
@@ -2961,6 +2968,9 @@ class LocationHooker : XposedModule() {
                     val enableJitter = runCatching {
                         c.getInt(c.getColumnIndexOrThrow("enable_jitter")) == 1
                     }.getOrDefault(true)
+                    val joystickMode = runCatching {
+                        c.getInt(c.getColumnIndexOrThrow("joystick_mode")) == 1
+                    }.getOrDefault(false)
                     val jitterRadius = runCatching {
                         c.getInt(c.getColumnIndexOrThrow("jitter_radius_meters"))
                     }.getOrDefault(DEFAULT_JITTER_RADIUS_METERS.toInt())
@@ -3007,6 +3017,7 @@ class LocationHooker : XposedModule() {
                         put("altitude", altitude)
                         put("sim_bearing", simBearing.toDouble())
                         put("sim_speed", simSpeed.toDouble())
+                        put("joystick_mode", joystickMode)
                         put("satellite_count", satelliteCount)
                         // These values are emitted by the host's sole runtime writer. The reader
                         // must never renew liveness merely because a ContentProvider query ran.

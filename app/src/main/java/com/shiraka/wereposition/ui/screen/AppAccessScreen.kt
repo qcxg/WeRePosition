@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.shiraka.wereposition.R
+import com.shiraka.wereposition.ui.components.ExpressiveSwitch
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.viewmodel.MainViewModel
 
@@ -81,13 +82,9 @@ fun AppAccessScreen(viewModel: MainViewModel, uiState: AppState, onBack: () -> U
                             Icon(Icons.Rounded.Shield, null, Modifier.size(36.dp))
                             Text(stringResource(R.string.app_access_location_heading),
                                 style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                            Switch(checked = uiState.perAppLocationEnabled,
+                            ExpressiveSwitch(checked = uiState.perAppLocationEnabled,
                                 modifier = Modifier.semantics { contentDescription = modeLabel },
-                                onCheckedChange = viewModel::setPerAppLocationEnabled,
-                                thumbContent = {
-                                    Icon(if (uiState.perAppLocationEnabled) Icons.Rounded.Check else Icons.Rounded.Close,
-                                        null, Modifier.size(SwitchDefaults.IconSize))
-                                })
+                                onCheckedChange = viewModel::setPerAppLocationEnabled)
                         }
                         Text(stringResource(R.string.app_access_location_desc), style = MaterialTheme.typography.bodyMedium)
                     }

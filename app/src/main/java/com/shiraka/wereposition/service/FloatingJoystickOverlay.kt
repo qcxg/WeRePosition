@@ -2,6 +2,9 @@ package com.shiraka.wereposition.service
 
 import android.app.Dialog
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -12,6 +15,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.widget.Toast
 import android.view.Gravity
@@ -22,6 +26,7 @@ import android.view.WindowInsets
 import android.view.WindowManager
 import com.shiraka.wereposition.R
 import com.shiraka.wereposition.utils.SettingsManager
+import com.shiraka.wereposition.utils.JoystickMotionController
 import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -29,10 +34,10 @@ import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** The touch wheel only stores input. One paced loop integrates motion without queued drag steps. */
+/** Touch updates the latest velocity command; only the service integrates position. */
 internal class FloatingJoystickOverlay(
     private val context: Context,
-    private val onMove: (Double, Float, Float, Double) -> Unit,
+    private val onMove: (Double, Float, Float, Long) -> Unit,
     private val onRelease: () -> Unit,
     private val onExitSimulation: () -> Unit
 ) : SensorEventListener {
@@ -65,26 +70,32 @@ internal class FloatingJoystickOverlay(
     private var bearing = 0.0
     private var intensity = 0f
     private var deviceHeading: Double? = null
-    private var lastTickNanos = 0L
+    private var screenReceiverRegistered = false
+    private val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) { wheelView?.release() }
+    }
     private val tick = object : Runnable {
         override fun run() {
             if (wheelDialog == null) return
-            val now = SystemClock.elapsedRealtimeNanos()
-            val elapsedSeconds = ((now - lastTickNanos).coerceIn(0L, 250_000_000L)) / 1_000_000_000.0
-            lastTickNanos = now
+            if (!power.isInteractive || wheelView?.isAttachedToWindow != true) {
+                wheelView?.release()
+            }
             val limitedSpeed = speed.coerceIn(settings.joystickMinSpeedMs, settings.joystickMaxSpeedMs)
             if (limitedSpeed != speed) {
                 speed = limitedSpeed
                 sliderView?.invalidate()
             }
-            if (moving && intensity > 0.01f) {
-                val resolvedBearing = if (settings.joystickDirectionMode == "DEVICE") {
-                    (bearing + (deviceHeading ?: 0.0)) % 360.0
-                } else bearing
-                onMove(resolvedBearing, intensity, speed, elapsedSeconds)
-            }
+            if (moving) sendInput()
             handler.postDelayed(this, 100L)
         }
+    }
+
+    private fun sendInput() {
+        val resolvedBearing = if (settings.joystickDirectionMode == "DEVICE") {
+            (bearing + (deviceHeading ?: 0.0)) % 360.0
+        } else bearing
+        onMove(resolvedBearing, intensity, speed, SystemClock.elapsedRealtimeNanos())
     }
 
     fun show(): Boolean {
@@ -113,7 +124,8 @@ internal class FloatingJoystickOverlay(
             lockDialog = createWindow(lock, controlSize, controlSize,
                 lockEnd(), controlBottom(), true)
             rotationSensor?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
-            lastTickNanos = SystemClock.elapsedRealtimeNanos()
+            context.registerReceiver(screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF), Context.RECEIVER_NOT_EXPORTED)
+            screenReceiverRegistered = true
             handler.post(tick)
             true
         }.getOrElse {
@@ -125,7 +137,10 @@ internal class FloatingJoystickOverlay(
     fun hide() {
         handler.removeCallbacks(tick)
         sensors.unregisterListener(this)
-        val wasMoving = moving
+        if (screenReceiverRegistered) {
+            context.unregisterReceiver(screenReceiver)
+            screenReceiverRegistered = false
+        }
         moving = false
         intensity = 0f
         wheelDialog?.dismiss()
@@ -139,7 +154,7 @@ internal class FloatingJoystickOverlay(
         lockView = null
         wheelView = null
         sliderView = null
-        if (wasMoving) onRelease()
+        onRelease()
     }
 
     private fun createWindow(
@@ -361,6 +376,7 @@ internal class FloatingJoystickOverlay(
         override fun onTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    release()
                     if (hypot(event.x - center, event.y - center) >= 41 * density) {
                         if (overlayLocked) return true
                         overlayPointerId = event.getPointerId(0)
@@ -369,7 +385,6 @@ internal class FloatingJoystickOverlay(
                         return true
                     }
                     pointerId = event.getPointerId(0)
-                    lastTickNanos = SystemClock.elapsedRealtimeNanos()
                     updateThumb(event.x, event.y)
                     return true
                 }
@@ -382,11 +397,11 @@ internal class FloatingJoystickOverlay(
                             moveOverlayBy(rawX - lastRawX, rawY - lastRawY)
                             lastRawX = rawX
                             lastRawY = rawY
-                        }
+                        } else release()
                         return true
                     }
                     val index = event.findPointerIndex(pointerId)
-                    if (index >= 0) updateThumb(event.getX(index), event.getY(index))
+                    if (index >= 0) updateThumb(event.getX(index), event.getY(index)) else release()
                     return true
                 }
                 MotionEvent.ACTION_POINTER_UP -> {
@@ -402,7 +417,6 @@ internal class FloatingJoystickOverlay(
                     if (overlayPointerId >= 0) {
                         overlayPointerId = -1
                         saveOverlayPosition()
-                        return true
                     }
                     release()
                     return true
@@ -411,15 +425,25 @@ internal class FloatingJoystickOverlay(
             return true
         }
 
-        private fun release() {
-            if (pointerId == -1) return
+        fun release() {
             pointerId = -1
+            overlayPointerId = -1
             moving = false
             intensity = 0f
             thumbX = 0f
             thumbY = 0f
             onRelease()
             invalidate()
+        }
+
+        override fun onDetachedFromWindow() {
+            release()
+            super.onDetachedFromWindow()
+        }
+
+        override fun onWindowVisibilityChanged(visibility: Int) {
+            super.onWindowVisibilityChanged(visibility)
+            if (visibility != VISIBLE) release()
         }
 
         private fun updateThumb(x: Float, y: Float) {
@@ -431,7 +455,9 @@ internal class FloatingJoystickOverlay(
             thumbY = dy * factor
             intensity = (hypot(thumbX, thumbY) / travel).coerceIn(0f, 1f)
             bearing = (Math.toDegrees(atan2(thumbX.toDouble(), -thumbY.toDouble())) + 360.0) % 360.0
-            moving = true
+            val wasMoving = moving
+            moving = intensity > JoystickMotionController.DEAD_ZONE
+            if (moving) sendInput() else if (wasMoving) onRelease()
             invalidate()
         }
     }

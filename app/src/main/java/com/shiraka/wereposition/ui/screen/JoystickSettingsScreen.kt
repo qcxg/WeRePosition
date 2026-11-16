@@ -33,6 +33,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRoute: () -> Unit) {
     val context = LocalContext.current
     val settings = remember(context) { SettingsManager(context) }
@@ -109,51 +110,60 @@ fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRo
         Text(stringResource(R.string.nav_joystick), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.joystick_overlay_description), style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Outlined.SportsEsports, null, tint = MaterialTheme.colorScheme.primary)
-            Text(stringResource(if (overlayVisible) R.string.joystick_ready
-                else R.string.joystick_start_hint), style = MaterialTheme.typography.titleMedium)
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.secondaryContainer) {
+            Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Outlined.SportsEsports, null, tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(if (overlayVisible) R.string.joystick_ready
+                    else R.string.joystick_start_hint), style = MaterialTheme.typography.titleMedium)
+            }
         }
 
-        Text(stringResource(R.string.joystick_direction_title), style = MaterialTheme.typography.titleMedium)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            SegmentedButton(
-                selected = directionMode == "NORTH",
-                onClick = { directionMode = "NORTH"; settings.joystickDirectionMode = "NORTH" },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-            ) { Text(stringResource(R.string.joystick_direction_north)) }
-            SegmentedButton(
-                selected = directionMode == "DEVICE",
-                onClick = { directionMode = "DEVICE"; settings.joystickDirectionMode = "DEVICE" },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-            ) { Text(stringResource(R.string.joystick_direction_device)) }
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.joystick_direction_title), style = MaterialTheme.typography.titleMedium)
+                val northLabel = stringResource(R.string.joystick_direction_north)
+                val deviceLabel = stringResource(R.string.joystick_direction_device)
+                ButtonGroup(overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(it) },
+                    modifier = Modifier.fillMaxWidth()) {
+                    toggleableItem(checked = directionMode == "NORTH", label = northLabel, weight = 1f,
+                        onCheckedChange = { if (it) { directionMode = "NORTH"; settings.joystickDirectionMode = "NORTH" } })
+                    toggleableItem(checked = directionMode == "DEVICE", label = deviceLabel, weight = 1f,
+                        onCheckedChange = { if (it) { directionMode = "DEVICE"; settings.joystickDirectionMode = "DEVICE" } })
+                }
+                Text(stringResource(if (directionMode == "NORTH") R.string.joystick_north_hint
+                    else R.string.joystick_device_hint), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Text(stringResource(if (directionMode == "NORTH") R.string.joystick_north_hint
-            else R.string.joystick_device_hint), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        Text(stringResource(R.string.joystick_speed_bounds), style = MaterialTheme.typography.titleMedium)
-        RangeSlider(
-            value = minSpeed..maxSpeed,
-            onValueChange = { range ->
-                minSpeed = range.start.coerceIn(0.5f, 19.5f)
-                maxSpeed = range.endInclusive.coerceIn(minSpeed + 0.5f, 20f)
-                settings.setJoystickSpeedBounds(minSpeed, maxSpeed)
-            },
-            valueRange = 0.5f..20f,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(String.format(Locale.US, "%.1f m/s", minSpeed),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(String.format(Locale.US, "%.1f m/s", maxSpeed),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.joystick_speed_bounds), style = MaterialTheme.typography.titleMedium)
+                val speedRange = rememberRangeSliderState(minSpeed, maxSpeed, trackRange = 0.5f..20f)
+                speedRange.endValue = maxSpeed
+                speedRange.startValue = minSpeed
+                RangeSlider(
+                    state = speedRange,
+                    onValueChange = { range ->
+                        minSpeed = range.start.coerceIn(0.5f, 19.5f)
+                        maxSpeed = range.endInclusive.coerceIn(minSpeed + 0.5f, 20f)
+                        settings.setJoystickSpeedBounds(minSpeed, maxSpeed)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(String.format(Locale.US, "%.1f m/s", minSpeed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(String.format(Locale.US, "%.1f m/s", maxSpeed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(stringResource(R.string.joystick_speed_bounds_hint), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Text(stringResource(R.string.joystick_speed_bounds_hint), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Button(onClick = {
             if (overlayVisible) {
@@ -179,7 +189,8 @@ fun JoystickSettingsScreen(viewModel: MainViewModel, uiState: AppState, onPlanRo
                         Uri.parse("package:${context.packageName}")))
                 }
             }
-        }, enabled = !uiState.isSavingConfig, modifier = Modifier.fillMaxWidth()) {
+        }, enabled = !uiState.isSavingConfig, shapes = ButtonDefaults.shapesFor(56.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             Icon(Icons.Outlined.SportsEsports, null)
             Spacer(Modifier.width(8.dp))
             Text(stringResource(if (overlayVisible) R.string.joystick_stop_mode else R.string.joystick_start_mode))

@@ -161,3 +161,7 @@ First launch walks through language selection, project/use information and conse
 ## License
 
 [GNU General Public License v3.0](LICENSE)
+
+## UI migration reference
+
+The [MD3e implementation and colour guide](docs/MD3E_IMPLEMENTATION_GUIDE.md) (Traditional Chinese) includes dynamic colours, complete brand palettes, check/cross switches, Expressive components, blur surfaces, and reusable Kotlin examples.

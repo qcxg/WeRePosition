@@ -57,7 +57,7 @@ private data class ManagedLocationGroup(
     val bluetoothSources: List<String>
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ManageDataScreen(
     viewModel: MainViewModel,
@@ -170,7 +170,8 @@ fun ManageDataScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        FilledTonalButton(onClick = onOpenScanner, modifier = Modifier.fillMaxWidth()) {
+                        FilledTonalButton(onClick = onOpenScanner, shapes = ButtonDefaults.shapesFor(56.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
                             Icon(Icons.Rounded.Map, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(R.string.env_map_scan))
@@ -178,10 +179,12 @@ fun ManageDataScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(
                                 onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                                shapes = ButtonDefaults.shapesFor(48.dp),
                                 modifier = Modifier.weight(1f)
                             ) { Text(stringResource(R.string.import_data)) }
                             OutlinedButton(
                                 onClick = { exportLauncher.launch("environment_data.json") },
+                                shapes = ButtonDefaults.shapesFor(48.dp),
                                 modifier = Modifier.weight(1f)
                             ) { Text(stringResource(R.string.export_data)) }
                         }
@@ -192,18 +195,23 @@ fun ManageDataScreen(
                 Text(stringResource(R.string.title_manage_data), style = MaterialTheme.typography.titleMedium)
             }
             item(key = "group-filters") {
+                val allLabel = stringResource(R.string.data_group_all)
+                val ungroupedLabel = stringResource(R.string.data_group_ungrouped)
                 Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 12.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilterChip(selected = selectedGroup == null, onClick = { selectedGroup = null },
-                        label = { Text(stringResource(R.string.data_group_all)) })
-                    FilterChip(selected = selectedGroup == "", onClick = { selectedGroup = "" },
-                        label = { Text(stringResource(R.string.data_group_ungrouped)) })
-                    namedGroups.forEach { name ->
-                        FilterChip(selected = selectedGroup == name, onClick = { selectedGroup = name },
-                            label = { Text(name) })
+                    ButtonGroup(overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(it) },
+                        modifier = Modifier.weight(1f)) {
+                        toggleableItem(checked = selectedGroup == null, label = allLabel,
+                            onCheckedChange = { if (it) selectedGroup = null })
+                        toggleableItem(checked = selectedGroup == "", label = ungroupedLabel,
+                            onCheckedChange = { if (it) selectedGroup = "" })
+                        namedGroups.forEach { name ->
+                            toggleableItem(checked = selectedGroup == name, label = name,
+                                onCheckedChange = { if (it) selectedGroup = name })
+                        }
                     }
                     if (!selectedGroup.isNullOrEmpty()) IconButton(onClick = {
                         groupNameInput = selectedGroup.orEmpty()
@@ -212,7 +220,7 @@ fun ManageDataScreen(
                 }
             }
             if (uiState.manageDataIsLoading) {
-                item { Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+                item { Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) { LoadingIndicator() } }
             } else if (visibleData.isEmpty()) {
                 item { Text(stringResource(R.string.no_data_collected), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {

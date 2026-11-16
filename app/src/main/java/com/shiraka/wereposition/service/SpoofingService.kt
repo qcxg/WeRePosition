@@ -26,7 +26,7 @@ import com.shiraka.wereposition.utils.RootManager
 import com.shiraka.wereposition.utils.RuntimeConfigWriteCoordinator
 import com.shiraka.wereposition.utils.SettingsManager
 import com.shiraka.wereposition.utils.SyntheticRfGenerator
-import com.shiraka.wereposition.utils.JoystickMotion
+import com.shiraka.wereposition.utils.JoystickMotionController
 import com.shiraka.wereposition.utils.TrajectorySimulator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -67,6 +67,7 @@ class SpoofingService : Service() {
     private var lastFullSnapshotGeneration = 0L
     private var lastWriteAttemptUptimeMs = 0L
     private var consecutiveWriteFailures = 0
+    private var writerLockBusy = false
     @Volatile private var writerSuperseded = false
     private var lastPersistedFingerprint: RuntimeContentFingerprint? = null
     private var lastPublishedPosition: RuntimePositionFingerprint? = null
@@ -97,7 +98,10 @@ class SpoofingService : Service() {
     }
     private val currentBootId by lazy { readBootId() }
     private var joystickOverlay: FloatingJoystickOverlay? = null
-    @Volatile private var joystickMoving = false
+    private val joystickMotionLock = Any()
+    private var joystickMotion: JoystickMotionController? = null
+    private var joystickMotionJob: Job? = null
+    private var joystickLifecycleToken = 0L
     private var joystickStartPosition: Pair<Double, Double>? = null
 
     private data class RuntimeWriteRequest(
@@ -358,7 +362,6 @@ class SpoofingService : Service() {
                                 if (writerSuperseded) break
                                 if (committed) {
                                     consecutiveWriteFailures = 0
-                                    if (fullWriteDue) lastPublishedPosition = positionFingerprint
                                     lastRuntimeFrameWriteUptimeMs = SystemClock.uptimeMillis()
                                     if (fullWriteDue) {
                                         lastPersistedFingerprint = fingerprint
@@ -368,7 +371,7 @@ class SpoofingService : Service() {
                                         logWriteSuccessIfNeeded(contentChanged || resumedFromDisabled, currentLoc)
                                     }
                                 } else {
-                                    consecutiveWriteFailures++
+                                    if (writerLockBusy) consecutiveWriteFailures = 0 else consecutiveWriteFailures++
                                 }
                             }
                     } catch (e: CancellationException) {
@@ -583,11 +586,11 @@ class SpoofingService : Service() {
 
     private fun computeCurrentLocation(): SimulatedLocation {
         if (isJoystickVisible) {
-            val position = SpooferProvider.currentPosition()
-            return SimulatedLocation(
-                position.latitude, position.longitude, position.speed, position.bearing,
-                5f, SpooferProvider.altitude
-            )
+            return synchronized(joystickMotionLock) {
+                val position = SpooferProvider.currentPosition()
+                SimulatedLocation(position.latitude, position.longitude, position.speed, position.bearing,
+                    5f, SpooferProvider.altitude)
+            }
         }
         val routePoints = parseRoutePoints(SpooferProvider.routeJson)
         return if (SpooferProvider.isRouteMode && routePoints.size >= 2) {
@@ -628,7 +631,10 @@ class SpoofingService : Service() {
         if (isJoystickVisible) return
         val current = SpooferProvider.currentPosition()
         joystickStartPosition = current.latitude to current.longitude
-        joystickMoving = false
+        synchronized(joystickMotionLock) {
+            joystickLifecycleToken = SpooferProvider.runtimeLifecycleToken
+            joystickMotion = JoystickMotionController(current.latitude, current.longitude, SystemClock.elapsedRealtimeNanos())
+        }
         SpooferProvider.publishAnchorPosition(current.latitude, current.longitude)
         SpooferProvider.simMode = "STILL"
         SpooferProvider.isRouteMode = false
@@ -641,17 +647,43 @@ class SpoofingService : Service() {
             onExitSimulation = ::exitSimulationFromOverlay
         ).also { joystickOverlay = it }
         isJoystickVisible = overlay.show()
-        if (isJoystickVisible) locationStateWake.trySend(Unit)
+        if (isJoystickVisible) {
+            // The motion clock must not wait for root IO or the overlay's UI thread.
+            // It updates memory only; the existing service job remains the sole writer.
+            joystickMotionJob = serviceScope.launch(Dispatchers.Default) {
+                while (isActive && isJoystickVisible && SpooferProvider.isActive) {
+                    val changed = synchronized(joystickMotionLock) {
+                        val before = SpooferProvider.currentPosition()
+                        joystickMotion?.sample(SystemClock.elapsedRealtimeNanos())?.let(::publishJoystickPosition)
+                        before != SpooferProvider.currentPosition()
+                    }
+                    if (changed) locationStateWake.trySend(Unit)
+                    delay(JOYSTICK_TICK_INTERVAL_MS)
+                }
+            }
+            locationStateWake.trySend(Unit)
+        }
     }
 
     private fun hideFloatingJoystick(restoreStart: Boolean = true) {
+        val restoreThisSession = synchronized(joystickMotionLock) {
+            restoreStart && joystickLifecycleToken != 0L &&
+                joystickLifecycleToken == SpooferProvider.runtimeLifecycleToken
+        }
+        joystickMotionJob?.cancel()
+        joystickMotionJob = null
+        // Disarm callbacks before dismissing views: a newer repository start may
+        // already have published its anchor and must not receive an old release.
+        synchronized(joystickMotionLock) {
+            joystickLifecycleToken = 0L
+            joystickMotion = null
+        }
         joystickOverlay?.hide()
         joystickOverlay = null
         isJoystickVisible = false
-        joystickMoving = false
         val start = joystickStartPosition
         joystickStartPosition = null
-        if (restoreStart && start != null && SpooferProvider.isActive) {
+        if (restoreThisSession && start != null && SpooferProvider.isActive) {
             SpooferProvider.publishAnchorPosition(start.first, start.second)
             SpooferProvider.publishCurrentPosition(start.first, start.second, 0f, 0f)
         }
@@ -679,30 +711,30 @@ class SpoofingService : Service() {
     }
 
     private fun moveFromFloatingJoystick(
-        bearing: Double, intensity: Float, maxSpeedMs: Float, elapsedSeconds: Double
+        bearing: Double, intensity: Float, maxSpeedMs: Float, commandNanos: Long
     ) {
-        if (!isRunning || !SpooferProvider.isActive) return
-        val anchor = SpooferProvider.anchorPosition()
-        val speed = maxSpeedMs * intensity
-        val (lat, lng) = JoystickMotion.advance(
-            anchor.latitude, anchor.longitude, bearing,
-            speed * elapsedSeconds.coerceIn(0.0, 0.25)
-        )
-        val oldCell = EnvironmentCoveragePolicy.cellFor(anchor.latitude, anchor.longitude)
-        SpooferProvider.publishAnchorPosition(lat, lng)
-        SpooferProvider.publishCurrentPosition(lat, lng, bearing.toFloat(), speed)
-        joystickMoving = true
-        // One conflated wake only: turns replace old input, never enqueue drag positions.
+        if (!isRunning || !SpooferProvider.isActive || !isJoystickVisible) return
+        synchronized(joystickMotionLock) {
+            joystickMotion?.command(bearing, intensity, maxSpeedMs, commandNanos)?.let(::publishJoystickPosition)
+        }
         locationStateWake.trySend(Unit)
-        if (EnvironmentCoveragePolicy.cellFor(lat, lng) != oldCell) SpooferProvider.requestRfRefresh()
     }
 
     private fun stopFloatingJoystickMotion() {
-        joystickMoving = false
         if (!SpooferProvider.isActive) return
-        val position = SpooferProvider.currentPosition()
-        SpooferProvider.publishCurrentPosition(position.latitude, position.longitude, position.bearing, 0f)
+        synchronized(joystickMotionLock) {
+            joystickMotion?.stop(SystemClock.elapsedRealtimeNanos())?.let(::publishJoystickPosition)
+        }
         locationStateWake.trySend(Unit)
+    }
+
+    private fun publishJoystickPosition(position: JoystickMotionController.Position) {
+        if (joystickLifecycleToken == 0L || joystickLifecycleToken != SpooferProvider.runtimeLifecycleToken ||
+            !SpooferProvider.isActive) return
+        // Motion sampling and publication share the lock with release. An IO sample
+        // can never publish old speed after the UI has acknowledged a stop.
+        SpooferProvider.publishAnchorPosition(position.latitude, position.longitude)
+        SpooferProvider.publishCurrentPosition(position.latitude, position.longitude, position.bearing, position.speed)
     }
 
     private fun stopSpoofing(startId: Int) {
@@ -723,6 +755,7 @@ class SpoofingService : Service() {
 
     private suspend fun writeRuntimePositionOverlay(loc: SimulatedLocation): Boolean {
         if (!SpooferProvider.isActive) return false
+        writerLockBusy = false
         val writeGeneration = RuntimeConfigWriteCoordinator.newGeneration()
         return RuntimeConfigWriteCoordinator.commitIfLatest(writeGeneration) {
             if (!SpooferProvider.isActive) return@commitIfLatest false
@@ -746,7 +779,9 @@ class SpoofingService : Service() {
                     [ "${'$'}left" \> "${'$'}right" ]
                 }
                 wereposition_overlay_write() {
-                    flock -x 9 || return 73
+                # A position command must never queue behind an external root writer.
+                # Retry through the service with a fresh sample instead.
+                flock -x -n 9 || { printf '%s\n' 'WRP_WRITER_LOCK_BUSY'; return 0; }
                     writer_status=0
                     locked_snapshot_generation="${'$'}(getprop gsm.wrp.snapshot_generation)"
                     locked_stop_generation="${'$'}(getprop gsm.wrp.stop_generation)"
@@ -769,6 +804,10 @@ class SpoofingService : Service() {
                 wereposition_overlay_write 9>/data/local/tmp/wereposition_runtime.lock
             """.trimIndent()
             val result = rootManager.executePersistentCommand(command)
+            if (result.contains("WRP_WRITER_LOCK_BUSY")) {
+                writerLockBusy = true
+                return@commitIfLatest false
+            }
             if (consumeStaleWriterMarker(result)) return@commitIfLatest false
             if (result == "ERROR") {
                 logRuntimeErrorThrottled(IllegalStateException("root position overlay failed"))
@@ -782,141 +821,148 @@ class SpoofingService : Service() {
     }
 
     private suspend fun writeRuntimeConfig(
-        loc: SimulatedLocation,
+        requestedLocation: SimulatedLocation,
         rfSnapshot: SpooferProvider.Companion.RuntimeRfSnapshot,
         contentChanged: Boolean
     ): Boolean {
         if (!SpooferProvider.isActive) return false
+        writerLockBusy = false
         val writeGeneration = RuntimeConfigWriteCoordinator.newGeneration()
-        val now = System.currentTimeMillis()
-        val heartbeatUptimeMs = SystemClock.uptimeMillis()
-        val bootId = currentBootId
-        val runtimeFrame = encodeRuntimeFrame(
-            active = true,
-            snapshotGeneration = writeGeneration,
-            heartbeatUptimeMs = heartbeatUptimeMs,
-            location = loc
-        )
-        
-        // The service is the sole active runtime writer. MainViewModel may move
-        // the manual anchor, but only this heartbeat publishes output files.
-        val outputAltitude = SpooferProvider.altitude
-        
-        val config = JSONObject().apply {
-            put("lat", loc.lat)
-            put("lng", loc.lng)
-            put("active", true)
-            put("config_updated_at", now)
-            put("config_generation", writeGeneration)
-            put("runtime_lifecycle_token", activeLifecycleToken)
-            put("heartbeat_at", now)
-            put("heartbeat_uptime_ms", heartbeatUptimeMs)
-            put("boot_id", bootId)
-            put("fail_closed", false)
-            put("location_allowlist_enabled", settingsManager.perAppLocationEnabled)
-            put("location_allowlist", JSONArray(settingsManager.locationAllowedApps.sorted()))
-            put("sim_mode", SpooferProvider.simMode)
-            put("sim_bearing", loc.bearing.toDouble())
-            put("sim_speed", loc.speed.toDouble())
-            put("start_timestamp", SpooferProvider.startTimestamp)
-            put("route_points", safeJsonArray(SpooferProvider.routeJson))
-            put("is_route_mode", SpooferProvider.isRouteMode)
-            put("joystick_mode", isJoystickVisible)
-            put("wifi_json", safeWifiJson(rfSnapshot.wifiJson))
-            put("cell_json", safeJsonArray(rfSnapshot.cellJson))
-            put("bluetooth_json", JSONArray())
-            put("mock_wifi", rfSnapshot.mockWifi)
-            put("mock_cell", rfSnapshot.mockCell)
-            put("mock_bluetooth", false)
-            put("specified_wifi_enabled", settingsManager.specifiedWifiEnabled && settingsManager.specifiedWifi.isValid)
-            put("specified_wifi_json", settingsManager.specifiedWifi.toJson())
-            put("specified_bluetooth_enabled", settingsManager.specifiedBluetoothEnabled)
-            put("specified_bluetooth_json", com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice.listToJson(
-                settingsManager.specifiedBluetoothDevices.filter { it.isValid }
-            ))
-            put("enable_jitter", SpooferProvider.enableJitter && !isJoystickVisible)
-            put("jitter_radius_meters", SpooferProvider.jitterRadiusMeters.coerceIn(1, 80))
-            put("jitter_speed", SpooferProvider.jitterSpeed)
-            put("signal_jitter_enabled", SpooferProvider.signalJitterEnabled)
-            put("signal_jitter_level", SpooferProvider.signalJitterLevel.coerceIn(0, 100))
-            put("wifi_connection_mode", SpooferProvider.wifiConnectionMode)
-            put("altitude", SpooferProvider.altitude)
-            put("satellite_count", SpooferProvider.satelliteCount)
-        }
-        val jsonText = config.toString()
-        val command = """
-            wereposition_generation_gt() {
-                left="${'$'}1"
-                right="${'$'}2"
-                [ "${'$'}{#left}" -gt "${'$'}{#right}" ] && return 0
-                [ "${'$'}{#left}" -lt "${'$'}{#right}" ] && return 1
-                [ "${'$'}left" = "${'$'}right" ] && return 1
-                [ "${'$'}left" \> "${'$'}right" ]
-            }
-            wereposition_full_write() {
-            flock -x 9 || return 73
-            set -e
-
-            locked_snapshot_generation="${'$'}(getprop gsm.wrp.snapshot_generation)"
-            locked_stop_generation="${'$'}(getprop gsm.wrp.stop_generation)"
-            case "${'$'}locked_snapshot_generation" in
-                ''|*[!0-9]*) locked_snapshot_generation=0 ;;
-            esac
-            case "${'$'}locked_stop_generation" in
-                ''|*[!0-9]*) locked_stop_generation=0 ;;
-            esac
-            if [ "${'$'}locked_stop_generation" = "$writeGeneration" ] ||
-                wereposition_generation_gt "${'$'}locked_stop_generation" "$writeGeneration" ||
-                wereposition_generation_gt "${'$'}locked_snapshot_generation" "$writeGeneration"; then
-                printf '%s\n' "$STALE_WRITER_MARKER"
-                flock -u 9
-                return 0
-            fi
-
-            cat > /data/local/tmp/wereposition_config.json.tmp.$writeGeneration <<'WEREPOSITION_JSON'
-            $jsonText
-            WEREPOSITION_JSON
-            mv /data/local/tmp/wereposition_config.json.tmp.$writeGeneration /data/local/tmp/wereposition_config.json
-            chmod 666 /data/local/tmp/wereposition_config.json
-            chcon u:object_r:shell_data_file:s0 /data/local/tmp/wereposition_config.json 2>/dev/null || true
-
-            cat > /data/system/wereposition_config.json.tmp.$writeGeneration <<'WEREPOSITION_JSON_SYSTEM'
-            $jsonText
-            WEREPOSITION_JSON_SYSTEM
-            mv /data/system/wereposition_config.json.tmp.$writeGeneration /data/system/wereposition_config.json
-            chown system:system /data/system/wereposition_config.json 2>/dev/null || true
-            chmod 644 /data/system/wereposition_config.json
-            chcon u:object_r:system_data_file:s0 /data/system/wereposition_config.json 2>/dev/null || true
-
-            setprop gsm.wrp.mock_wifi ${rfSnapshot.mockWifi ||
-                (settingsManager.specifiedWifiEnabled && settingsManager.specifiedWifi.isValid)}
-            setprop gsm.wrp.mock_cell ${rfSnapshot.mockCell}
-            setprop gsm.wrp.active true
-            setprop gsm.wrp.location_allowlist_enabled ${settingsManager.perAppLocationEnabled}
-            setprop gsm.wrp.joystick_mode $isJoystickVisible
-            setprop gsm.wrp.enable_jitter ${SpooferProvider.enableJitter && !isJoystickVisible}
-            setprop gsm.wrp.jitter_radius ${SpooferProvider.jitterRadiusMeters.coerceIn(1, 80)}
-            setprop gsm.wrp.jitter_speed ${SpooferProvider.jitterSpeed}
-            setprop gsm.wrp.lat ${loc.lat}
-            setprop gsm.wrp.lng ${loc.lng}
-            setprop gsm.wrp.bearing ${loc.bearing}
-            setprop gsm.wrp.speed ${loc.speed}
-            setprop gsm.wrp.snapshot_generation $writeGeneration
-            setprop gsm.wrp.boot_id "$bootId"
-            setprop gsm.wrp.heartbeat_uptime $heartbeatUptimeMs
-            setprop gsm.wrp.heartbeat $now
-            setprop gsm.wrp.frame "$runtimeFrame"
-
-            flock -u 9
-            }
-            wereposition_full_write 9>/data/local/tmp/wereposition_runtime.lock
-        """.trimIndent()
         val committed = RuntimeConfigWriteCoordinator.commitIfLatest(writeGeneration) {
             if (!SpooferProvider.isActive) return@commitIfLatest false
+            // Full snapshots follow the same latest-sample rule as compact frames.
+            val loc = if (isJoystickVisible) computeCurrentLocation() else requestedLocation
+            val now = System.currentTimeMillis()
+            val heartbeatUptimeMs = SystemClock.uptimeMillis()
+            val bootId = currentBootId
+            val runtimeFrame = encodeRuntimeFrame(
+                active = true,
+                snapshotGeneration = writeGeneration,
+                heartbeatUptimeMs = heartbeatUptimeMs,
+                location = loc
+            )
+        
+            // The service is the sole active runtime writer. MainViewModel may move
+            // the manual anchor, but only this heartbeat publishes output files.
+            val outputAltitude = SpooferProvider.altitude
+        
+            val config = JSONObject().apply {
+                put("lat", loc.lat)
+                put("lng", loc.lng)
+                put("active", true)
+                put("config_updated_at", now)
+                put("config_generation", writeGeneration)
+                put("runtime_lifecycle_token", activeLifecycleToken)
+                put("heartbeat_at", now)
+                put("heartbeat_uptime_ms", heartbeatUptimeMs)
+                put("boot_id", bootId)
+                put("fail_closed", false)
+                put("location_allowlist_enabled", settingsManager.perAppLocationEnabled)
+                put("location_allowlist", JSONArray(settingsManager.locationAllowedApps.sorted()))
+                put("sim_mode", SpooferProvider.simMode)
+                put("sim_bearing", loc.bearing.toDouble())
+                put("sim_speed", loc.speed.toDouble())
+                put("start_timestamp", SpooferProvider.startTimestamp)
+                put("route_points", safeJsonArray(SpooferProvider.routeJson))
+                put("is_route_mode", SpooferProvider.isRouteMode)
+                put("joystick_mode", isJoystickVisible)
+                put("wifi_json", safeWifiJson(rfSnapshot.wifiJson))
+                put("cell_json", safeJsonArray(rfSnapshot.cellJson))
+                put("bluetooth_json", JSONArray())
+                put("mock_wifi", rfSnapshot.mockWifi)
+                put("mock_cell", rfSnapshot.mockCell)
+                put("mock_bluetooth", false)
+                put("specified_wifi_enabled", settingsManager.specifiedWifiEnabled && settingsManager.specifiedWifi.isValid)
+                put("specified_wifi_json", settingsManager.specifiedWifi.toJson())
+                put("specified_bluetooth_enabled", settingsManager.specifiedBluetoothEnabled)
+                put("specified_bluetooth_json", com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice.listToJson(
+                    settingsManager.specifiedBluetoothDevices.filter { it.isValid }
+                ))
+                put("enable_jitter", SpooferProvider.enableJitter && !isJoystickVisible)
+                put("jitter_radius_meters", SpooferProvider.jitterRadiusMeters.coerceIn(1, 80))
+                put("jitter_speed", SpooferProvider.jitterSpeed)
+                put("signal_jitter_enabled", SpooferProvider.signalJitterEnabled)
+                put("signal_jitter_level", SpooferProvider.signalJitterLevel.coerceIn(0, 100))
+                put("wifi_connection_mode", SpooferProvider.wifiConnectionMode)
+                put("altitude", SpooferProvider.altitude)
+                put("satellite_count", SpooferProvider.satelliteCount)
+            }
+            val jsonText = config.toString()
+            val command = """
+                wereposition_generation_gt() {
+                    left="${'$'}1"
+                    right="${'$'}2"
+                    [ "${'$'}{#left}" -gt "${'$'}{#right}" ] && return 0
+                    [ "${'$'}{#left}" -lt "${'$'}{#right}" ] && return 1
+                    [ "${'$'}left" = "${'$'}right" ] && return 1
+                    [ "${'$'}left" \> "${'$'}right" ]
+                }
+                wereposition_full_write() {
+                flock -x -n 9 || { printf '%s\n' 'WRP_WRITER_LOCK_BUSY'; return 0; }
+                set -e
+
+                locked_snapshot_generation="${'$'}(getprop gsm.wrp.snapshot_generation)"
+                locked_stop_generation="${'$'}(getprop gsm.wrp.stop_generation)"
+                case "${'$'}locked_snapshot_generation" in
+                    ''|*[!0-9]*) locked_snapshot_generation=0 ;;
+                esac
+                case "${'$'}locked_stop_generation" in
+                    ''|*[!0-9]*) locked_stop_generation=0 ;;
+                esac
+                if [ "${'$'}locked_stop_generation" = "$writeGeneration" ] ||
+                    wereposition_generation_gt "${'$'}locked_stop_generation" "$writeGeneration" ||
+                    wereposition_generation_gt "${'$'}locked_snapshot_generation" "$writeGeneration"; then
+                    printf '%s\n' "$STALE_WRITER_MARKER"
+                    flock -u 9
+                    return 0
+                fi
+
+                cat > /data/local/tmp/wereposition_config.json.tmp.$writeGeneration <<'WEREPOSITION_JSON'
+                $jsonText
+                WEREPOSITION_JSON
+                mv /data/local/tmp/wereposition_config.json.tmp.$writeGeneration /data/local/tmp/wereposition_config.json
+                chmod 666 /data/local/tmp/wereposition_config.json
+                chcon u:object_r:shell_data_file:s0 /data/local/tmp/wereposition_config.json 2>/dev/null || true
+
+                cat > /data/system/wereposition_config.json.tmp.$writeGeneration <<'WEREPOSITION_JSON_SYSTEM'
+                $jsonText
+                WEREPOSITION_JSON_SYSTEM
+                mv /data/system/wereposition_config.json.tmp.$writeGeneration /data/system/wereposition_config.json
+                chown system:system /data/system/wereposition_config.json 2>/dev/null || true
+                chmod 644 /data/system/wereposition_config.json
+                chcon u:object_r:system_data_file:s0 /data/system/wereposition_config.json 2>/dev/null || true
+
+                setprop gsm.wrp.mock_wifi ${rfSnapshot.mockWifi ||
+                    (settingsManager.specifiedWifiEnabled && settingsManager.specifiedWifi.isValid)}
+                setprop gsm.wrp.mock_cell ${rfSnapshot.mockCell}
+                setprop gsm.wrp.active true
+                setprop gsm.wrp.location_allowlist_enabled ${settingsManager.perAppLocationEnabled}
+                setprop gsm.wrp.joystick_mode $isJoystickVisible
+                setprop gsm.wrp.enable_jitter ${SpooferProvider.enableJitter && !isJoystickVisible}
+                setprop gsm.wrp.jitter_radius ${SpooferProvider.jitterRadiusMeters.coerceIn(1, 80)}
+                setprop gsm.wrp.jitter_speed ${SpooferProvider.jitterSpeed}
+                setprop gsm.wrp.lat ${loc.lat}
+                setprop gsm.wrp.lng ${loc.lng}
+                setprop gsm.wrp.bearing ${loc.bearing}
+                setprop gsm.wrp.speed ${loc.speed}
+                setprop gsm.wrp.snapshot_generation $writeGeneration
+                setprop gsm.wrp.boot_id "$bootId"
+                setprop gsm.wrp.heartbeat_uptime $heartbeatUptimeMs
+                setprop gsm.wrp.heartbeat $now
+                setprop gsm.wrp.frame "$runtimeFrame"
+
+                flock -u 9
+                }
+                wereposition_full_write 9>/data/local/tmp/wereposition_runtime.lock
+            """.trimIndent()
             // Full snapshots finish non-cancellably after admission. The fd9 guard
             // rejects this writer if a newer snapshot or stop fence won while it waited.
             val result = withContext(NonCancellable) {
                 rootManager.executeCommand(command)
+            }
+            if (result.contains("WRP_WRITER_LOCK_BUSY")) {
+                writerLockBusy = true
+                return@commitIfLatest false
             }
             if (consumeStaleWriterMarker(result)) return@commitIfLatest false
             if (result == "ERROR") {
@@ -953,6 +999,7 @@ class SpoofingService : Service() {
             } catch (e: Throwable) {
                 logRuntimeErrorThrottled(e)
             }
+            lastPublishedPosition = RuntimePositionFingerprint(loc.lat, loc.lng, loc.bearing, loc.speed)
             true
         }
         currentCoroutineContext().ensureActive()

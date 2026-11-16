@@ -4,15 +4,22 @@ This folder is the maintained AI-facing technical memory for the project.
 
 ## Handoff For The Next Conversation
 
+- Version 2.1.1 fixes centre/release/cancel/multiple-pointer stops, a writer-blocked motion clock, missing joystick/jitter flags in the ContentProvider fallback, and old overlay callbacks overwriting a newer lifecycle. The service owns a locked `JoystickMotionController` with 500 ms command lease and a separate memory-only motion clock. Root lock contention retries fresh samples without the generic failure backoff. Framework speed rejects joystick frames older than 750 ms; loading new framework hook code still requires the normal LSPosed reload/device restart.
+- The same changes apply official 1.5.0-rc01 components to joystick settings, grouped Settings entries, data filters/actions, home buttons/sliders, and specified-connection actions. The latest official release was checked on 2026-11-17; no library bump was necessary.
+- All ten switches use the shared `ExpressiveSwitch`: checked shows a tick, unchecked a cross, with the official disabled colours and semantics preserved.
+- Android 17 real-touch tests passed for coordinator and root-file-lock stalls, return-to-centre, cancellation, primary pointer up with another finger held, frozen input thread, full refresh after release, native framework zero-speed delivery, and a new fixed run replacing the old joystick. Route lifecycle tests also passed. No host/GMS scope was added; temporary settings and the inactive simulation state were restored.
+
 - Version 2.1.0 fixes preserve route-map viewport through point edits and restore an active route into a recreated UI. Whole-host recovery reuses same-boot canonical runtime snapshots only when newer than the stop fence, retaining the original timestamp/custom speed through the existing single-writer start path. See `ActiveRouteSession`, repository recovery, and `RouteLifecycleTest`.
 
 - Version 2.1.0 also upgrades official Material 3 to 1.5.0-rc01, rewrites app isolation and route controls with Expressive components, and shares navigation-style map blur across compact route/search/side surfaces. Route undo and edit/cancel preserve the expected point history.
 - Version 2.1.0 changes normalize common Wi-Fi MAC formats with per-field errors, animate the app-isolation/scope page inside Settings, and publish the latest joystick sample after coordinator admission at ~100 ms. See the current technical document and `JoystickResponsivenessTest`.
-- Current source version is `2.1.0` (`versionCode=20100`). Onboarding/startup access, shared horizontal page transitions, and specified-connection testing are documented in `technical_readme.md`.
+- Current source version is `2.1.1` (`versionCode=20101`). Onboarding/startup access, shared horizontal page transitions, and specified-connection testing are documented in `technical_readme.md`.
 - Onboarding language/information/permissions/completion and Settings > Permissions now use the existing Settings slide/fade timing, with reverse back navigation. Android 17 transition screenshots confirmed intermediate horizontal positions. User settings and animation scale were restored after verification; do not reset onboarding for another user handoff unless requested.
 - The independent classic-Bluetooth fixture passed on Android 17: bonded 5 -> 8 -> 5 -> 8 -> 5 across baseline/active/disabled/re-enabled/stopped, with A2DP and Headset connected lists 0 -> 1 -> 0 -> 1 -> 0. Metadata, state filtering and real-device preservation assertions passed. The first run correctly returned baseline data with the location master switch off; the fixture now temporarily enables that switch and restores it in `finally`.
 - Scope preparation remains manual in LSPosed. The user authorized resuming Bluetooth verification; only the independent test client was temporarily selected, never the host app. The temporary scope and APK were removed after testing; the final LSPosed scope matches the original scope. See `tools/bluetooth-probe/README.md` for commands and evidence. The fixture emits count-only `WRP_BT_PROBE` logs and preserves full private JSON reports on-device.
 - The most important invariant is that specified Wi-Fi must never expose real scan results; `ClientWifiHook` returns simulated nearby APs or an empty scan. The classic Bluetooth addition must leave other real devices visible.
+
+- Portable UI migration reference: `docs/MD3E_IMPLEMENTATION_GUIDE.md` and `docs/examples/md3e/` cover dynamic/brand color, complete color roles, current components and blur. The guide distinguishes the app's current HSV fallback from the HCT-generated portable example.
 
 ## Current Source Of Truth
 

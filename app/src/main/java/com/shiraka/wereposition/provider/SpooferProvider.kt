@@ -1,6 +1,7 @@
 package com.shiraka.wereposition.provider
 
 import android.content.ContentProvider
+import com.shiraka.wereposition.service.SpoofingService
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
@@ -243,6 +244,7 @@ class SpooferProvider : ContentProvider() {
         }
         enforceScopedCaller()
         val position = if (isActive) currentPosition() else anchorPosition()
+        val joystickMode = SpoofingService.isJoystickVisible
         val outputLatitude = position.latitude
         val outputLongitude = position.longitude
         val rfSnapshot = rfSnapshotFor(outputLatitude, outputLongitude)
@@ -259,7 +261,7 @@ class SpooferProvider : ContentProvider() {
                 "config_generation", "runtime_lifecycle_token", "boot_id",
                 "location_allowlist_enabled", "location_allowlist",
                 "specified_wifi_enabled", "specified_wifi_json",
-                "specified_bluetooth_enabled", "specified_bluetooth_json"
+                "specified_bluetooth_enabled", "specified_bluetooth_json", "joystick_mode"
             )
         )
         cursor.addRow(
@@ -278,7 +280,7 @@ class SpooferProvider : ContentProvider() {
                 if (isRouteMode) 1 else 0,
                 altitude,
                 satelliteCount,
-                if (enableJitter) 1 else 0,
+                if (enableJitter && !joystickMode) 1 else 0,
                 jitterRadiusMeters,
                 jitterSpeed,
                 if (signalJitterEnabled) 1 else 0,
@@ -300,7 +302,8 @@ class SpooferProvider : ContentProvider() {
                 if (accessSettings.specifiedBluetoothEnabled) 1 else 0,
                 com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice.listToJson(
                     accessSettings.specifiedBluetoothDevices.filter { it.isValid }
-                ).toString()
+                ).toString(),
+                if (joystickMode) 1 else 0
             )
         )
         return cursor

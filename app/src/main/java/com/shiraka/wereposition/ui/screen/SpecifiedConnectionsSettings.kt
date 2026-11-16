@@ -11,18 +11,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shiraka.wereposition.R
+import com.shiraka.wereposition.ui.components.ExpressiveSwitch
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.data.model.SpecifiedBluetoothDevice
 import com.shiraka.wereposition.data.model.SpecifiedWifiConnection
@@ -47,6 +50,7 @@ import com.shiraka.wereposition.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: AppState) {
     val context = LocalContext.current
     val importer = remember(context) { SavedConnectionImporter(context) }
@@ -95,7 +99,7 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
     Spacer(Modifier.height(12.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.specified_wifi), modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-        Switch(checked = wifiEnabled, onCheckedChange = { enabled ->
+        ExpressiveSwitch(checked = wifiEnabled, onCheckedChange = { enabled ->
             wifiEnabled = enabled
             if (!enabled) viewModel.setSpecifiedWifi(false, uiState.specifiedWifi)
         })
@@ -107,7 +111,9 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
             if (savedNetworks.isEmpty()) Toast.makeText(context, unavailableText, Toast.LENGTH_SHORT).show()
             else showWifiImport = true
         }
-    }) { Text(stringResource(R.string.specified_import_saved_wifi)) }
+    }, shapes = ButtonDefaults.shapesFor(48.dp), modifier = Modifier.heightIn(min = 48.dp)) {
+        Text(stringResource(R.string.specified_import_saved_wifi))
+    }
     Text(stringResource(R.string.specified_wifi_import_note), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
     SpecifiedField(wifi.ssid, { wifi = wifi.copy(ssid = it) }, stringResource(R.string.specified_ssid), error = if (wifi.ssid.isBlank()) stringResource(R.string.specified_ssid_error) else null)
@@ -138,12 +144,13 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
         )
         viewModel.setSpecifiedWifi(wifiEnabled, value)
         Toast.makeText(context, savedText, Toast.LENGTH_SHORT).show()
-    }, enabled = !wifiEnabled || wifiDraft.isValid) { Text(stringResource(R.string.save)) }
+    }, enabled = !wifiEnabled || wifiDraft.isValid, shapes = ButtonDefaults.shapesFor(48.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.save)) }
 
     HorizontalDivider(Modifier.padding(vertical = 20.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.specified_bluetooth), modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-        Switch(checked = bluetoothEnabled, onCheckedChange = { enabled ->
+        ExpressiveSwitch(checked = bluetoothEnabled, onCheckedChange = { enabled ->
             bluetoothEnabled = enabled
             if (enabled && deviceDrafts.isEmpty()) deviceDrafts = listOf(BluetoothDeviceDraft(SpecifiedBluetoothDevice()))
             if (!enabled) viewModel.setSpecifiedBluetooth(false, uiState.specifiedBluetoothDevices)
@@ -157,7 +164,9 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
             if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
             ) permissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
             else importBluetooth()
-        }) { Text(stringResource(R.string.specified_import_bluetooth)) }
+        }, shapes = ButtonDefaults.shapesFor(48.dp), modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.specified_import_bluetooth))
+        }
         TextButton(onClick = { deviceDrafts = deviceDrafts + BluetoothDeviceDraft(SpecifiedBluetoothDevice()) }) {
             Text(stringResource(R.string.specified_add_device))
         }
@@ -189,7 +198,8 @@ internal fun SpecifiedConnectionsSettings(viewModel: MainViewModel, uiState: App
     if (bluetoothEnabled) Button(onClick = {
         viewModel.setSpecifiedBluetooth(true, deviceDrafts.map { it.toDevice() })
         Toast.makeText(context, savedText, Toast.LENGTH_SHORT).show()
-    }, enabled = deviceDrafts.isNotEmpty() && deviceDrafts.all { it.isValid }) {
+    }, enabled = deviceDrafts.isNotEmpty() && deviceDrafts.all { it.isValid },
+        shapes = ButtonDefaults.shapesFor(48.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Text(stringResource(R.string.save))
     }
 

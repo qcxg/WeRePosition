@@ -117,7 +117,7 @@ LSPosed injected processes
   |-- fail-closed when active config is stale
 ```
 
-固定點與自動路線由 `MainViewModel` 發起，懸浮搖桿由 `SpoofingService` 積分移動；三者最終都由服務寫入運行期資料。搖桿移動時最多約每 250 ms 更新精簡位置 frame；一般固定點與自動路線仍按原有節奏更新。啟停邊界與服務寫入由 `RuntimeConfigWriteCoordinator` 序列化，較舊 generation 不得覆蓋較新的狀態。
+固定點與自動路線由 `MainViewModel` 發起，懸浮搖桿由 `SpoofingService` 的獨立運動時鐘積分移動；三者最終都由服務寫入運行期資料。搖桿移動時約每 100 ms 更新精簡位置 frame，命令逾時 500 ms 便停止；一般固定點與自動路線仍按原有節奏更新。啟停邊界與服務寫入由 `RuntimeConfigWriteCoordinator` 序列化，較舊 generation 不得覆蓋較新的狀態。
 
 > 自動路線仍是獨立功能；舊的手動路線旗標及未接通的真實道路規劃選項已移除。懸浮搖桿不建立第二個 runtime writer 或定位 hook。
 
@@ -180,3 +180,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 ## 開源協議
 
 本專案以 [GNU General Public License v3.0](LICENSE) 發布。
+
+## UI 遷移參考
+
+其他 Android App 可參考 [MD3e 實作與配色指南](docs/MD3E_IMPLEMENTATION_GUIDE.md)，包含系統取色、完整品牌明暗色盤、帶勾／叉的開關、Expressive 元件及模糊表面，並附可複用 Kotlin 範例。

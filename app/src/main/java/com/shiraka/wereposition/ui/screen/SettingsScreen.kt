@@ -17,6 +17,13 @@ import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.BluetoothConnected
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.animation.AnimatedContent
@@ -24,6 +31,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -34,10 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiraka.wereposition.R
+import com.shiraka.wereposition.ui.components.ExpressiveSwitch
 import com.shiraka.wereposition.BuildConfig
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.utils.ExternalApiTester
 import com.shiraka.wereposition.viewmodel.MainViewModel
+import com.shiraka.wereposition.ui.components.ExpressiveSlider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,7 +55,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
@@ -139,32 +149,28 @@ fun SettingsScreen(
                 if (page == "home") {
                     SettingsMenuGroup(title = stringResource(R.string.settings_category_preferences)) {
                         SettingsMenuItem(stringResource(R.string.settings_appearance),
-                            "$selectedLanguageName · ${if (useDynamicColor) stringResource(R.string.theme_dynamic) else stringResource(R.string.theme_custom)}") {
+                            "$selectedLanguageName · ${if (useDynamicColor) stringResource(R.string.theme_dynamic) else stringResource(R.string.theme_custom)}", icon = Icons.Rounded.Palette) {
                             currentPage = "appearance"
                         }
                     }
                     SettingsMenuGroup(title = stringResource(R.string.settings_category_simulation)) {
                         SettingsMenuItem(stringResource(R.string.settings_location),
-                            stringResource(R.string.settings_location_summary)) { currentPage = "location" }
-                        HorizontalDivider(Modifier.padding(horizontal = 18.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant)
+                            stringResource(R.string.settings_location_summary), icon = Icons.Rounded.LocationOn, index = 0, count = 3) { currentPage = "location" }
                         SettingsMenuItem(stringResource(R.string.app_access_title),
-                            stringResource(R.string.app_access_summary)) { currentPage = "app_access" }
-                        HorizontalDivider(Modifier.padding(horizontal = 18.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant)
+                            stringResource(R.string.app_access_summary), icon = Icons.Rounded.Apps, index = 1, count = 3) { currentPage = "app_access" }
                         SettingsMenuItem(stringResource(R.string.specified_connections_title),
-                            stringResource(R.string.specified_connections_menu_summary)) { currentPage = "connections" }
+                            stringResource(R.string.specified_connections_menu_summary), icon = Icons.Rounded.BluetoothConnected, index = 2, count = 3) { currentPage = "connections" }
                     }
                     SettingsMenuGroup(title = stringResource(R.string.settings_category_environment_data)) {
                         SettingsMenuItem(stringResource(R.string.settings_environment),
-                            stringResource(R.string.api_config)) { currentPage = "environment" }
+                            stringResource(R.string.api_config), icon = Icons.Rounded.Storage) { currentPage = "environment" }
                     }
                     SettingsMenuGroup(title = stringResource(R.string.settings_category_more)) {
                         SettingsMenuItem(stringResource(R.string.setup_permissions),
-                            stringResource(R.string.setup_permissions_summary)) { currentPage = "permissions" }
+                            stringResource(R.string.setup_permissions_summary), icon = Icons.Rounded.Shield, index = 0, count = 2) { currentPage = "permissions" }
 
                         SettingsMenuItem(stringResource(R.string.settings_about),
-                            stringResource(R.string.settings_version, BuildConfig.VERSION_NAME)) {
+                            stringResource(R.string.settings_version, BuildConfig.VERSION_NAME), icon = Icons.Rounded.Info, index = 1, count = 2) {
                             currentPage = "about"
                         }
                     }
@@ -177,7 +183,7 @@ fun SettingsScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.theme_dynamic), modifier = Modifier.weight(1f))
-                        Switch(checked = useDynamicColor, onCheckedChange = {
+                        ExpressiveSwitch(checked = useDynamicColor, onCheckedChange = {
                             useDynamicColor = it
                             themePrefs.edit().putBoolean("theme_dynamic_color", it).apply()
                         })
@@ -206,7 +212,7 @@ fun SettingsScreen(
                         else -> 215f
                     }
                     Text(stringResource(R.string.theme_hue_value, hue.toInt()), style = MaterialTheme.typography.bodySmall)
-                    Slider(
+                    ExpressiveSlider(
                         value = hue,
                         onValueChange = {
                             selectedTone = "hue_${it.toInt()}"
@@ -246,7 +252,7 @@ fun SettingsScreen(
                     summary = stringResource(R.string.recent_display_count, uiState.recentLocationDisplayCount),
                 ) {
                     Text(stringResource(R.string.recent_display_count, recentDisplayCount.toInt()))
-                    Slider(
+                    ExpressiveSlider(
                         value = recentDisplayCount,
                         onValueChange = { recentDisplayCount = it },
                         onValueChangeFinished = { viewModel.setRecentLocationDisplayCount(recentDisplayCount.toInt()) },
@@ -273,7 +279,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Switch(
+                        ExpressiveSwitch(
                             checked = uiState.pureModeEnabled,
                             enabled = !uiState.isSpoofingActive && !uiState.isSavingConfig,
                             onCheckedChange = viewModel::setPureModeEnabled
@@ -344,12 +350,12 @@ fun SettingsScreen(
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.synthetic_rf_enable), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                        Switch(checked = syntheticEnabled, onCheckedChange = { syntheticEnabled = it })
+                        ExpressiveSwitch(checked = syntheticEnabled, onCheckedChange = { syntheticEnabled = it })
                     }
                     Text(stringResource(R.string.synthetic_wifi_count, syntheticWifiCount.toInt()), style = MaterialTheme.typography.bodyMedium)
-                    Slider(value = syntheticWifiCount, onValueChange = { syntheticWifiCount = it }, valueRange = 0f..8f, steps = 7, enabled = syntheticEnabled)
+                    ExpressiveSlider(value = syntheticWifiCount, onValueChange = { syntheticWifiCount = it }, valueRange = 0f..8f, steps = 7, enabled = syntheticEnabled)
                     Text(stringResource(R.string.synthetic_cell_count, syntheticCellCount.toInt()), style = MaterialTheme.typography.bodyMedium)
-                    Slider(value = syntheticCellCount, onValueChange = { syntheticCellCount = it }, valueRange = 0f..3f, steps = 2, enabled = syntheticEnabled)
+                    ExpressiveSlider(value = syntheticCellCount, onValueChange = { syntheticCellCount = it }, valueRange = 0f..3f, steps = 2, enabled = syntheticEnabled)
                     SaveSettingsButton {
                         viewModel.setSyntheticRfConfig(
                             syntheticEnabled, syntheticWifiCount.toInt(),
@@ -464,9 +470,10 @@ fun SettingsScreen(
                             }
                         },
                         enabled = !updateChecking,
+                        shapes = ButtonDefaults.shapesFor(48.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (updateChecking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        if (updateChecking) LoadingIndicator(Modifier.size(24.dp))
                         else Text(stringResource(R.string.settings_check_update))
                     }
                     if (updateMessage.isNotBlank()) Text(updateMessage,
@@ -561,17 +568,25 @@ private fun SettingsMenuGroup(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow
-    ) { Column(content = content) }
+    ) { Column(verticalArrangement = Arrangement.spacedBy(2.dp), content = content) }
 }
 
 @Composable
-private fun SettingsMenuItem(title: String, summary: String, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
+private fun SettingsMenuItem(title: String, summary: String, icon: ImageVector, index: Int = 0, count: Int = 1, onClick: () -> Unit) {
+    SegmentedListItem(
+        onClick = onClick,
+        shapes = ListItemDefaults.segmentedShapes(index, count),
+        content = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        leadingContent = {
+            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(icon, null, Modifier.padding(10.dp).size(22.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+        },
         supportingContent = { Text(summary, maxLines = 2) },
         trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        modifier = Modifier.fillMaxWidth(),
+        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     )
 }
 
@@ -747,11 +762,13 @@ private fun apiTestResultMessage(result: ExternalApiTester.Result): String {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 private fun SaveSettingsButton(onClick: () -> Unit) {
     Spacer(Modifier.height(10.dp))
     Button(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+        shapes = ButtonDefaults.shapesFor(48.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
     ) {
         Text(stringResource(R.string.save), modifier = Modifier.padding(vertical = 4.dp))
     }

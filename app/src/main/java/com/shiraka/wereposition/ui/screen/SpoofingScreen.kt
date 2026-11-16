@@ -68,6 +68,7 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.res.stringResource
 import com.shiraka.wereposition.R
+import com.shiraka.wereposition.ui.components.ExpressiveSwitch
 import com.shiraka.wereposition.data.model.AppState
 import com.shiraka.wereposition.data.model.RoutePlanStage
 import com.shiraka.wereposition.data.model.JitterSpeed
@@ -76,6 +77,7 @@ import com.shiraka.wereposition.data.model.SavedLocation
 import com.shiraka.wereposition.data.model.StartSpoofingPhase
 import com.shiraka.wereposition.data.model.WifiConnectionMode
 import com.shiraka.wereposition.data.model.WifiLoadStatus
+import com.shiraka.wereposition.ui.components.ExpressiveSlider
 import com.shiraka.wereposition.ui.components.AppMapView
 import com.shiraka.wereposition.ui.components.AppMapController
 import com.shiraka.wereposition.data.model.AppMapType
@@ -1242,6 +1244,7 @@ fun coordinateFieldColors() = OutlinedTextFieldDefaults.colors(
 // 操作按钮
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onStartFixedSpoofing: () -> Unit) {
     if (uiState.isSpoofingActive) {
         val stopColor by animateColorAsState(
@@ -1251,7 +1254,7 @@ fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onStartFixedSpoof
         Button(
             onClick = { viewModel.stopSpoofing() },
             modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = MaterialTheme.shapes.medium,
+            shapes = ButtonDefaults.shapesFor(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = stopColor)
         ) {
             Icon(Icons.Rounded.Stop, null, modifier = Modifier.size(20.dp))
@@ -1263,14 +1266,13 @@ fun ActionButtons(viewModel: MainViewModel, uiState: AppState, onStartFixedSpoof
                 onClick = onStartFixedSpoofing,
                 enabled = !uiState.isSavingConfig,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = MaterialTheme.shapes.medium,
+                shapes = ButtonDefaults.shapesFor(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 if (uiState.isSavingConfig) {
-                    androidx.compose.material3.CircularProgressIndicator(
+                    androidx.compose.material3.LoadingIndicator(
                         modifier = Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                     Spacer(Modifier.width(8.dp))
                     Text("Starting...", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -1859,7 +1861,7 @@ fun StartSpoofingDialog(
                                 tint = MaterialTheme.colorScheme.onBackground.copy(alpha = if (pendingMockWifi) 0.65f else 0.25f)
                             )
                         }
-                        Switch(checked = pendingMockWifi, onCheckedChange = { pendingMockWifi = it })
+                        ExpressiveSwitch(checked = pendingMockWifi, onCheckedChange = { pendingMockWifi = it })
                     }
                     if (pendingMockWifi && showWifiOptions) {
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(start = 32.dp, top = 4.dp, bottom = 8.dp)) {
@@ -1893,7 +1895,7 @@ fun StartSpoofingDialog(
                                 tint = MaterialTheme.colorScheme.onBackground.copy(alpha = if (pendingMockCell) 0.65f else 0.25f)
                             )
                         }
-                        Switch(checked = pendingMockCell, onCheckedChange = { pendingMockCell = it })
+                        ExpressiveSwitch(checked = pendingMockCell, onCheckedChange = { pendingMockCell = it })
                     }
                     if (pendingMockCell && showCellOptions) {
                         Column(modifier = Modifier.fillMaxWidth().padding(start = 32.dp, end = 4.dp, bottom = 8.dp)) {
@@ -1901,11 +1903,11 @@ fun StartSpoofingDialog(
                                 Icon(Icons.Outlined.NetworkCell, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Text("信號強度抖動", modifier = Modifier.weight(1f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground)
-                                Switch(checked = pendingSignalJitterEnabled, onCheckedChange = { pendingSignalJitterEnabled = it })
+                                ExpressiveSwitch(checked = pendingSignalJitterEnabled, onCheckedChange = { pendingSignalJitterEnabled = it })
                             }
                             if (pendingSignalJitterEnabled) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(end = 4.dp, bottom = 4.dp)) {
-                                    Slider(
+                                    ExpressiveSlider(
                                         value = pendingSignalJitterLevel,
                                         onValueChange = { pendingSignalJitterLevel = it.coerceIn(0f, 100f) },
                                         valueRange = 0f..100f,
@@ -1943,7 +1945,7 @@ fun StartSpoofingDialog(
                             tint = MaterialTheme.colorScheme.onBackground.copy(alpha = if (pendingEnableJitter) 0.65f else 0.25f)
                         )
                     }
-                    Switch(checked = pendingEnableJitter, onCheckedChange = { pendingEnableJitter = it })
+                    ExpressiveSwitch(checked = pendingEnableJitter, onCheckedChange = { pendingEnableJitter = it })
                 }
                 if (pendingEnableJitter && showSatelliteJitterOptions) {
                     Column(
@@ -1968,7 +1970,7 @@ fun StartSpoofingDialog(
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                        Slider(
+                        ExpressiveSlider(
                             value = pendingJitterRadius,
                             onValueChange = { pendingJitterRadius = it.coerceIn(1f, 80f) },
                             valueRange = 1f..80f,
