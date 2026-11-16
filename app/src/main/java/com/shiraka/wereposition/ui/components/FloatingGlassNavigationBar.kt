@@ -3,6 +3,8 @@ package com.shiraka.wereposition.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -12,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,9 +37,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -158,15 +168,26 @@ fun FloatingGlassNavigationBar(
         val targetIndicatorWidth = (itemWidths[safeIndex] - 4.dp).coerceAtLeast(0.dp)
         val indicatorStart = animateDpAsState(
             targetIndicatorStart,
-            animationSpec = animation,
+            animationSpec = spring(dampingRatio = 0.78f, stiffness = 450f),
             label = "glass-indicator-start",
         ).value
         val indicatorWidth = animateDpAsState(
             targetIndicatorWidth,
-            animationSpec = animation,
+            animationSpec = spring(dampingRatio = 0.82f, stiffness = 500f),
             label = "glass-indicator-width",
         ).value
         val scheme = MaterialTheme.colorScheme
+        val darkSurface = scheme.surface.luminance() < 0.5f
+        val rim = Brush.verticalGradient(listOf(
+            scheme.outline.copy(alpha = if (darkSurface) 0.58f else 0.36f),
+            scheme.outlineVariant.copy(alpha = 0.28f),
+            scheme.outline.copy(alpha = if (darkSurface) 0.40f else 0.24f),
+        ))
+        val innerRim = Brush.verticalGradient(listOf(
+            Color.White.copy(alpha = if (darkSurface) 0.24f else 0.68f),
+            Color.White.copy(alpha = 0.02f),
+            scheme.primary.copy(alpha = 0.12f),
+        ))
         Box(
             modifier = Modifier
                 .width(animatedBarWidth)
@@ -191,16 +212,34 @@ fun FloatingGlassNavigationBar(
                         ),
                     ),
                 )
-                .border(0.7.dp, scheme.outlineVariant.copy(alpha = 0.20f), CircleShape)
+                .border(1.dp, rim, CircleShape)
+                .drawWithCache {
+                    val inset = 1.8.dp.toPx()
+                    val stroke = Stroke(0.7.dp.toPx())
+                    onDrawWithContent {
+                        drawContent()
+                        // An inset reflection gives the glass rim depth without enlarging the bar.
+                        drawRoundRect(
+                            brush = innerRim,
+                            topLeft = Offset(inset, inset),
+                            size = Size((size.width - inset * 2).coerceAtLeast(0f),
+                                (size.height - inset * 2).coerceAtLeast(0f)),
+                            cornerRadius = CornerRadius((size.height / 2 - inset).coerceAtLeast(0f)),
+                            style = stroke,
+                        )
+                    }
+                }
                 .testTag("glass-navigation-bar"),
         ) {
             Box(
                 modifier = Modifier
-                    .offset(x = indicatorStart, y = 9.dp)
+                    .offset(x = indicatorStart.coerceIn(4.dp,
+                        (animatedBarWidth - indicatorWidth - 4.dp).coerceAtLeast(4.dp)), y = 9.dp)
                     .width(indicatorWidth)
                     .height(42.dp)
                     .clip(CircleShape)
                     .background(scheme.surfaceContainerHighest.copy(alpha = 0.64f))
+                    .border(0.7.dp, innerRim, CircleShape)
                     .testTag("glass-nav-indicator"),
             )
             Row(
@@ -212,6 +251,16 @@ fun FloatingGlassNavigationBar(
                 items.forEachIndexed { index, item ->
                     val selected = index == safeIndex
                     val interactionSource = remember(index) { MutableInteractionSource() }
+                    val pressed = interactionSource.collectIsPressedAsState().value
+                    val contentScale = animateFloatAsState(
+                        targetValue = if (pressed) 0.94f else if (selected) 1.025f else 1f,
+                        animationSpec = spring(dampingRatio = 0.64f, stiffness = 650f),
+                        label = "glass-nav-content-scale-$index",
+                    ).value
+                    val contentMotion = Modifier.graphicsLayer {
+                        scaleX = contentScale
+                        scaleY = contentScale
+                    }
                     Box(
                         modifier = Modifier
                             .width(animatedItemWidths[index])
@@ -236,11 +285,12 @@ fun FloatingGlassNavigationBar(
                             Icon(
                                 imageVector = item.icon,
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp),
+                                modifier = contentMotion.size(24.dp),
                                 tint = scheme.onSurfaceVariant,
                             )
                         } else {
                             Row(
+                                modifier = contentMotion,
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center,
                             ) {

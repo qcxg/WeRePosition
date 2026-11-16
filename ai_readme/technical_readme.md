@@ -1,6 +1,6 @@
 # WeRePosition Current Simulation Pipeline
 
-Last maintained: 2026-11-17 (v2.1.1: joystick control/fallback fixes and wider Expressive components)
+Last maintained: 2026-11-17 (v2.1.2: layered glass navigation and spring interaction; includes v2.1.1 joystick/Expressive updates)
 
 While a route is RUNNING, the home screen replaces its editable map with a route-status surface and a return-to-route button. Returning opens the existing full-screen route without starting a new session; no home map view or camera listener is mounted during that run.
 
@@ -53,6 +53,7 @@ Debug/test apps that directly inspect Wi-Fi, cell, GNSS status, or NMEA must als
 - The app is Compose-native and already wraps content in `MaterialExpressiveTheme`. `androidx.compose.material3:material3` is explicitly pinned to `1.5.0-rc01` (official release 2026-11-04); it passes the existing compileSdk 37 / Kotlin 2.2.10 build. No View migration or third-party Material widget library is involved. Some APIs, such as `LoadingIndicator`, still require the Expressive opt-in.
 - App isolation uses official `ButtonGroup.toggleableItem` for location and independent RF scope, including pressed-width expansion, shape morphing and overflow; app order remains stable while toggling. Search/system filtering never changes scope. The host package remains excluded by the installed-app loader. Settings owns the shared forward/back page transition and header.
 - Route planning uses an official floating top toolbar, expressive button shapes and connected `ToggleButton` speed choices. The bottom control surface is compact (~116 dp at the default font size, with 48 dp targets). The map alone is a `hazeSource`; search, side controls and the bottom panel reuse `GlassOverlaySurface` with the navigation bar's 18 dp blur / 0.5 input scale / 0.03 noise and translucent Material tint. Never include the controls in their own blur source.
+- The 60 dp floating navigation bar adds a 1 dp gradient outline and 0.7 dp inset reflection (1.8 dp inset), plus a selected-capsule rim. Position/width use bounded spring motion; pressed icon/text scales to 0.94 and springs back to 1.025 when selected. Width allocation, tab semantics and touch areas stay independent of visual scaling; Compose handles the system animation duration scale.
 - Undo removes the last point and disables at zero. Map favorites and recenter remain available after adding points. Canceling route configuration preserves the READY route; `editRoutePoints()` returns to SELECTING without clearing points. Route configuration scrolls and accepts a finite custom speed in 0.1–100 m/s. Saving routes or starting simulation still requires explicit UI actions. Android 17 manual UI checks passed 0→1→2→1→0 point undo (disabled at zero), cancel with two points retained, return to editing with two points retained, and map-layer access after selecting points; entry/back animation intermediate frames were captured and the animation scale restored.
 
 ### Route Re-entry And Viewport
